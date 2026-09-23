@@ -1,0 +1,217 @@
+// Command tlua is a standalone Lua interpreter written in pure Go.
+//
+// It embeds gopher-lua (Lua 5.1), so the binary is statically linkable and
+// needs no cgo, yet it still runs ordinary Lua files from disk together with
+// the modules they require(). A program can also be attached to the binary,
+// turning it into a standalone executable; see the fuse subcommand.
+package main
+
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	"tlua/internal/fuse"
+	"tlua/internal/interp"
+	"tlua/internal/payload"
+)
+
+const version = "tlua 0.1.0 (Lua 5.1 via gopher-lua, pure Go)"
+
+const usage = `usage: tlua [options] [script [args]]
+       tlua fuse [-o output] <main.lua | directory | archive.zip>
+
+Options:
+  -e stat    execute string 'stat'
+  -l name    require library 'name' into a global of the same name
+             (use -l glob=name to pick the global)
+  -p path    prepend 'path' to package.path (a directory, or a ?-pattern)
+  -i         enter interactive mode after executing 'script'
+  -v         print version information
+  -E         ignore environment variables (TLUA_*, LUA_PATH, LUA_INIT)
+  -h         print this help
+  --         stop handling options
+  -          execute stdin as a file and stop handling options
+
+Environment:
+  TLUA_INCLUDE   site-wide library directories, listed like PATH; each is
+                 searched as <dir>/?.lua and <dir>/?/init.lua
+  TLUA_PATH      package.path patterns, as LUA_PATH but tlua-only
+  TLUA_INIT      chunk to run at startup ("@file" runs a file)
+
+The fuse subcommand attaches a Lua program to a copy of this binary, producing
+a standalone executable; "tlua fuse -h" explains it. A zip concatenated onto
+the binary (cat tlua app.zip > app) works the same way.
+`
+
+func main() {
+	// A binary with a program attached stops being an interpreter: it runs
+	// that program and hands it the entire command line.
+	exe, err := os.Executable()
+	if err == nil {
+		p, perr := payload.Open(exe)
+		if perr != nil {
+			fmt.Fprintf(os.Stderr, "tlua: %v\n", perr)
+			os.Exit(1)
+		}
+		if p != nil {
+			defer p.Close()
+			os.Exit(interp.RunFused(p, exe))
+		}
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "fuse" {
+		os.Exit(fuse.Command(os.Args[2:]))
+	}
+
+	c, err := parseArgs(os.Args[1:])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tlua: %v\n%s", err, usage)
+		os.Exit(1)
+	}
+	os.Exit(run(c))
+}
+
+// cli is one parsed command line: the options the interpreter answers itself,
+// plus everything it passes on to interp.
+type cli struct {
+	opts        *interp.Options
+	showVersion bool
+	showHelp    bool
+}
+
+// parseArgs reads the interpreter's own options, stopping at the script name.
+func parseArgs(args []string) (*cli, error) {
+	c := &cli{opts: &interp.Options{ScriptArgIdx: len(args) + 1}}
+	opts := c.opts
+
+	i := 0
+	for ; i < len(args); i++ {
+		a := args[i]
+		if !strings.HasPrefix(a, "-") || a == "-" {
+			break
+		}
+		if a == "--" {
+			i++
+			break
+		}
+
+		// Options with an argument accept both "-efoo" and "-e foo".
+		takeArg := func(name rune) (string, error) {
+			if len(a) > 2 {
+				return a[2:], nil
+			}
+			if i+1 >= len(args) {
+				return "", fmt.Errorf("'-%c' needs an argument", name)
+			}
+			i++
+			return args[i], nil
+		}
+
+		switch a[1] {
+		case 'e', 'l', 'p':
+			v, err := takeArg(rune(a[1]))
+			if err != nil {
+				return nil, err
+			}
+			opts.Actions = append(opts.Actions, interp.Action{Kind: rune(a[1]), Arg: v})
+		case 'i':
+			if len(a) != 2 {
+				return nil, fmt.Errorf("unrecognized option '%s'", a)
+			}
+			opts.Interactive = true
+		case 'v':
+			c.showVersion = true
+		case 'E':
+			opts.NoEnv = true
+		case 'h':
+			c.showHelp = true
+		default:
+			return nil, fmt.Errorf("unrecognized option '%s'", a)
+		}
+	}
+
+	if i < len(args) {
+		opts.ScriptArgIdx = i + 1 // +1: os.Args[0] is the interpreter itself
+		opts.Script = args[i]
+		opts.ScriptArgs = args[i+1:]
+	}
+	return c, nil
+}
+
+// run carries out the command line in the order the reference interpreter
+// does: the startup chunk, then -e/-l in the order given, then the script,
+// then interactive mode.
+func run(c *cli) int {
+	opts := c.opts
+
+	if c.showHelp {
+		fmt.Print(usage)
+		return 0
+	}
+	if c.showVersion {
+		fmt.Println(version)
+		if opts.Script == "" && len(opts.Actions) == 0 && !opts.Interactive {
+			return 0
+		}
+	}
+
+	r := interp.New(opts)
+	defer r.Close()
+
+	if !opts.NoEnv {
+		if err := r.RunInit(interp.InitChunk()); err != nil {
+			return r.Report(err)
+		}
+	}
+
+	for _, act := range opts.Actions {
+		var err error
+		switch act.Kind {
+		case 'e':
+			err = r.DoString(act.Arg, "=(command line)")
+		case 'l':
+			err = r.Require(act.Arg)
+		case 'p':
+			// already applied while building package.path
+		}
+		if err != nil {
+			return r.Report(err)
+		}
+	}
+
+	if opts.Script != "" {
+		if err := r.DoScript(opts.Script, opts.ScriptArgs); err != nil {
+			return r.Report(err)
+		}
+	}
+
+	if opts.Interactive {
+		r.REPL()
+		return 0
+	}
+
+	// No script and no -e: behave like lua and read a program from stdin,
+	// or start a REPL when stdin is a terminal.
+	if opts.Script == "" && len(opts.Actions) == 0 && !c.showVersion {
+		if isTerminal(os.Stdin) {
+			fmt.Println(version)
+			r.REPL()
+			return 0
+		}
+		if err := r.DoScript("-", nil); err != nil {
+			return r.Report(err)
+		}
+	}
+	return 0
+}
+
+// isTerminal reports whether f is a tty, which is how the interpreter decides
+// between a REPL and reading a program from a pipe.
+func isTerminal(f *os.File) bool {
+	st, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return st.Mode()&os.ModeCharDevice != 0
+}
