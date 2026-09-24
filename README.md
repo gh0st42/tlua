@@ -89,6 +89,8 @@ once, and F5 to run.
 | `F7`, `F8` | find next, find previous |
 | `Ctrl-R` | replace |
 | `F9` | check the current buffer's syntax without running it |
+| `Alt-F7`, `Alt-F8` | the previous and next problem the server reported |
+| `Alt-F9` | list the problems in this buffer |
 | `Ctrl-Space` | complete what is being typed (language server) |
 | `Ctrl-P` | the parameters of the call being typed (language server) |
 | `F11`, `Ctrl-F1` | what is under the cursor (language server) |
@@ -199,6 +201,32 @@ completions the server's list of trigger characters is narrowed —
 lua-language-server asks to be consulted after a space as well — since a hint
 that appears on every space is noise. *Edit › Parameters on status line* moves
 it to the status bar for anyone who would rather it never covered a line of code.
+
+**Problems.** What the server finds wrong is marked where it is, said on the
+status line, and listed on request. Errors are drawn white on maroon, warnings
+black on brown, and notes are underlined; a name on the buffer bar gains a `!`
+when its file has errors or a `?` when it only has warnings:
+
+```
+ 1:»main.lua!
+╔══════════════════════ »main.lua! ══════════════════════╗
+║local x = 1                                             ║
+║end                                                     ║
+╚════════════════════════════════════════════════════════╝
+ Error: Unexpected symbol `end`.                    L2 C1
+```
+
+The status line shows the message for the line the cursor is on, so walking
+through a file tells you what is wrong with each line as you reach it. A message
+about the last thing you did wins for as long as the cursor has not moved, and
+after that the line hands itself back to the diagnostics. `Alt-F7` and `Alt-F8`
+step from one problem to the next, wrapping round, as they did in the Borland
+editors; `Alt-F9` lists them all with their lines and severities, and `Enter`
+jumps.
+
+The text goes to the server 300 ms after you stop typing, which is what prompts
+a fresh report, so marks appear as you work rather than only on save. F9 still
+checks the syntax on its own, without a server.
 
 **Hover help.** `F11`, or `Ctrl-F1` where the terminal sends it — which is where
 Turbo Pascal put help on the word under the cursor — shows what the server knows
@@ -452,6 +480,8 @@ bin/               build output (git-ignored)
 | [internal/lsp/edits.go](internal/lsp/edits.go) | applying a server's edits to a document |
 | [internal/lsp/text.go](internal/lsp/text.go) | markdown and snippets reduced to plain text |
 | [internal/editor/complete.go](internal/editor/complete.go) | the completion panel and the hover box |
+| [internal/editor/signature.go](internal/editor/signature.go) | the parameter hint |
+| [internal/editor/diagnostics.go](internal/editor/diagnostics.go) | what the server finds wrong, and moving between it |
 
 Tests sit beside what they cover: unit tests in each `internal` package, and
 end-to-end tests in [cmd/tlua](cmd/tlua/) that build the binary and drive it as

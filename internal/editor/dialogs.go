@@ -12,12 +12,35 @@ import (
 	"github.com/rivo/tview"
 )
 
-// showModal floats a dialog over the desktop and gives it the keyboard.
+// showModal floats a dialog over the desktop and gives it the keyboard. A dialog
+// never asks for more room than the terminal has: on a small screen it is cut
+// down to fit rather than hanging off the edge, and anything with more to say
+// than fits can be scrolled.
 func (e *Editor) showModal(name string, p tview.Primitive, width, height int) {
+	width, height = e.fit(width, height)
 	e.modals++
 	e.modalStack = append(e.modalStack, p)
 	e.pages.AddPage(name, center(p, width, height), true, true)
 	e.app.SetFocus(p)
+}
+
+// fit trims a dialog's size to what the screen can hold, leaving the bars around
+// it visible.
+func (e *Editor) fit(width, height int) (int, int) {
+	screenWidth, screenHeight := e.screenSize()
+	if width > screenWidth-2 {
+		width = screenWidth - 2
+	}
+	if height > screenHeight-2 {
+		height = screenHeight - 2
+	}
+	if width < 10 {
+		width = 10
+	}
+	if height < 3 {
+		height = 3
+	}
+	return width, height
 }
 
 // closeModal takes a dialog back down and returns to the text.
@@ -36,53 +59,65 @@ func (e *Editor) closeModal(name string) {
 	}
 }
 
+// dialog is the shape every question in this editor takes: something to read, a
+// row of buttons, and a size the screen can hold. tview has a Modal that does
+// much the same, but it grows to fit its text however long that is, which on a
+// 25 row terminal means a box drawn off the top of the screen.
+func (e *Editor) dialog(name, title, text string, buttons []string, done func(label string)) {
+	body := tview.NewTextView().SetWrap(true).SetScrollable(true)
+	body.SetBackgroundColor(egaLightGray)
+	body.SetTextStyle(dialogTextStyle)
+	body.SetText(text)
+
+	form := tview.NewForm()
+	form.SetButtonsAlign(tview.AlignCenter)
+	for _, label := range buttons {
+		chosen := label
+		form.AddButton(chosen, func() {
+			e.closeModal(name)
+			if done != nil {
+				done(chosen)
+			}
+		})
+	}
+	e.styleForm(form, title)
+	form.SetBorder(false)
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			e.closeModal(name)
+			if done != nil {
+				done("") // leaving is the same as choosing nothing
+			}
+			return nil
+		}
+		return event
+	})
+
+	frame := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(body, 0, 1, false).
+		AddItem(form, 3, 0, true)
+	frame.SetBackgroundColor(egaLightGray)
+	dialogColors(frame.Box)
+	frame.SetTitle(" " + title + " ")
+
+	const width = 60
+	height := strings.Count(text, "\n") + len(text)/width + 6
+	e.showModal(name, frame, width, height)
+	e.app.SetFocus(form)
+}
+
 // message states something and waits for the user to acknowledge it.
 func (e *Editor) message(title, text string) {
-	const name = "message"
-	modal := tview.NewModal().
-		SetText(text).
-		AddButtons([]string{"OK"}).
-		SetDoneFunc(func(int, string) { e.closeModal(name) })
-	modal.SetBackgroundColor(egaLightGray)
-	modal.SetTextColor(egaBlack)
-	modal.SetButtonBackgroundColor(egaGreen)
-	modal.SetButtonTextColor(egaBlack)
-	modal.SetBorder(true)
-	modal.SetBorderColor(egaBlack)
-	modal.SetTitle(" " + title + " ")
-	modal.SetTitleColor(egaBlack)
-
-	e.modals++
-	e.modalStack = append(e.modalStack, modal)
-	e.pages.AddPage(name, modal, true, true)
-	e.app.SetFocus(modal)
+	e.dialog("message", title, text, []string{"OK"}, nil)
 }
 
 // confirm asks a yes or no question, running onYes only on yes.
 func (e *Editor) confirm(title, text string, onYes func()) {
-	const name = "confirm"
-	modal := tview.NewModal().
-		SetText(text).
-		AddButtons([]string{"Yes", "No"}).
-		SetDoneFunc(func(_ int, label string) {
-			e.closeModal(name)
-			if label == "Yes" {
-				onYes()
-			}
-		})
-	modal.SetBackgroundColor(egaLightGray)
-	modal.SetTextColor(egaBlack)
-	modal.SetButtonBackgroundColor(egaGreen)
-	modal.SetButtonTextColor(egaBlack)
-	modal.SetBorder(true)
-	modal.SetBorderColor(egaBlack)
-	modal.SetTitle(" " + title + " ")
-	modal.SetTitleColor(egaBlack)
-
-	e.modals++
-	e.modalStack = append(e.modalStack, modal)
-	e.pages.AddPage(name, modal, true, true)
-	e.app.SetFocus(modal)
+	e.dialog("confirm", title, text, []string{"Yes", "No"}, func(label string) {
+		if label == "Yes" {
+			onYes()
+		}
+	})
 }
 
 // prompt asks for one line of text.
@@ -282,7 +317,7 @@ func readDir(dir string) []dirEntry {
 // showHelp lists the keys, which is what F1 was for.
 func (e *Editor) showHelp() {
 	const name = "help"
-	text := tview.NewTextView().SetDynamicColors(true)
+	text := tview.NewTextView().SetDynamicColors(true).SetScrollable(true)
 	text.SetBackgroundColor(egaLightGray)
 	text.SetTextStyle(dialogTextStyle)
 	text.SetText(strings.Join([]string{
@@ -293,13 +328,16 @@ func (e *Editor) showHelp() {
 		"  F3, Ctrl-O  open a file            F7   find next",
 		"  F4          show or hide output    F8   find previous",
 		"  Ctrl-N      new file               F9   check syntax",
-		"  Ctrl-B      comment or uncomment   F11  what is under the cursor",
-		"  Ctrl-Space  complete               F12  format (language server)",
-		"  Ctrl-P      parameters of a call   F10  menu bar",
+		"  Ctrl-B      comment or uncomment   F10  menu bar",
+		"  Ctrl-Space  complete               F11  what is under the cursor",
+		"  Ctrl-P      parameters of a call   F12  format (language server)",
 		"  Ctrl-F      find                   Alt-1..9  pick a buffer",
 		"  Ctrl-R      replace                Alt-F2    list functions",
 		"  Ctrl-G      go to line             Alt-F3    close buffer",
 		"  Ctrl-C      stop the program       Alt-X     leave",
+		"",
+		"  Alt-F7, Alt-F8  the previous and next thing the language",
+		"                  server complained about; Alt-F9 lists them.",
 		"",
 		"  In the text: Ctrl-Z undo, Ctrl-Y redo, Ctrl-Q copy,",
 		"  Ctrl-X cut, Ctrl-V paste, Ctrl-L select all. PgUp and",
@@ -308,7 +346,8 @@ func (e *Editor) showHelp() {
 		"  Alt-F, Alt-E, Alt-S, Alt-R, Alt-W, Alt-H open the menus.",
 		"  The mouse works: click the bars, the text and the menus.",
 		"  The file marked » in the buffer bar is the one F5 runs;",
-		"  set it from the Run menu.",
+		"  set it from the Run menu. A ! or ? after a name means the",
+		"  server found something wrong with that file.",
 	}, "\n"))
 	dialogColors(text.Box)
 	text.SetTitle(" Help ")
@@ -320,7 +359,7 @@ func (e *Editor) showHelp() {
 		}
 		return event
 	})
-	e.showModal(name, text, 68, 24)
+	e.showModal(name, text, 68, 28)
 }
 
 func (e *Editor) styleForm(form *tview.Form, title string) {

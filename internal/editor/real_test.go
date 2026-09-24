@@ -131,3 +131,36 @@ func TestRealServerShowsParameters(t *testing.T) {
 		}
 	}
 }
+
+// TestRealServerReportsASyntaxError opens a file that does not parse and waits
+// for the server to say so, with whatever server is installed.
+func TestRealServerReportsASyntaxError(t *testing.T) {
+	command, args, ok := lsp.Find()
+	if !ok {
+		t.Skip("no language server on PATH")
+	}
+	t.Setenv(lsp.EnvServer, strings.Join(append([]string{command}, args...), " "))
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.lua")
+	// "end" with nothing to end: a genuine syntax error.
+	if err := os.WriteFile(path, []byte("local x = 1\nend\nprint(x)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e, screen := start(t, path)
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil })
+	waitFor(t, e, "the server to report the error", func() bool {
+		return len(e.buffers[0].diagnostics) > 0
+	})
+
+	onEditor(t, e, func() {
+		for _, d := range e.buffers[0].diagnostics {
+			t.Logf("line %d: %s: %s", d.Range.Start.Line+1, d.Severity, d.Message)
+		}
+		e.gotoLine(e.buffers[0], 2)
+	})
+	redraw(t, e)
+	t.Logf("status line: %s", strings.TrimSpace(dump(screen)[len(dump(screen))-1]))
+	t.Logf("buffer bar:  %s", strings.TrimSpace(dump(screen)[1]))
+}

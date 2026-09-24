@@ -54,6 +54,9 @@ type Editor struct {
 	// or on the status line.
 	signatureShown    bool
 	signatureInStatus bool
+	// signatureSuppressed keeps the hint down after Escape, so that an answer
+	// still coming cannot put it back.
+	signatureSuppressed bool
 
 	// lspGeneration counts changes of text or cursor, so an answer that arrives
 	// after the user has moved on can be recognised and dropped. The asking
@@ -67,6 +70,11 @@ type Editor struct {
 	// name character asks again, so the list narrows as the word is typed
 	// rather than appearing once and going.
 	completing bool
+	// syncScheduled marks that the text is due to be handed to the server.
+	syncScheduled bool
+	// diagnosticsWake is rung by the client's reader goroutine when a report
+	// comes in, and drained by a goroutine that brings the buffers up to date.
+	diagnosticsWake chan struct{}
 
 	outputShown bool
 	outputBytes int  // how much the pane holds, against outputLimit
@@ -79,7 +87,10 @@ type Editor struct {
 	running        *exec.Cmd // the program started by F5, while it runs
 	exe            string    // this binary, used to run scripts
 	status         string    // the message shown until something replaces it
-	taggedStatus   string    // a message that brings its own colours
+	// statusGeneration is what the change counter stood at when the message was
+	// set, so that moving the cursor hands the line back to the diagnostics.
+	statusGeneration int
+	taggedStatus     string // a message that brings its own colours
 }
 
 const outputHeight = 10
@@ -123,6 +134,8 @@ func New(cfg Config) (*Editor, error) {
 		current:  -1,
 		exe:      exe,
 	}
+
+	e.diagnosticsWake = make(chan struct{}, 1)
 
 	e.menubar = newClickableBar(e.clickMenuBar)
 	e.menubar.SetBackgroundColor(egaLightGray)
@@ -229,8 +242,15 @@ func (e *Editor) refreshTabs() {
 
 // refreshStatus redraws the function key hints and the cursor position.
 func (e *Editor) refreshStatus() {
+	// What the line says, in order: a message about the last thing done, for as
+	// long as the cursor has not moved since; then whatever the server says
+	// about the line the cursor is on; then the key hints. A message that has
+	// been sat through is not worth hiding a mistake for.
 	hint := keyHints
-	if e.status != "" {
+	if problem := e.diagnosticStatus(); problem != "" {
+		hint = tagBar + " " + tview.Escape(problem)
+	}
+	if e.status != "" && e.statusGeneration == e.lspGeneration {
 		hint = tagBar + " " + tview.Escape(e.status)
 	}
 	if e.taggedStatus != "" {
@@ -253,6 +273,7 @@ func (e *Editor) refreshStatus() {
 // setStatus shows a message on the status line until the next keystroke.
 func (e *Editor) setStatus(msg string) {
 	e.status = msg
+	e.statusGeneration = e.lspGeneration
 	e.taggedStatus = ""
 	e.refreshStatus()
 }
@@ -409,6 +430,7 @@ func (e *Editor) handleKey(event *tcell.EventKey) *tcell.EventKey {
 			case e.isSignatureTrigger(event.Rune()):
 				e.completing = false // a bracket or comma ends a word
 				e.sendKeyToText(event)
+				e.askForSignature()
 				e.signatureHelpAsync()
 				return nil
 			case e.completing && isNameRune(event.Rune()):
@@ -454,6 +476,17 @@ func (e *Editor) handleAltKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case tcell.KeyF2:
 		e.outlineDialog()
+		return nil
+	case tcell.KeyF7:
+		// Alt-F7 and Alt-F8 walk the server's complaints, as they did in the
+		// Borland editors.
+		e.previousProblem()
+		return nil
+	case tcell.KeyF8:
+		e.nextProblem()
+		return nil
+	case tcell.KeyF9:
+		e.problemsDialog()
 		return nil
 	}
 	r := event.Rune()

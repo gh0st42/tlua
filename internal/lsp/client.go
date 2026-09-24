@@ -42,6 +42,12 @@ type Client struct {
 	// goroutines syncing at once must not send version 3 before version 2.
 	syncMu sync.Mutex
 
+	// diagnostics are what the server last said about each document, and
+	// onDiagnostics is told whenever that changes. Both are guarded by mu,
+	// because they are written by the reader goroutine.
+	diagnostics   map[string][]Diagnostic
+	onDiagnostics func(path string, list []Diagnostic)
+
 	canFormat      bool
 	canComplete    bool
 	canHover       bool
@@ -75,12 +81,13 @@ func Start(ctx context.Context, command string, args []string, root string) (*Cl
 	}
 
 	c := &Client{
-		name:    filepath.Base(command),
-		cmd:     cmd,
-		stdin:   stdin,
-		stdout:  stdout,
-		pending: make(map[int]chan message),
-		docs:    make(map[string]int),
+		name:        filepath.Base(command),
+		cmd:         cmd,
+		stdin:       stdin,
+		stdout:      stdout,
+		pending:     make(map[int]chan message),
+		docs:        make(map[string]int),
+		diagnostics: make(map[string][]Diagnostic),
 	}
 	go c.read()
 
@@ -131,6 +138,10 @@ func (c *Client) initialize(ctx context.Context, root string) error {
 				"hover": map[string]any{
 					"dynamicRegistration": false,
 					"contentFormat":       []string{"markdown", "plaintext"},
+				},
+				"publishDiagnostics": map[string]any{
+					"relatedInformation": false,
+					"versionSupport":     false,
 				},
 				"signatureHelp": map[string]any{
 					"dynamicRegistration": false,
@@ -364,6 +375,8 @@ func (c *Client) read() {
 		}
 
 		switch {
+		case msg.Method == "textDocument/publishDiagnostics":
+			c.publishDiagnostics(msg.Params)
 		case msg.Method != "" && len(msg.ID) > 0:
 			c.answer(msg)
 		case len(msg.ID) > 0:
@@ -378,6 +391,42 @@ func (c *Client) read() {
 				reply <- msg
 			}
 		}
+	}
+}
+
+// OnDiagnostics registers what to do when the server reports on a document. It
+// is called from the reader goroutine, so a handler that touches an interface
+// has to get itself onto the right one.
+func (c *Client) OnDiagnostics(handler func(path string, list []Diagnostic)) {
+	c.mu.Lock()
+	c.onDiagnostics = handler
+	c.mu.Unlock()
+}
+
+// Diagnostics reports what the server last said about a document.
+func (c *Client) Diagnostics(path string) []Diagnostic {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	list := c.diagnostics[pathToURI(path)]
+	out := make([]Diagnostic, len(list))
+	copy(out, list)
+	return out
+}
+
+// publishDiagnostics takes in a report and passes it on.
+func (c *Client) publishDiagnostics(params json.RawMessage) {
+	var report publishDiagnosticsParams
+	if err := json.Unmarshal(params, &report); err != nil {
+		return
+	}
+
+	c.mu.Lock()
+	c.diagnostics[report.URI] = report.Diagnostics
+	handler := c.onDiagnostics
+	c.mu.Unlock()
+
+	if handler != nil {
+		handler(URIToPath(report.URI), report.Diagnostics)
 	}
 }
 
@@ -458,6 +507,21 @@ func readMessage(reader *bufio.Reader) ([]byte, error) {
 		return nil, err
 	}
 	return body, nil
+}
+
+// URIToPath turns a file:// URI back into a path, which is how a report about a
+// document is matched to the buffer holding it.
+func URIToPath(uri string) string {
+	parsed, err := url.Parse(uri)
+	if err != nil || parsed.Scheme != "file" {
+		return uri
+	}
+	path := parsed.Path
+	// A Windows URI carries its drive letter after the leading slash.
+	if len(path) > 2 && path[0] == '/' && path[2] == ':' {
+		path = path[1:]
+	}
+	return filepath.FromSlash(path)
 }
 
 // pathToURI turns a file path into the file:// URI the protocol wants.

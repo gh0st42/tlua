@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"tlua/internal/lsp"
 )
 
 // buffer is one open file, or an unsaved new file when path is empty.
@@ -16,6 +18,8 @@ type buffer struct {
 	// crlf records that the file was read with DOS line endings, so that saving
 	// it does not quietly rewrite every line.
 	crlf bool
+	// diagnostics is what the language server last said about this buffer.
+	diagnostics []lsp.Diagnostic
 }
 
 // newBuffer builds an editing widget wired to this editor's bookkeeping.
@@ -32,6 +36,8 @@ func (e *Editor) newBuffer(path, name, text string) *buffer {
 	area.SetChangedFunc(func() {
 		area.invalidate()
 		e.lspGeneration++
+		// The server is told once the typing pauses, and reports back.
+		e.scheduleSync()
 		if !b.dirty {
 			b.dirty = true
 			e.refreshTabs()
@@ -69,6 +75,11 @@ func (e *Editor) title(b *buffer) string {
 	name := b.name
 	if b.dirty {
 		name += "*"
+	}
+	if errors, warnings := problemCount(b.diagnostics); errors > 0 {
+		name += "!"
+	} else if warnings > 0 {
+		name += "?"
 	}
 	if e.primary == b {
 		name = "»" + name

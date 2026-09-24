@@ -50,6 +50,7 @@ func (e *Editor) startLanguageServer() {
 				return
 			}
 			e.lsp = client
+			e.watchDiagnostics(client)
 			// Tell it about what is already open, so it starts reading the
 			// workspace now rather than when the first question is asked: a
 			// server that has just started answers "nothing" until it has.

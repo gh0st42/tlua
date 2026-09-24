@@ -30,6 +30,45 @@ import (
 
 var documents = map[string]string{}
 
+// publishDiagnostics reports on a document unprompted, as a server does after
+// reading it. Its idea of a mistake is a marker in the text: "??" is an error
+// and "!!" a warning, which gives a test something exact to expect.
+func publishDiagnostics(out *bufio.Writer, uri string) {
+	if os.Getenv("FAKELSP_NODIAGNOSTICS") != "" {
+		return
+	}
+	list := []map[string]any{}
+	for i, line := range strings.Split(documents[uri], "\n") {
+		for _, marker := range []struct {
+			text     string
+			severity int
+			message  string
+		}{
+			{"??", 1, "unexpected symbol near '??'"},
+			{"!!", 2, "this looks doubtful"},
+		} {
+			at := strings.Index(line, marker.text)
+			if at < 0 {
+				continue
+			}
+			start := len(utf16.Encode([]rune(line[:at])))
+			list = append(list, map[string]any{
+				"range": map[string]any{
+					"start": map[string]any{"line": i, "character": start},
+					"end":   map[string]any{"line": i, "character": start + 2},
+				},
+				"severity": marker.severity,
+				"source":   "fakelsp",
+				"message":  marker.message,
+			})
+		}
+	}
+	notify(out, "textDocument/publishDiagnostics", map[string]any{
+		"uri":         uri,
+		"diagnostics": list,
+	})
+}
+
 // think waits, as a server under load would.
 func think() {
 	ms, err := strconv.Atoi(os.Getenv("FAKELSP_SLOW"))
@@ -115,6 +154,7 @@ func main() {
 			_ = json.Unmarshal(msg.Params, &params)
 			documents[params.TextDocument.URI] = params.TextDocument.Text
 			record("didOpen " + params.TextDocument.URI)
+			publishDiagnostics(out, params.TextDocument.URI)
 
 		case "textDocument/didChange":
 			var params struct {
@@ -129,6 +169,8 @@ func main() {
 			if len(params.ContentChanges) > 0 {
 				documents[params.TextDocument.URI] = params.ContentChanges[0].Text
 			}
+			record("didChange " + params.TextDocument.URI)
+			publishDiagnostics(out, params.TextDocument.URI)
 
 		case "textDocument/formatting":
 			if os.Getenv("FAKELSP_HANG") != "" {

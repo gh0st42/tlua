@@ -35,6 +35,11 @@ func (e *Editor) isSignatureTrigger(r rune) bool {
 	return false
 }
 
+// askForSignature marks that a hint is wanted again, which asking for one by
+// hand or typing a bracket both do. Escape suppresses the hint until then, so
+// that an answer still on its way cannot put it back up.
+func (e *Editor) askForSignature() { e.signatureSuppressed = false }
+
 // signatureHelp asks what the call at the cursor takes and shows it. Asked for
 // by hand it explains itself; asked because a bracket was typed it keeps quiet.
 func (e *Editor) signatureHelp(automatic bool) {
@@ -54,6 +59,8 @@ func (e *Editor) signatureHelp(automatic bool) {
 		}
 		return
 	}
+
+	e.askForSignature()
 
 	ctx, cancel := context.WithTimeout(context.Background(), lspSignatureTimeout)
 	defer cancel()
@@ -119,8 +126,8 @@ func (e *Editor) signatureHelpAsync() {
 				e.signatureHelpAsync()
 				return
 			}
-			if generation != e.lspGeneration || e.buf() != b {
-				return // the answer is about where the cursor used to be
+			if generation != e.lspGeneration || e.buf() != b || e.signatureSuppressed {
+				return // stale, about another buffer, or the hint was dismissed
 			}
 			signature, active, ok := help.Active()
 			if err != nil || !ok {
@@ -198,8 +205,10 @@ func (e *Editor) showSignaturePanel(b *buffer, text string) {
 	}
 }
 
-// hideSignature takes the hint down, wherever it was showing.
+// hideSignature takes the hint down, wherever it was showing, and keeps it down
+// until something asks for it again.
 func (e *Editor) hideSignature() {
+	e.signatureSuppressed = true
 	if !e.signatureShown {
 		return
 	}

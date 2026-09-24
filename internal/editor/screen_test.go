@@ -228,6 +228,12 @@ func panelBackgrounds(screen tcell.SimulationScreen, p tview.Primitive) map[tcel
 	x, y, width, height := p.GetRect()
 	cells, screenWidth, screenHeight := screen.GetContents()
 	found := map[tcell.Color]int{}
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
 	for row := y; row < y+height && row < screenHeight; row++ {
 		for col := x; col < x+width && col < screenWidth; col++ {
 			_, bg, _ := cells[row*screenWidth+col].Style.Decompose()
@@ -371,6 +377,19 @@ func TestSearchMenuOnScreen(t *testing.T) {
 			t.Errorf("the Search menu is missing %q", want)
 		}
 	}
+}
+
+// screenWords reads the whole screen as one run of words, with the frames taken
+// out, which is how a test checks wrapped text without caring where it wrapped.
+func screenWords(screen tcell.SimulationScreen) string {
+	text := strings.Join(dump(screen), " ")
+	text = strings.Map(func(r rune) rune {
+		if strings.ContainsRune("\u2500\u2502\u250c\u2510\u2514\u2518\u2550\u2551\u2554\u2557\u255a\u255d", r) {
+			return ' '
+		}
+		return r
+	}, text)
+	return strings.Join(strings.Fields(text), " ")
 }
 
 // columnOf reports the screen column a substring is drawn at. A dumped row is
@@ -547,5 +566,86 @@ func TestParameterHintOnScreen(t *testing.T) {
 	// And the rest of the hint is an ordinary grey panel.
 	if _, bg := colorAt(screen, col-1, hintRow); bg != egaLightGray {
 		t.Errorf("the hint's background is %v", bg)
+	}
+}
+
+// TestDiagnosticMarksOnScreen checks that a mistake is marked where it is, in
+// the strongest colours the palette has for the purpose.
+func TestDiagnosticMarksOnScreen(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"),
+		"local a = 1\nlocal b = ??\nlocal c = 3 !!\n"))
+	waitFor(t, e, "the server's report", func() bool { return len(e.buffers[0].diagnostics) == 2 })
+	redraw(t, e)
+
+	rows := dump(screen)
+	t.Logf("screen:\n%s", strings.Join(rows, "\n"))
+
+	// The error is white on maroon, over the two characters it complains about.
+	errorRow := -1
+	for i, row := range rows {
+		if strings.Contains(row, "local b = ??") {
+			errorRow = i
+		}
+	}
+	if errorRow < 0 {
+		t.Fatal("the line with the error is not on screen")
+	}
+	col := columnOf(rows[errorRow], "??")
+	if fg, bg := colorAt(screen, col, errorRow); fg != egaWhite || bg != egaRed {
+		t.Errorf("the error is %v on %v, want white on maroon", fg, bg)
+	}
+	// Only the range is marked: the code before it keeps its own colours.
+	if _, bg := colorAt(screen, col-1, errorRow); bg != egaBlue {
+		t.Errorf("the mark spread past the range: background %v", bg)
+	}
+
+	// The warning is black on brown.
+	warningRow := errorRow + 1
+	col = columnOf(rows[warningRow], "!!")
+	if fg, bg := colorAt(screen, col, warningRow); fg != egaBlack || bg != egaBrown {
+		t.Errorf("the warning is %v on %v, want black on brown", fg, bg)
+	}
+}
+
+// TestDialogsFitTheScreen guards against a dialog asking for more room than the
+// terminal has: the key list grew past 25 rows once, and a centred box taller
+// than the screen is drawn at a negative row.
+func TestDialogsFitTheScreen(t *testing.T) {
+	dir := t.TempDir()
+	e, _ := start(t, write(t, filepath.Join(dir, "main.lua"), "local a = 1\n"))
+
+	screenWidth, screenHeight := 0, 0
+	onEditor(t, e, func() { screenWidth, screenHeight = e.screenSize() })
+
+	dialogs := []struct {
+		name string
+		open func()
+	}{
+		{"the key list", e.showHelp},
+		{"the open dialog", e.openDialog},
+		{"a long message", func() {
+			e.message("Long", strings.Repeat("a line of explanation\n", 60))
+		}},
+	}
+	for _, dialog := range dialogs {
+		onEditor(t, e, dialog.open)
+		redraw(t, e)
+		onEditor(t, e, func() {
+			x, y, width, height := e.modalStack[len(e.modalStack)-1].GetRect()
+			if x < 0 || y < 0 {
+				t.Errorf("%s is drawn at %d,%d", dialog.name, x, y)
+			}
+			if x+width > screenWidth || y+height > screenHeight {
+				t.Errorf("%s is %dx%d at %d,%d on a %dx%d screen",
+					dialog.name, width, height, x, y, screenWidth, screenHeight)
+			}
+			for _, page := range []string{"help", "open", "message"} {
+				if e.pages.HasPage(page) {
+					e.closeModal(page)
+				}
+			}
+		})
 	}
 }

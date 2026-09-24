@@ -2,6 +2,7 @@ package editor
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -46,11 +47,18 @@ func TestMouseChoosesAMenuItem(t *testing.T) {
 	click(screen, runColumn, 0)
 	waitFor(t, e, "the Run menu", func() bool { return e.openMenu == run })
 
-	// "Show output" is the eighth line of the dropdown, counting separators.
+	// Find the row that says "Show output" rather than counting lines, which
+	// changes whenever the menu does.
 	var itemY int
 	onEditor(t, e, func() {
 		_, y, _, _ := e.menuList.GetRect()
-		itemY = y + 1 + 7 // inside the border, then down to the item
+		for i := 0; i < e.menuList.GetItemCount(); i++ {
+			if label, _ := e.menuList.GetItemText(i); strings.Contains(label, "Show output") {
+				itemY = y + 1 + i // inside the border, then down to the item
+				return
+			}
+		}
+		t.Fatal("the Run menu has no Show output")
 	})
 	click(screen, runColumn+2, itemY)
 	waitFor(t, e, "the output pane to appear", func() bool { return e.outputShown })

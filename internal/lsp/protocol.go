@@ -270,3 +270,44 @@ func (p ParameterInformation) Text(label string) string {
 	}
 	return ""
 }
+
+/* --- diagnostics --- */
+
+// Severity is how much a diagnostic matters.
+type Severity int
+
+const (
+	SeverityError       Severity = 1
+	SeverityWarning     Severity = 2
+	SeverityInformation Severity = 3
+	SeverityHint        Severity = 4
+)
+
+// String is the word the editor shows for a severity.
+func (s Severity) String() string {
+	switch s {
+	case SeverityWarning:
+		return "warning"
+	case SeverityInformation:
+		return "note"
+	case SeverityHint:
+		return "hint"
+	default:
+		return "error"
+	}
+}
+
+// Diagnostic is something a server found wrong with a document.
+type Diagnostic struct {
+	Range    Range    `json:"range"`
+	Severity Severity `json:"severity"`
+	Source   string   `json:"source"`
+	Message  string   `json:"message"`
+}
+
+// publishDiagnosticsParams is what the server sends unprompted.
+type publishDiagnosticsParams struct {
+	URI         string       `json:"uri"`
+	Version     *int         `json:"version"`
+	Diagnostics []Diagnostic `json:"diagnostics"`
+}
