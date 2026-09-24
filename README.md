@@ -168,7 +168,8 @@ local x = pri
 
 `Enter` or a click inserts, `Esc` dismisses, and typing carries on regardless:
 a letter goes into the text and the list comes back narrowed to the word as it
-now stands, backspace likewise.
+now stands, backspace likewise. A completion is a session that lasts as long as
+the word does, so the list follows the whole of it and goes when the word ends.
 
 An item that brings its own edit says exactly what to replace; otherwise the
 word being typed makes way for it, and a dotted or colon prefix is left alone so
@@ -204,6 +205,14 @@ Turbo Pascal put help on the word under the cursor — shows what the server kno
 about it. The answer arrives as markdown and is reduced to text: fences,
 emphasis, links and rules go, and what they wrapped stays. Plain `F1` is still
 the key list.
+
+Nothing waits on the server while you work. Every request a keystroke provokes
+— completions after a `.`, the parameter hint as the cursor moves — is made off
+the editing loop, and its answer is dropped if the cursor has moved on before it
+arrives. Asking again while an answer is in flight coalesces rather than
+queueing, so holding a key cannot pile requests up, and typing stays as quick
+with a slow server as with none: two tests pin that, driving the editor against
+a server told to think for 400 ms per answer.
 
 Open buffers are handed to the server as soon as it starts, so it reads the
 workspace before the first question rather than after it; a server that has only
@@ -287,11 +296,16 @@ Lua is highlighted in the same palette, in the manner of the Borland IDEs:
 `tview` draws a text area in a single style, so the colouring is painted over
 what the widget has just drawn: the glyphs stay exactly where tview put them
 and only the colour of each cell changes, which leaves the cursor, the
-selection and undo untouched. The work is proportional to the visible window,
-not to the file: a redraw scans only the lines on screen (about 33 µs for a
-screenful, by the benchmark in `highlight_test.go`), and the one thing that
-needs the lines above — whether a long string or `--[[ ]]` comment is still
-open — is cached per line and extended only as far down as you have scrolled.
+selection and undo untouched.
+
+The work is proportional to the visible window rather than to the file. The
+scanner writes into a slice the highlighter owns and works in bytes, so a
+redraw allocates nothing of its own; the one thing that needs the lines above —
+whether a long string or a `--[[ ]]` comment is still open — is remembered per
+line and extended only as far down as you have scrolled. An edit keeps every
+line state above the line that changed, so a keystroke at the bottom of a long
+file re-reads one line instead of all of them: that took a redraw there from
+2.5 ms to 86 µs, and what is left is tview's own drawing.
 
 ## Standalone executables (fuse)
 

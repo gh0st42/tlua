@@ -565,3 +565,119 @@ func TestFunctionListJumpsToTopAndEndOfFile(t *testing.T) {
 		return e.modals == 0 && row == 0
 	})
 }
+
+// Save As over a file that is already there asks first.
+func TestSaveAsAsksBeforeWritingOverAFile(t *testing.T) {
+	dir := t.TempDir()
+	existing := write(t, filepath.Join(dir, "taken.lua"), "-- do not lose me\n")
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"), "-- new content\n"))
+
+	onEditor(t, e, e.saveAsDialog)
+	waitFor(t, e, "the Save as dialog", func() bool { return e.modals == 1 })
+
+	// Replace what the field holds with the name of the file that exists.
+	onEditor(t, e, func() {
+		form := e.modalStack[0].(*tview.Form)
+		form.GetFormItem(0).(*tview.InputField).SetText(existing)
+	})
+	press(screen, tcell.KeyEnter, 0, tcell.ModNone)
+
+	waitFor(t, e, "the question", func() bool { return e.modals == 1 && e.pages.HasPage("confirm") })
+	data, err := os.ReadFile(existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "-- do not lose me\n" {
+		t.Errorf("the file was written over before the question was answered: %q", data)
+	}
+
+	// Answering yes writes it.
+	press(screen, tcell.KeyEnter, 0, tcell.ModNone)
+	waitFor(t, e, "the save", func() bool { return strings.HasPrefix(e.status, "Saved ") })
+	data, err = os.ReadFile(existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "-- new content\n" {
+		t.Errorf("file = %q", data)
+	}
+}
+
+// A file with DOS line endings keeps them, rather than having every line
+// quietly rewritten on the first save.
+func TestSavingKeepsDosLineEndings(t *testing.T) {
+	dir := t.TempDir()
+	path := write(t, filepath.Join(dir, "dos.lua"), "local a = 1\r\nlocal b = 2\r\n")
+
+	e, screen := start(t, path)
+	onEditor(t, e, func() {
+		if got := e.buffers[0].area.GetText(); strings.Contains(got, "\r") {
+			t.Errorf("the buffer holds carriage returns: %q", got)
+		}
+	})
+
+	typeText(screen, "-")
+	press(screen, tcell.KeyF2, 0, tcell.ModNone)
+	waitFor(t, e, "the save", func() bool { return strings.HasPrefix(e.status, "Saved ") })
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "\r\n") {
+		t.Errorf("the line endings were changed: %q", data)
+	}
+	if strings.Contains(string(data), "\n\n") {
+		t.Errorf("a stray newline crept in: %q", data)
+	}
+}
+
+// Closing the only buffer leaves an empty one, not no editor.
+func TestClosingTheOnlyBuffer(t *testing.T) {
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"), "-- main\n"))
+
+	press(screen, tcell.KeyF3, 0, tcell.ModAlt)
+	waitFor(t, e, "the buffer to be replaced", func() bool {
+		return len(e.buffers) == 1 && e.buffers[0].path == ""
+	})
+	onEditor(t, e, func() {
+		if e.primary != nil {
+			t.Error("an unsaved buffer became the primary file")
+		}
+		if e.buf() == nil {
+			t.Error("there is no current buffer")
+		}
+	})
+}
+
+func TestExpandHome(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory")
+	}
+	cases := map[string]string{
+		"~":             home,
+		"~/x.lua":       filepath.Join(home, "x.lua"),
+		"~x.lua":        "~x.lua", // not a home reference
+		"/absolute.lua": "/absolute.lua",
+		"relative.lua":  "relative.lua",
+	}
+	for in, want := range cases {
+		if got := expandHome(in); got != want {
+			t.Errorf("expandHome(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A file whose name begins with a dash is a file, not an option.
+func TestRunAFileNamedLikeAnOption(t *testing.T) {
+	dir := t.TempDir()
+	path := write(t, filepath.Join(dir, "-dashed.lua"), "print('ran anyway')\n")
+
+	e, screen := start(t, path)
+	press(screen, tcell.KeyF5, 0, tcell.ModNone)
+	waitFor(t, e, "the program to run", func() bool {
+		return strings.Contains(e.output.GetText(true), "ran anyway")
+	})
+}

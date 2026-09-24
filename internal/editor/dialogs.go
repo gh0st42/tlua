@@ -132,11 +132,22 @@ func (e *Editor) saveAsDialog() {
 		initial = filepath.Join(wd, b.name)
 	}
 	e.prompt("Save as", "File: ", initial, func(path string) {
-		if err := e.saveAs(b, path); err != nil {
-			e.message("Save as", err.Error())
-			return
+		path = expandHome(path)
+		write := func() {
+			if err := e.saveAs(b, path); err != nil {
+				e.message("Save as", err.Error())
+				return
+			}
+			e.setStatus("Saved " + b.name)
 		}
-		e.setStatus("Saved " + b.name)
+		// Writing over somebody else's file is worth a question.
+		if abs, err := filepath.Abs(path); err == nil && abs != b.path {
+			if st, err := os.Stat(abs); err == nil && !st.IsDir() {
+				e.confirm("Save as", displayName(abs)+" exists. Write over it?", write)
+				return
+			}
+		}
+		write()
 	})
 }
 
@@ -181,6 +192,7 @@ func (e *Editor) openDialog() {
 		if typed == "" {
 			return
 		}
+		typed = expandHome(typed)
 		if !filepath.IsAbs(typed) {
 			typed = filepath.Join(dir, typed)
 		}
@@ -222,6 +234,19 @@ func (e *Editor) openDialog() {
 	})
 
 	e.showModal(name, frame, 60, 18)
+}
+
+// expandHome turns a leading ~ into the home directory, since a path typed by
+// hand often starts with one.
+func expandHome(path string) string {
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, strings.TrimPrefix(strings.TrimPrefix(path, "~"), "/"))
 }
 
 type dirEntry struct {

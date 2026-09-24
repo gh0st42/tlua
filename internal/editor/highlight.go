@@ -2,7 +2,6 @@ package editor
 
 import (
 	"strings"
-	"unicode"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -61,106 +60,121 @@ type lineState struct {
 	isComment bool
 }
 
-// scanLine classifies one line's runes and reports the state the next line
-// starts in. It is a plain left-to-right scan with no allocations beyond the
-// classes slice, which is what keeps redrawing cheap.
-func scanLine(runes []rune, state lineState) ([]tokenClass, lineState) {
-	classes := make([]tokenClass, len(runes))
-	i := 0
+// scan classifies one line and reports the state the next line starts in.
+//
+// It works in bytes rather than runes and writes into a slice the caller owns,
+// so a redraw allocates nothing; classes may be nil, which is how the line
+// states above the window are worked out without paying for their colours.
+// Each byte of a character carries that character's class, which is what the
+// drawing loop wants: it walks bytes and looks up the class of the one it is on.
+func scan(line string, state lineState, classes []tokenClass) lineState {
+	set := func(from, to int, class tokenClass) {
+		if classes == nil {
+			return
+		}
+		if to > len(classes) {
+			to = len(classes)
+		}
+		for i := from; i < to; i++ {
+			classes[i] = class
+		}
+	}
 
+	i := 0
 	// A long bracket left open above continues here.
 	if state.inLong {
 		class := classString
 		if state.isComment {
 			class = classComment
 		}
-		end := closeLongBracket(runes, 0, state.longLevel)
+		end := closeLongBracket(line, 0, state.longLevel)
 		if end < 0 {
-			fill(classes, 0, len(runes), class)
-			return classes, state
+			set(0, len(line), class)
+			return state
 		}
-		fill(classes, 0, end, class)
+		set(0, end, class)
 		i = end
 		state = lineState{}
 	}
 
-	for i < len(runes) {
-		r := runes[i]
-		switch {
-		case r == '-' && i+1 < len(runes) && runes[i+1] == '-':
+	for i < len(line) {
+		switch c := line[i]; {
+		case c == '-' && i+1 < len(line) && line[i+1] == '-':
 			// A comment: either long, and possibly running past this line, or
 			// to the end of the line.
-			if level, ok := openLongBracket(runes, i+2); ok {
-				end := closeLongBracket(runes, i+2+level+2, level)
+			if level, ok := openLongBracket(line, i+2); ok {
+				end := closeLongBracket(line, i+2+level+2, level)
 				if end < 0 {
-					fill(classes, i, len(runes), classComment)
-					return classes, lineState{inLong: true, longLevel: level, isComment: true}
+					set(i, len(line), classComment)
+					return lineState{inLong: true, longLevel: level, isComment: true}
 				}
-				fill(classes, i, end, classComment)
+				set(i, end, classComment)
 				i = end
 				continue
 			}
-			fill(classes, i, len(runes), classComment)
-			return classes, lineState{}
+			set(i, len(line), classComment)
+			return lineState{}
 
-		case r == '[':
-			if level, ok := openLongBracket(runes, i); ok {
-				end := closeLongBracket(runes, i+level+2, level)
+		case c == '[':
+			if level, ok := openLongBracket(line, i); ok {
+				end := closeLongBracket(line, i+level+2, level)
 				if end < 0 {
-					fill(classes, i, len(runes), classString)
-					return classes, lineState{inLong: true, longLevel: level}
+					set(i, len(line), classString)
+					return lineState{inLong: true, longLevel: level}
 				}
-				fill(classes, i, end, classString)
+				set(i, end, classString)
 				i = end
 				continue
 			}
-			classes[i] = classText
+			set(i, i+1, classText)
 			i++
 
-		case r == '"' || r == '\'':
-			end := closeQuote(runes, i)
-			fill(classes, i, end, classString)
+		case c == '"' || c == '\'':
+			end := closeQuote(line, i)
+			set(i, end, classString)
 			i = end
 
-		case unicode.IsDigit(r) || (r == '.' && i+1 < len(runes) && unicode.IsDigit(runes[i+1])):
-			end := endOfNumber(runes, i)
-			fill(classes, i, end, classNumber)
+		case isDigit(c) || (c == '.' && i+1 < len(line) && isDigit(line[i+1])):
+			end := endOfNumber(line, i)
+			set(i, end, classNumber)
 			i = end
 
-		case isNameStart(r):
+		case isNameStartByte(c):
 			end := i + 1
-			for end < len(runes) && isNameRune(runes[end]) {
+			for end < len(line) && isNameByte(line[end]) {
 				end++
 			}
-			word := string(runes[i:end])
 			class := classText
-			switch {
+			switch word := line[i:end]; {
 			case luaKeywords[word]:
 				class = classKeyword
 			case luaBuiltins[word]:
 				class = classBuiltin
 			}
-			fill(classes, i, end, class)
+			set(i, end, class)
 			i = end
 
 		default:
-			classes[i] = classText
+			// Anything else, including a character outside ASCII, is ordinary
+			// text; a multi-byte one is coloured byte by byte, which comes to
+			// the same thing on screen.
+			set(i, i+1, classText)
 			i++
 		}
 	}
-	return classes, lineState{}
+	return lineState{}
 }
 
 // openLongBracket reports the level of a "[", "[=[" ... opening at i.
-func openLongBracket(runes []rune, i int) (int, bool) {
-	if i >= len(runes) || runes[i] != '[' {
+func openLongBracket(line string, i int) (int, bool) {
+	if i >= len(line) || line[i] != '[' {
 		return 0, false
 	}
 	level := 0
-	for i+1+level < len(runes) && runes[i+1+level] == '=' {
+	for i+1+level < len(line) && line[i+1+level] == '=' {
 		level++
 	}
-	if i+1+level < len(runes) && runes[i+1+level] == '[' {
+	if i+1+level < len(line) && line[i+1+level] == '[' {
 		return level, true
 	}
 	return 0, false
@@ -168,16 +182,16 @@ func openLongBracket(runes []rune, i int) (int, bool) {
 
 // closeLongBracket finds the end of a long bracket of the given level, or -1
 // when it runs past the end of the line.
-func closeLongBracket(runes []rune, from, level int) int {
-	for i := from; i < len(runes); i++ {
-		if runes[i] != ']' {
+func closeLongBracket(line string, from, level int) int {
+	for i := from; i < len(line); i++ {
+		if line[i] != ']' {
 			continue
 		}
 		found := 0
-		for i+1+found < len(runes) && runes[i+1+found] == '=' {
+		for i+1+found < len(line) && line[i+1+found] == '=' {
 			found++
 		}
-		if found == level && i+1+found < len(runes) && runes[i+1+found] == ']' {
+		if found == level && i+1+found < len(line) && line[i+1+found] == ']' {
 			return i + level + 2
 		}
 	}
@@ -186,28 +200,28 @@ func closeLongBracket(runes []rune, from, level int) int {
 
 // closeQuote finds the end of a quoted string, honouring backslash escapes. An
 // unterminated string simply colours to the end of the line.
-func closeQuote(runes []rune, start int) int {
-	quote := runes[start]
-	for i := start + 1; i < len(runes); i++ {
-		switch runes[i] {
+func closeQuote(line string, start int) int {
+	quote := line[start]
+	for i := start + 1; i < len(line); i++ {
+		switch line[i] {
 		case '\\':
 			i++
 		case quote:
 			return i + 1
 		}
 	}
-	return len(runes)
+	return len(line)
 }
 
 // endOfNumber consumes a Lua numeral, including hex and exponents.
-func endOfNumber(runes []rune, start int) int {
+func endOfNumber(line string, start int) int {
 	i := start
-	for i < len(runes) {
-		r := runes[i]
+	for i < len(line) {
+		c := line[i]
 		switch {
-		case unicode.IsDigit(r) || r == '.' || isHexLetter(r) || r == 'x' || r == 'X':
+		case isDigit(c) || c == '.' || isHexLetter(c) || c == 'x' || c == 'X':
 			i++
-		case (r == '+' || r == '-') && i > start && isExponent(runes[i-1]):
+		case (c == '+' || c == '-') && i > start && isExponent(line[i-1]):
 			i++
 		default:
 			return i
@@ -216,62 +230,84 @@ func endOfNumber(runes []rune, start int) int {
 	return i
 }
 
-func isExponent(r rune) bool { return r == 'e' || r == 'E' || r == 'p' || r == 'P' }
+func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 
-func isHexLetter(r rune) bool {
-	return (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F') || isExponent(r)
+func isExponent(c byte) bool { return c == 'e' || c == 'E' || c == 'p' || c == 'P' }
+
+func isHexLetter(c byte) bool {
+	return (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || isExponent(c)
 }
 
-func isNameStart(r rune) bool {
-	return r == '_' || unicode.IsLetter(r)
+func isNameStartByte(c byte) bool {
+	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
-func isNameRune(r rune) bool {
-	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
-}
+func isNameByte(c byte) bool { return isNameStartByte(c) || isDigit(c) }
 
-func fill(classes []tokenClass, from, to int, class tokenClass) {
-	if to > len(classes) {
-		to = len(classes)
-	}
-	for i := from; i < to; i++ {
-		classes[i] = class
-	}
-}
-
-// highlighter keeps what a buffer's text costs to work out: the lines, and the
-// state each one starts in. Both are computed once per edit, and the line
-// states only as far down as the screen has scrolled.
+// highlighter keeps what a buffer's text costs to work out: the lines, the state
+// each one starts in, and a slice to classify a line into.
+//
+// An edit keeps whatever is still true. The states above the first line that
+// changed cannot have changed either, so they stay, and a keystroke at the
+// bottom of a long file re-reads one line rather than all of them.
 type highlighter struct {
-	lines  []string
-	states []lineState // states[i] is the state line i starts in
-	known  int         // how many entries of states are filled in
+	text    string
+	lines   []string
+	states  []lineState // states[i] is the state line i starts in
+	known   int         // how many entries of states are filled in
+	classes []tokenClass
 }
 
-// reset takes new text, throwing away what was derived from the old.
-func (h *highlighter) reset(text string) {
-	h.lines = strings.Split(text, "\n")
-	if cap(h.states) >= len(h.lines) {
-		h.states = h.states[:len(h.lines)]
+// update takes the buffer's text as it now is.
+func (h *highlighter) update(text string) {
+	if h.lines != nil && text == h.text {
+		return
+	}
+	lines := strings.Split(text, "\n")
+
+	// How far down is the text the same? Everything above the first changed
+	// line keeps the state it had.
+	same := 0
+	for same < len(h.lines) && same < len(lines) && h.lines[same] == lines[same] {
+		same++
+	}
+
+	h.text, h.lines = text, lines
+	if cap(h.states) >= len(lines) {
+		h.states = h.states[:len(lines)]
 	} else {
-		h.states = make([]lineState, len(h.lines))
+		states := make([]lineState, len(lines))
+		copy(states, h.states)
+		h.states = states
 	}
 	h.states[0] = lineState{}
-	h.known = 1
+	if h.known > same+1 {
+		h.known = same + 1
+	}
+	if h.known < 1 {
+		h.known = 1
+	}
+	if h.known > len(h.lines) {
+		h.known = len(h.lines)
+	}
 }
 
-// classesFor returns the colour of every rune on a line, scanning down from the
-// last line whose state is already known.
-func (h *highlighter) classesFor(line int) ([]rune, []tokenClass) {
+// classesFor returns a line and the class of each of its bytes, scanning down
+// from the last line whose state is already known.
+func (h *highlighter) classesFor(line int) (string, []tokenClass) {
 	if line < 0 || line >= len(h.lines) {
-		return nil, nil
+		return "", nil
 	}
 	for h.known <= line {
-		_, next := scanLine([]rune(h.lines[h.known-1]), h.states[h.known-1])
-		h.states[h.known] = next
+		h.states[h.known] = scan(h.lines[h.known-1], h.states[h.known-1], nil)
 		h.known++
 	}
-	runes := []rune(h.lines[line])
-	classes, _ := scanLine(runes, h.states[line])
-	return runes, classes
+
+	text := h.lines[line]
+	if cap(h.classes) < len(text) {
+		h.classes = make([]tokenClass, len(text)+64)
+	}
+	classes := h.classes[:len(text)]
+	scan(text, h.states[line], classes)
+	return text, classes
 }

@@ -42,7 +42,7 @@ func (a *codeArea) Draw(screen tcell.Screen) {
 		return
 	}
 	if a.stale {
-		a.hl.reset(a.GetText())
+		a.hl.update(a.GetText())
 		a.stale = false
 	}
 
@@ -50,12 +50,12 @@ func (a *codeArea) Draw(screen tcell.Screen) {
 	_, selectionBg, _ := selectionStyle.Decompose()
 
 	for row := 0; row < height; row++ {
-		runes, classes := a.hl.classesFor(rowOffset + row)
-		if runes == nil {
+		line, classes := a.hl.classesFor(rowOffset + row)
+		if classes == nil {
 			break
 		}
 		column := 0
-		for i, r := range runes {
+		for i, r := range line {
 			w := cellWidth(r)
 			style := classStyles[classes[i]]
 			for cell := 0; cell < w; cell++ {

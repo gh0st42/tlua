@@ -13,6 +13,9 @@ type buffer struct {
 	name  string // what the tab bar shows
 	area  *codeArea
 	dirty bool
+	// crlf records that the file was read with DOS line endings, so that saving
+	// it does not quietly rewrite every line.
+	crlf bool
 }
 
 // newBuffer builds an editing widget wired to this editor's bookkeeping.
@@ -28,6 +31,7 @@ func (e *Editor) newBuffer(path, name, text string) *buffer {
 	)
 	area.SetChangedFunc(func() {
 		area.invalidate()
+		e.lspGeneration++
 		if !b.dirty {
 			b.dirty = true
 			e.refreshTabs()
@@ -35,6 +39,7 @@ func (e *Editor) newBuffer(path, name, text string) *buffer {
 		e.refreshStatus()
 	})
 	area.SetMovedFunc(func() {
+		e.lspGeneration++
 		e.refreshStatus()
 		// The text and the cursor are already up to date here, which is what
 		// the parameter hint needs to follow them.
@@ -93,15 +98,19 @@ func (e *Editor) openFile(path string) error {
 	}
 
 	var text string
+	crlf := false
 	if err == nil {
 		data, err := os.ReadFile(abs)
 		if err != nil {
 			return err
 		}
-		text = strings.ReplaceAll(string(data), "\r\n", "\n")
+		text = string(data)
+		crlf = strings.Contains(text, "\r\n")
+		text = strings.ReplaceAll(text, "\r\n", "\n")
 	}
 
 	b := e.newBuffer(abs, displayName(abs), text)
+	b.crlf = crlf
 	if e.lsp != nil {
 		_ = e.lsp.Sync(abs, text)
 	}
@@ -146,7 +155,11 @@ func (e *Editor) save(b *buffer) error {
 	if !strings.HasSuffix(text, "\n") && text != "" {
 		text += "\n" // a Lua file, like any text file, ends in a newline
 	}
-	if err := os.WriteFile(b.path, []byte(text), 0o644); err != nil {
+	onDisk := text
+	if b.crlf {
+		onDisk = strings.ReplaceAll(text, "\n", "\r\n")
+	}
+	if err := os.WriteFile(b.path, []byte(onDisk), 0o644); err != nil {
 		return err
 	}
 	if e.lsp != nil {
@@ -205,8 +218,10 @@ func (e *Editor) closeBuffer(b *buffer) {
 		}
 	}
 
-	if b.path != "" && e.lsp != nil {
-		_ = e.lsp.DidClose(b.path)
+	if e.lsp != nil {
+		// Including buffers that were never saved: the server was told about
+		// them under the same name.
+		_ = e.lsp.DidClose(b.lspPath())
 	}
 	if len(e.buffers) == 0 {
 		e.newFile()
@@ -223,6 +238,7 @@ func (e *Editor) selectBuffer(i int) {
 		return
 	}
 	e.hideSignature() // it belonged to the buffer being left
+	e.completing = false
 	e.current = i
 	e.editors.SwitchToPage(pageName(i))
 	e.app.SetFocus(e.buffers[i].area)

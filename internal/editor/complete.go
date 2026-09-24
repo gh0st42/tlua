@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -47,6 +48,12 @@ func (e *Editor) cursorPosition(b *buffer) lsp.Position {
 	return lsp.Position{Line: row, Character: units}
 }
 
+// isNameRune reports whether a rune can be part of a Lua name, which is what
+// decides where the word under the cursor begins and ends.
+func isNameRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
 // wordBeforeCursor is the run of name characters the cursor sits at the end of,
 // which is what a completion without an edit of its own replaces.
 func wordBeforeCursor(text string, offset int) (start int) {
@@ -70,10 +77,56 @@ func wordBeforeCursor(text string, offset int) (start int) {
 // offers the answers in a list at the cursor.
 func (e *Editor) complete() { e.completeWith(false) }
 
-// completeAutomatically is the same request made because a trigger character
-// was typed. It says nothing when there is nothing to say, since a message on
-// every "." would be noise.
-func (e *Editor) completeAutomatically() { e.completeWith(true) }
+// completeAutomatically is the same request made because a trigger character was
+// typed. It runs off the event loop, so typing never waits on the server, and it
+// says nothing when there is nothing to say, since a message on every "." would
+// be noise.
+func (e *Editor) completeAutomatically() {
+	b, client := e.buf(), e.lsp
+	if b == nil || client == nil || !client.CanComplete() {
+		return
+	}
+	if e.completeAsking {
+		// Typing faster than the server answers: remember that the question
+		// needs asking again, rather than losing the latest keystroke.
+		e.completeWanted = true
+		return
+	}
+	generation := e.lspGeneration
+	path, text, pos := b.lspPath(), b.area.GetText(), e.cursorPosition(b)
+	e.completeAsking = true
+	// The session starts with the question, not with the answer: the next letter
+	// typed has to ask again even if the first answer is still on its way.
+	e.completing = true
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), lspAutoTimeout)
+		defer cancel()
+		items, err := client.Complete(ctx, path, text, pos)
+
+		e.app.QueueUpdateDraw(func() {
+			e.completeAsking = false
+			if e.completeWanted {
+				// The text moved on while this answer was coming; ask about
+				// where things are now instead of showing where they were.
+				e.completeWanted = false
+				e.completeAutomatically()
+				return
+			}
+			if generation != e.lspGeneration || e.buf() != b {
+				return // about where the cursor used to be; a newer ask may follow
+			}
+			if err != nil || len(items) == 0 {
+				e.completing = false // there is nothing here to complete
+				return
+			}
+			if e.modals > 0 || e.openMenu >= 0 {
+				return // something else has the screen
+			}
+			e.showCompletions(b, items)
+		})
+	}()
+}
 
 func (e *Editor) completeWith(automatic bool) {
 	b := e.buf()
@@ -152,6 +205,7 @@ func (e *Editor) isTriggerCharacter(r rune) bool {
 // should appear where the typing is.
 func (e *Editor) showCompletions(b *buffer, items []lsp.CompletionItem) {
 	const name = "complete"
+	e.completing = true // picking from the list is part of the session
 
 	// The frame carries the border; the list sits inside it with the hint line.
 	list := newClickList()
@@ -180,6 +234,7 @@ func (e *Editor) showCompletions(b *buffer, items []lsp.CompletionItem) {
 			label += fmt.Sprintf("  [gray]%s", kind)
 		}
 		list.AddItem(label, "", 0, func() {
+			e.completing = false
 			e.closeModal(name)
 			e.insertCompletion(b, chosen)
 		})
@@ -195,6 +250,7 @@ func (e *Editor) showCompletions(b *buffer, items []lsp.CompletionItem) {
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyEscape:
+			e.completing = false
 			e.closeModal(name)
 			return nil
 
@@ -207,6 +263,8 @@ func (e *Editor) showCompletions(b *buffer, items []lsp.CompletionItem) {
 			if event.Key() != tcell.KeyRune || isNameRune(event.Rune()) ||
 				e.isTriggerCharacter(event.Rune()) {
 				e.completeAutomatically()
+			} else {
+				e.completing = false
 			}
 			return nil
 		}
@@ -249,8 +307,12 @@ func (e *Editor) insertCompletion(b *buffer, item lsp.CompletionItem) {
 	}
 
 	insert := item.Text()
-	_, cursor, _ := b.area.GetSelection()
-	start := wordBeforeCursor(text, cursor)
+	_, selStart, selEnd := b.area.GetSelection()
+	start, cursor := selStart, selEnd
+	if selStart == selEnd {
+		// Nothing selected: the word being typed makes way.
+		start = wordBeforeCursor(text, selEnd)
+	}
 	b.area.Replace(start, cursor, insert)
 	at := start + len(insert)
 	b.area.Select(at, at)

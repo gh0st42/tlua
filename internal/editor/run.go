@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rivo/tview"
 
@@ -63,7 +65,8 @@ func (e *Editor) runBuffer(b *buffer) {
 	dir, file := filepath.Dir(b.path), filepath.Base(b.path)
 	e.appendOutput(tagNote + "Running " + tview.Escape(file) + "\n")
 
-	cmd := exec.Command(e.exe, file)
+	// "--" so that a file whose name begins with a dash is a file, not an option.
+	cmd := exec.Command(e.exe, "--", file)
 	cmd.Dir = dir
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -93,7 +96,12 @@ func (e *Editor) runBuffer(b *buffer) {
 	go func() {
 		wg.Wait()
 		waitErr := cmd.Wait()
+		// Whatever the program printed last has not been flushed yet.
+		remaining := e.takePendingOutput()
 		e.app.QueueUpdateDraw(func() {
+			if remaining != "" {
+				e.appendOutput(remaining)
+			}
 			e.running = nil
 			switch {
 			case waitErr == nil:
@@ -112,8 +120,8 @@ func (e *Editor) runBuffer(b *buffer) {
 	}()
 }
 
-// pump copies one of the program's streams into the output pane, line by line,
-// and optionally keeps a copy for the error jump.
+// pump copies one of the program's streams into the output pane, and optionally
+// keeps a copy for the error jump.
 func (e *Editor) pump(wg *sync.WaitGroup, r io.Reader, tag string, keep *strings.Builder) {
 	defer wg.Done()
 	scanner := bufio.NewScanner(r)
@@ -124,9 +132,47 @@ func (e *Editor) pump(wg *sync.WaitGroup, r io.Reader, tag string, keep *strings
 			keep.WriteString(line)
 			keep.WriteByte('\n')
 		}
-		text := tag + tview.Escape(line) + "\n"
-		e.app.QueueUpdateDraw(func() { e.appendOutput(text) })
+		e.writeOutput(tag + tview.Escape(line) + "\n")
 	}
+}
+
+// outputFlush is how long lines are allowed to pile up before the pane is
+// redrawn.
+const outputFlush = 50 * time.Millisecond
+
+// writeOutput queues a line for the output pane. A program that prints without
+// pause would otherwise force a redraw of the whole screen for every line, and
+// tview's queue waits for each one, which makes the editor crawl just when the
+// program is at its busiest. Lines gather instead and go up together.
+func (e *Editor) writeOutput(text string) {
+	e.outputMu.Lock()
+	e.outputPending.WriteString(text)
+	already := e.outputFlushing
+	e.outputFlushing = true
+	e.outputMu.Unlock()
+	if already {
+		return
+	}
+
+	go func() {
+		time.Sleep(outputFlush)
+		text := e.takePendingOutput()
+		if text == "" {
+			return
+		}
+		e.app.QueueUpdateDraw(func() { e.appendOutput(text) })
+	}()
+}
+
+// takePendingOutput hands over whatever has gathered, and lets the next line
+// schedule a fresh flush.
+func (e *Editor) takePendingOutput() string {
+	e.outputMu.Lock()
+	defer e.outputMu.Unlock()
+	text := e.outputPending.String()
+	e.outputPending.Reset()
+	e.outputFlushing = false
+	return text
 }
 
 // stopProgram is Ctrl-C: it kills the running program, not the editor.
@@ -136,6 +182,10 @@ func (e *Editor) stopProgram() {
 		return
 	}
 	if err := e.running.Process.Kill(); err != nil {
+		if errors.Is(err, os.ErrProcessDone) {
+			e.setStatus("The program had already finished")
+			return
+		}
 		e.setStatus("Cannot stop the program: " + err.Error())
 		return
 	}
@@ -229,6 +279,7 @@ func (e *Editor) toggleOutput() {
 }
 
 func (e *Editor) clearOutput() {
+	e.takePendingOutput() // drop what has not gone up yet
 	e.output.SetText("")
 	e.outputBytes = 0
 	e.outputFull = false

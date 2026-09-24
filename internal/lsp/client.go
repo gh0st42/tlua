@@ -38,6 +38,9 @@ type Client struct {
 	closed  bool
 
 	writeMu sync.Mutex
+	// syncMu keeps a document's changes in the order they were numbered: two
+	// goroutines syncing at once must not send version 3 before version 2.
+	syncMu sync.Mutex
 
 	canFormat      bool
 	canComplete    bool
@@ -175,6 +178,9 @@ func hasCapability(raw json.RawMessage) bool {
 // Sync brings the server's copy of a document in line with the editor's.
 func (c *Client) Sync(path, text string) error {
 	uri := pathToURI(path)
+
+	c.syncMu.Lock()
+	defer c.syncMu.Unlock()
 
 	c.mu.Lock()
 	version, open := c.docs[uri]

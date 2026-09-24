@@ -2,8 +2,10 @@ package editor
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 
@@ -180,4 +182,72 @@ func TestOnlyBracketsAndCommasTriggerTheHint(t *testing.T) {
 			}
 		}
 	})
+}
+
+// Cursor movement must not wait on the language server. With a server that
+// takes its time, moving about stays as quick as it is with no server at all.
+func TestCursorMovementDoesNotWaitOnTheServer(t *testing.T) {
+	const thinkMS = 400
+	withLanguageServer(t, "FAKELSP_SLOW="+strconv.Itoa(thinkMS))
+
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"),
+		"string.format(x\nlocal a = 1\nlocal b = 2\nlocal c = 3\nlocal d = 4\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanSignature() })
+
+	// Put the hint up, which does wait: it was asked for by hand.
+	onEditor(t, e, func() {
+		b := e.buffers[0]
+		offset := offsetAt(b.area.GetText(), 0, 15)
+		b.area.Select(offset, offset)
+	})
+	press(screen, tcell.KeyCtrlP, 0, tcell.ModNone)
+	waitFor(t, e, "the hint", func() bool { return e.signatureShown })
+
+	// Now move about. Each move asks the server again, and each answer takes
+	// 400ms, so waiting for them would cost seconds.
+	const moves = 8
+	start := time.Now()
+	for i := 0; i < moves; i++ {
+		press(screen, tcell.KeyDown, 0, tcell.ModNone)
+		press(screen, tcell.KeyUp, 0, tcell.ModNone)
+	}
+	// The editor answers the keyboard throughout.
+	waitFor(t, e, "the editor to keep up", func() bool {
+		row, _, _, _ := e.buffers[0].area.GetCursor()
+		return row == 0
+	})
+	elapsed := time.Since(start)
+
+	if elapsed > moves*thinkMS*time.Millisecond/2 {
+		t.Errorf("%d moves took %v; the editor is waiting on the server", moves*2, elapsed)
+	}
+	t.Logf("%d moves in %v with a server that thinks for %dms", moves*2, elapsed, thinkMS)
+}
+
+// Typing does not wait on it either.
+func TestTypingDoesNotWaitOnTheServer(t *testing.T) {
+	withLanguageServer(t, "FAKELSP_SLOW=400")
+
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"), "local t = {}\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanComplete() })
+
+	onEditor(t, e, func() {
+		b := e.buffers[0]
+		offset := offsetAt(b.area.GetText(), 0, 12)
+		b.area.Select(offset, offset)
+	})
+
+	start := time.Now()
+	typeText(screen, ".insert(1, 2)")
+	waitFor(t, e, "the typing to land", func() bool {
+		return strings.Contains(e.buffers[0].area.GetText(), ".insert(1, 2)")
+	})
+	elapsed := time.Since(start)
+
+	if elapsed > 2*time.Second {
+		t.Errorf("typing 13 characters took %v; the editor is waiting on the server", elapsed)
+	}
+	t.Logf("13 characters in %v with a server that thinks for 400ms", elapsed)
 }

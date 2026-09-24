@@ -456,3 +456,58 @@ func TestTypingASpaceDoesNotOpenCompletions(t *testing.T) {
 		t.Error("a space opened a completion list")
 	}
 }
+
+// The list narrows as the word is typed, and goes when the word ends, which is
+// what makes it a session rather than a one-off.
+func TestCompletionSessionFollowsTheWordAndEnds(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"), "io\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanComplete() })
+
+	onEditor(t, e, func() {
+		b := e.buffers[0]
+		offset := offsetAt(b.area.GetText(), 0, 2)
+		b.area.Select(offset, offset)
+	})
+	typeText(screen, ".")
+	waitFor(t, e, "the list", func() bool { return e.modals == 1 })
+
+	// Several letters in a row: the list is there after each one.
+	for _, letter := range []string{"p", "r", "i"} {
+		typeText(screen, letter)
+		waitFor(t, e, "the list to follow "+letter, func() bool { return e.modals == 1 })
+	}
+	waitFor(t, e, "the letters to land", func() bool {
+		return e.buffers[0].area.GetText() == "io.pri\n"
+	})
+
+	// A character that cannot be part of a name ends the session.
+	typeText(screen, "(")
+	waitFor(t, e, "the list to go", func() bool { return !e.completing })
+	waitFor(t, e, "the bracket to land", func() bool {
+		return strings.HasPrefix(e.buffers[0].area.GetText(), "io.pri(")
+	})
+}
+
+// Backspacing while completing narrows the list back, rather than losing it.
+func TestBackspaceKeepsTheCompletionSession(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"), "io\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanComplete() })
+
+	onEditor(t, e, func() {
+		b := e.buffers[0]
+		offset := offsetAt(b.area.GetText(), 0, 2)
+		b.area.Select(offset, offset)
+	})
+	typeText(screen, ".pr")
+	waitFor(t, e, "the list", func() bool { return e.modals == 1 })
+
+	press(screen, tcell.KeyBackspace2, 0, tcell.ModNone)
+	waitFor(t, e, "the backspace to land", func() bool {
+		return e.buffers[0].area.GetText() == "io.p\n"
+	})
+	waitFor(t, e, "the list to still be there", func() bool { return e.modals == 1 })
+}

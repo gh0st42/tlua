@@ -79,12 +79,57 @@ func (e *Editor) signatureHelp(automatic bool) {
 
 // refreshSignature keeps the hint in step with the cursor while it is up, and
 // takes it down once the cursor leaves the call. It runs from the text area's
-// own moved handler, where the text and the cursor are already up to date.
+// own moved handler, where the text and the cursor are already up to date, so it
+// must not wait on the server: cursor movement would be as slow as the answer.
 func (e *Editor) refreshSignature() {
 	if !e.signatureShown || e.modals > 0 || e.openMenu >= 0 {
 		return
 	}
-	e.signatureHelp(true)
+	e.signatureHelpAsync()
+}
+
+// signatureHelpAsync asks the server without holding the editor up. The answer
+// comes back on the event loop and is dropped if the cursor has moved on since,
+// and only one question is out at a time, so holding an arrow key cannot pile
+// requests up.
+func (e *Editor) signatureHelpAsync() {
+	b, client := e.buf(), e.lsp
+	if b == nil || client == nil || !client.CanSignature() {
+		return
+	}
+	if e.signatureAsking {
+		// Typing or moving faster than the server answers: ask again once this
+		// answer is in, so the hint ends up describing where the cursor is now.
+		e.signatureWanted = true
+		return
+	}
+	generation := e.lspGeneration
+	path, text, pos := b.lspPath(), b.area.GetText(), e.cursorPosition(b)
+	e.signatureAsking = true
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), lspSignatureTimeout)
+		defer cancel()
+		help, err := client.Signature(ctx, path, text, pos)
+
+		e.app.QueueUpdateDraw(func() {
+			e.signatureAsking = false
+			if e.signatureWanted {
+				e.signatureWanted = false
+				e.signatureHelpAsync()
+				return
+			}
+			if generation != e.lspGeneration || e.buf() != b {
+				return // the answer is about where the cursor used to be
+			}
+			signature, active, ok := help.Active()
+			if err != nil || !ok {
+				e.hideSignature()
+				return
+			}
+			e.showSignature(b, signature, active)
+		})
+	}()
 }
 
 // showSignature draws the hint, with the parameter the cursor is at picked out.

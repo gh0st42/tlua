@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -54,16 +55,42 @@ type Editor struct {
 	signatureShown    bool
 	signatureInStatus bool
 
-	outputShown  bool
-	outputBytes  int       // how much the pane holds, against outputLimit
-	outputFull   bool      // set once the pane stopped accepting more
-	running      *exec.Cmd // the program started by F5, while it runs
-	exe          string    // this binary, used to run scripts
-	status       string    // the message shown until something replaces it
-	taggedStatus string    // a message that brings its own colours
+	// lspGeneration counts changes of text or cursor, so an answer that arrives
+	// after the user has moved on can be recognised and dropped. The asking
+	// flags keep one question of each kind in the air at a time.
+	lspGeneration   int
+	signatureAsking bool
+	signatureWanted bool
+	completeAsking  bool
+	completeWanted  bool
+	// completing marks a completion session: while one is in progress every
+	// name character asks again, so the list narrows as the word is typed
+	// rather than appearing once and going.
+	completing bool
+
+	outputShown bool
+	outputBytes int  // how much the pane holds, against outputLimit
+	outputFull  bool // set once the pane stopped accepting more
+
+	// Program output gathers here between redraws.
+	outputMu       sync.Mutex
+	outputPending  strings.Builder
+	outputFlushing bool
+	running        *exec.Cmd // the program started by F5, while it runs
+	exe            string    // this binary, used to run scripts
+	status         string    // the message shown until something replaces it
+	taggedStatus   string    // a message that brings its own colours
 }
 
 const outputHeight = 10
+
+// keyHints is the bottom line's standing content: short enough to fit an 80
+// column terminal beside the position readout, which is 15 columns. The rest of
+// the keys live in the menus and in F1. It never changes, so it is built once
+// rather than on every cursor movement.
+var keyHints = tagBar + " " + strings.Join([]string{
+	"F1 Help", "F2 Save", "F3 Open", "F5 Run", "F7 Find", "F9 Check", "F10 Menu",
+}, "  ")
 
 // Config is what an editing session starts from.
 type Config struct {
@@ -155,6 +182,12 @@ func New(cfg Config) (*Editor, error) {
 // Run takes over the terminal until the user leaves.
 func (e *Editor) Run() error {
 	defer e.stopLanguageServer()
+	// A program started with F5 must not outlive the editor that started it.
+	defer func() {
+		if e.running != nil && e.running.Process != nil {
+			_ = e.running.Process.Kill()
+		}
+	}()
 	return e.app.Run()
 }
 
@@ -196,10 +229,7 @@ func (e *Editor) refreshTabs() {
 
 // refreshStatus redraws the function key hints and the cursor position.
 func (e *Editor) refreshStatus() {
-	// Short enough to fit an 80 column terminal beside the position readout,
-	// which is 15 columns; the rest of the keys live in the menus and in F1.
-	keys := []string{"F1 Help", "F2 Save", "F3 Open", "F5 Run", "F7 Find", "F9 Check", "F10 Menu"}
-	hint := tagBar + " " + strings.Join(keys, "  ")
+	hint := keyHints
 	if e.status != "" {
 		hint = tagBar + " " + tview.Escape(e.status)
 	}
@@ -331,6 +361,13 @@ func (e *Editor) handleKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyCtrlP:
 		e.signatureHelp(false)
 		return nil
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if e.completing && e.textHasFocus() {
+			e.sendKeyToText(event)
+			e.completeAutomatically()
+			return nil
+		}
+		return event
 	case tcell.KeyF1:
 		// Turbo Pascal put help on the word under the cursor on Ctrl-F1, and
 		// terminals that send it get that here too.
@@ -370,10 +407,18 @@ func (e *Editor) handleKey(event *tcell.EventKey) *tcell.EventKey {
 				e.completeAutomatically()
 				return nil
 			case e.isSignatureTrigger(event.Rune()):
+				e.completing = false // a bracket or comma ends a word
 				e.sendKeyToText(event)
-				e.signatureHelp(true)
+				e.signatureHelpAsync()
+				return nil
+			case e.completing && isNameRune(event.Rune()):
+				// The word being completed is still being typed: ask again, so
+				// the list follows it.
+				e.sendKeyToText(event)
+				e.completeAutomatically()
 				return nil
 			}
+			e.completing = false // whatever this is, the word has ended
 		}
 		return event
 	}

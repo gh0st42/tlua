@@ -11,7 +11,9 @@
 // or hover (FAKELSP_NOHOVER), one that answers completion with null as a server
 // still reading a workspace does (FAKELSP_NULLCOMPLETE), one that never answers
 // a formatting request (FAKELSP_HANG), or one that fails it (FAKELSP_ERROR).
-// FAKELSP_LOG names a file to record what the server was told.
+// FAKELSP_LOG names a file to record what the server was told, and FAKELSP_SLOW
+// a number of milliseconds to think before answering a completion or signature
+// request, which is how a test sees whether the editor waits.
 package main
 
 import (
@@ -20,11 +22,21 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 	"unicode/utf16"
 )
 
 var documents = map[string]string{}
+
+// think waits, as a server under load would.
+func think() {
+	ms, err := strconv.Atoi(os.Getenv("FAKELSP_SLOW"))
+	if err == nil && ms > 0 {
+		time.Sleep(time.Duration(ms) * time.Millisecond)
+	}
+}
 
 // record appends a line to the file named by FAKELSP_LOG, when a test asked for
 // one, so it can see what the server was told and when.
@@ -135,6 +147,7 @@ func main() {
 			reply(out, msg.ID, edits(documents[params.TextDocument.URI]))
 
 		case "textDocument/completion":
+			think()
 			var params struct {
 				TextDocument struct {
 					URI string `json:"uri"`
@@ -153,6 +166,7 @@ func main() {
 				params.Position.Line, params.Position.Character))
 
 		case "textDocument/signatureHelp":
+			think()
 			var params struct {
 				TextDocument struct {
 					URI string `json:"uri"`
