@@ -11,6 +11,7 @@
 // or hover (FAKELSP_NOHOVER), one that answers completion with null as a server
 // still reading a workspace does (FAKELSP_NULLCOMPLETE), one that never answers
 // a formatting request (FAKELSP_HANG), or one that fails it (FAKELSP_ERROR).
+// FAKELSP_LOG names a file to record what the server was told.
 package main
 
 import (
@@ -24,6 +25,21 @@ import (
 )
 
 var documents = map[string]string{}
+
+// record appends a line to the file named by FAKELSP_LOG, when a test asked for
+// one, so it can see what the server was told and when.
+func record(line string) {
+	path := os.Getenv("FAKELSP_LOG")
+	if path == "" {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintln(f, line)
+}
 
 func main() {
 	in := bufio.NewReader(os.Stdin)
@@ -52,7 +68,9 @@ func main() {
 			}
 			if os.Getenv("FAKELSP_NOCOMPLETE") == "" {
 				capabilities["completionProvider"] = map[string]any{
-					"triggerCharacters": []string{".", ":"},
+					// As broad as a real server's: the editor is expected to
+					// narrow this down rather than pop up on every space.
+					"triggerCharacters": []string{".", ":", " ", "(", "=", ",", "-"},
 				}
 			}
 			reply(out, msg.ID, map[string]any{
@@ -77,6 +95,7 @@ func main() {
 			}
 			_ = json.Unmarshal(msg.Params, &params)
 			documents[params.TextDocument.URI] = params.TextDocument.Text
+			record("didOpen " + params.TextDocument.URI)
 
 		case "textDocument/didChange":
 			var params struct {

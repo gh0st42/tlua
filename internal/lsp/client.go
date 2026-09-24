@@ -39,10 +39,11 @@ type Client struct {
 
 	writeMu sync.Mutex
 
-	canFormat   bool
-	canComplete bool
-	canHover    bool
-	serverName  string
+	canFormat    bool
+	canComplete  bool
+	canHover     bool
+	triggerChars []string
+	serverName   string
 }
 
 // shutdownTimeout is how long the client waits for a server to leave before it
@@ -138,6 +139,7 @@ func (c *Client) initialize(ctx context.Context, root string) error {
 	}
 	c.canFormat = hasCapability(result.Capabilities.DocumentFormattingProvider)
 	c.canComplete = hasCapability(result.Capabilities.CompletionProvider)
+	c.triggerChars = triggerCharacters(result.Capabilities.CompletionProvider)
 	c.canHover = hasCapability(result.Capabilities.HoverProvider)
 	c.serverName = result.ServerInfo.Name
 
@@ -455,6 +457,26 @@ func pathToURI(path string) string {
 
 // CanComplete reports whether the server offers completions.
 func (c *Client) CanComplete() bool { return c.canComplete }
+
+// TriggerCharacters are the characters after which the server expects to be
+// asked for completions without being prompted. A server that offers
+// completions but names none gets Lua's two, which is what asking after "io."
+// and "obj:" depends on.
+func (c *Client) TriggerCharacters() []string { return c.triggerChars }
+
+// triggerCharacters reads them out of the completion capability.
+func triggerCharacters(raw json.RawMessage) []string {
+	if !hasCapability(raw) {
+		return nil
+	}
+	var options struct {
+		TriggerCharacters []string `json:"triggerCharacters"`
+	}
+	if err := json.Unmarshal(raw, &options); err == nil && len(options.TriggerCharacters) > 0 {
+		return options.TriggerCharacters
+	}
+	return []string{".", ":"}
+}
 
 // CanHover reports whether the server offers hover help.
 func (c *Client) CanHover() bool { return c.canHover }

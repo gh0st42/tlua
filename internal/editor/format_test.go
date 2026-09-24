@@ -303,3 +303,27 @@ func TestOffsetAt(t *testing.T) {
 		}
 	}
 }
+
+// The editor tells the server about open buffers as soon as it starts, so the
+// server is reading the workspace before the first question is asked rather
+// than after it.
+func TestOpenBuffersReachTheServerAtStartup(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "fakelsp.log")
+	withLanguageServer(t, "FAKELSP_LOG="+log)
+
+	dir := t.TempDir()
+	first := write(t, filepath.Join(dir, "main.lua"), "print(1)\n")
+	second := write(t, filepath.Join(dir, "lib.lua"), "return 1\n")
+
+	e, _ := start(t, first, second)
+	waitForServer(t, e)
+
+	waitFor(t, e, "both buffers to reach the server", func() bool {
+		data, err := os.ReadFile(log)
+		if err != nil {
+			return false
+		}
+		return strings.Contains(string(data), "main.lua") &&
+			strings.Contains(string(data), "lib.lua")
+	})
+}

@@ -322,8 +322,42 @@ func (e *Editor) handleKey(event *tcell.EventKey) *tcell.EventKey {
 			e.app.SetFocus(b.area)
 		}
 		return nil
+
+	case tcell.KeyRune:
+		// A "." or a ":" asks the language server what comes next. The character
+		// has to be in the text before the question is asked, because the answer
+		// depends on the cursor being after it, so it goes in here rather than
+		// being left to tview: queueing the request instead would deadlock,
+		// since tview's QueueUpdate waits for the work it queues and this is
+		// the goroutine that would have to do it.
+		if e.isTriggerCharacter(event.Rune()) && e.textHasFocus() {
+			e.sendKeyToText(event)
+			e.completeAutomatically()
+			return nil
+		}
+		return event
 	}
 	return event
+}
+
+// textHasFocus reports whether the keyboard belongs to the buffer being edited,
+// rather than to the output pane.
+func (e *Editor) textHasFocus() bool {
+	b := e.buf()
+	return b != nil && b.area.HasFocus()
+}
+
+// sendKeyToText hands a key to the buffer being edited, which is how a popup
+// lets typing carry on underneath it.
+func (e *Editor) sendKeyToText(event *tcell.EventKey) {
+	b := e.buf()
+	if b == nil {
+		return
+	}
+	e.app.SetFocus(b.area)
+	if handler := b.area.InputHandler(); handler != nil {
+		handler(event, func(tview.Primitive) {})
+	}
 }
 
 // handleAltKey covers the Alt combinations: menu hotkeys, Alt-1..9 to pick a

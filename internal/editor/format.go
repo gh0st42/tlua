@@ -50,6 +50,12 @@ func (e *Editor) startLanguageServer() {
 				return
 			}
 			e.lsp = client
+			// Tell it about what is already open, so it starts reading the
+			// workspace now rather than when the first question is asked: a
+			// server that has just started answers "nothing" until it has.
+			for _, b := range e.buffers {
+				_ = client.Sync(b.lspPath(), b.area.GetText())
+			}
 			if client.CanFormat() {
 				e.lspNote = client.Name() + ": formatting on save"
 			} else {

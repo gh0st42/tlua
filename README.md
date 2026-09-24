@@ -148,9 +148,10 @@ what the screen shows. `F12` formats without saving. *Edit › Format on save*
 turns the pass on and off when a server's idea of tidy is not yours, and
 *Edit › Language server...* says what was found.
 
-**Completion.** `Ctrl-Space` asks what could go at the cursor and lists the
-answers in a panel under it, with the kind of each beside it and the server's
-description of the selected one along the bottom:
+**Completion.** Typing `.` or `:` asks the server what comes next, and
+`Ctrl-Space` asks anywhere. The answers appear in a panel under the cursor, with
+the kind of each beside it and the server's description of the selected one
+along the bottom:
 
 ```
 local x = pri
@@ -164,17 +165,33 @@ local x = pri
              ╚═════════════════════════╝
 ```
 
-`Enter` or a click inserts. An item that brings its own edit says exactly what to
-replace; otherwise the word being typed makes way for it, and a dotted or colon
-prefix is left alone so `table.ins` completes to `table.insert` rather than
-doubling the prefix. Snippets go in with their placeholders reduced to defaults,
-since this editor has no tab stops to walk.
+`Enter` or a click inserts, `Esc` dismisses, and typing carries on regardless:
+a letter goes into the text and the list comes back narrowed to the word as it
+now stands, backspace likewise.
+
+An item that brings its own edit says exactly what to replace; otherwise the
+word being typed makes way for it, and a dotted or colon prefix is left alone so
+`table.ins` completes to `table.insert` rather than doubling the prefix.
+Snippets go in with their placeholders reduced to defaults, since this editor has
+no tab stops to walk.
+
+Only `.` and `:` open the list unasked. Servers may request far more —
+lua-language-server asks to be consulted after a space, a tab, `(`, `=`, `-` and
+a dozen others — and a list that opens on every space is an obstacle rather than
+help, so the server's list is narrowed to member access. A buffer that has never
+been saved completes too: the server is told about it under its name in the
+working directory, and the file need not exist.
 
 **Hover help.** `F11`, or `Ctrl-F1` where the terminal sends it — which is where
 Turbo Pascal put help on the word under the cursor — shows what the server knows
 about it. The answer arrives as markdown and is reduced to text: fences,
 emphasis, links and rules go, and what they wrapped stays. Plain `F1` is still
 the key list.
+
+Open buffers are handed to the server as soon as it starts, so it reads the
+workspace before the first question rather than after it; a server that has only
+just started answers "nothing" until it has, and a request made by hand asks
+twice before believing it.
 
 None of this is required: with no server the editor behaves exactly as it did
 before, each of the three keys says so plainly, and a server that fails or goes

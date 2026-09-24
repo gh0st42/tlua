@@ -301,3 +301,158 @@ func TestPlainF1IsStillTheKeyList(t *testing.T) {
 		}
 	})
 }
+
+// Typing a dot asks the server on its own: this is what "autocomplete" means.
+func TestTypingADotOpensCompletions(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"), "local f = io\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanComplete() })
+
+	onEditor(t, e, func() {
+		b := e.buffers[0]
+		offset := offsetAt(b.area.GetText(), 0, 12) // just after "io"
+		b.area.Select(offset, offset)
+	})
+
+	typeText(screen, ".")
+	waitFor(t, e, "the completion list to appear by itself", func() bool { return e.modals == 1 })
+	onEditor(t, e, func() {
+		if got := e.buffers[0].area.GetText(); got != "local f = io.\n" {
+			t.Errorf("the dot did not go in: %q", got)
+		}
+	})
+
+	// And picking an item completes after the dot.
+	press(screen, tcell.KeyEnter, 0, tcell.ModNone)
+	waitFor(t, e, "the insertion", func() bool {
+		return e.modals == 0 && e.buffers[0].area.GetText() == "local f = io.print\n"
+	})
+}
+
+func TestTypingAColonOpensCompletions(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"), "obj\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanComplete() })
+
+	onEditor(t, e, func() {
+		b := e.buffers[0]
+		offset := offsetAt(b.area.GetText(), 0, 3)
+		b.area.Select(offset, offset)
+	})
+	typeText(screen, ":")
+	waitFor(t, e, "the completion list", func() bool { return e.modals == 1 })
+}
+
+// An ordinary letter is not a trigger, so typing stays quiet.
+func TestTypingALetterDoesNotOpenCompletions(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"), "local x = 1\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanComplete() })
+
+	typeText(screen, "abc")
+	waitFor(t, e, "the text to be typed", func() bool {
+		return strings.HasPrefix(e.buffers[0].area.GetText(), "abclocal")
+	})
+	if e.modals != 0 {
+		t.Error("a letter opened a completion list")
+	}
+}
+
+// With the list open, typing carries on in the text and the list follows.
+func TestTypingThroughTheCompletionList(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"), "io\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanComplete() })
+
+	onEditor(t, e, func() {
+		b := e.buffers[0]
+		offset := offsetAt(b.area.GetText(), 0, 2)
+		b.area.Select(offset, offset)
+	})
+	typeText(screen, ".")
+	waitFor(t, e, "the completion list", func() bool { return e.modals == 1 })
+
+	// Keep typing: the characters land in the buffer, and the list comes back.
+	typeText(screen, "pr")
+	waitFor(t, e, "the typing to reach the buffer", func() bool {
+		return e.buffers[0].area.GetText() == "io.pr\n"
+	})
+	waitFor(t, e, "the list to follow the typing", func() bool { return e.modals == 1 })
+
+	// Backspace works the same way.
+	press(screen, tcell.KeyBackspace2, 0, tcell.ModNone)
+	waitFor(t, e, "the backspace to reach the buffer", func() bool {
+		return e.buffers[0].area.GetText() == "io.p\n"
+	})
+
+	press(screen, tcell.KeyEscape, 0, tcell.ModNone)
+	waitFor(t, e, "the list to close", func() bool { return e.modals == 0 })
+}
+
+// A buffer that has never been saved can still be completed in.
+func TestCompleteInAnUnsavedBuffer(t *testing.T) {
+	withLanguageServer(t)
+	e, screen := start(t)
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanComplete() })
+
+	typeText(screen, "pri")
+	waitFor(t, e, "the typing", func() bool { return e.buffers[0].area.GetText() == "pri" })
+
+	press(screen, tcell.KeyCtrlSpace, 0, tcell.ModNone)
+	waitFor(t, e, "the completion list", func() bool { return e.modals == 1 })
+	press(screen, tcell.KeyEnter, 0, tcell.ModNone)
+	waitFor(t, e, "the insertion", func() bool {
+		return e.buffers[0].area.GetText() == "print"
+	})
+}
+
+// A server may ask to be consulted after almost anything; a list that opens on
+// every space would be an obstacle rather than help.
+func TestOnlyMemberAccessTriggersCompletionsByItself(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, _ := start(t, write(t, filepath.Join(dir, "main.lua"), "local x = 1\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanComplete() })
+
+	onEditor(t, e, func() {
+		// The fake server asks for all of these, as a real one does.
+		asked := strings.Join(e.lsp.TriggerCharacters(), "")
+		for _, r := range asked {
+			if !strings.ContainsRune(" (=,-", r) {
+				continue
+			}
+			if e.isTriggerCharacter(r) {
+				t.Errorf("typing %q would open a completion list", string(r))
+			}
+		}
+		for _, r := range ".:" {
+			if !e.isTriggerCharacter(r) {
+				t.Errorf("typing %q should open a completion list", string(r))
+			}
+		}
+	})
+}
+
+func TestTypingASpaceDoesNotOpenCompletions(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"), "local x =\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanComplete() })
+
+	onEditor(t, e, func() {
+		b := e.buffers[0]
+		offset := offsetAt(b.area.GetText(), 0, 9)
+		b.area.Select(offset, offset)
+	})
+	typeText(screen, " 1")
+	waitFor(t, e, "the typing", func() bool {
+		return e.buffers[0].area.GetText() == "local x = 1\n"
+	})
+	if e.modals != 0 {
+		t.Error("a space opened a completion list")
+	}
+}

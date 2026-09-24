@@ -40,6 +40,19 @@ func (e *Editor) newBuffer(path, name, text string) *buffer {
 	return b
 }
 
+// lspPath is the path a language server is told about. A buffer that has never
+// been saved has none, so it borrows its name in the working directory: the
+// server owns the text either way, and the file need not exist.
+func (b *buffer) lspPath() string {
+	if b.path != "" {
+		return b.path
+	}
+	if wd, err := os.Getwd(); err == nil {
+		return filepath.Join(wd, b.name)
+	}
+	return b.name
+}
+
 // title is the buffer's name with the markers the bars show: '*' when
 // modified, '»' when it is the file F5 runs.
 func (e *Editor) title(b *buffer) string {

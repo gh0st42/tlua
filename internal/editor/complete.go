@@ -15,8 +15,15 @@ import (
 )
 
 const (
+	// Asking by hand can afford to wait; asking because a "." was typed cannot,
+	// because the answer is in the way of the next keystroke.
 	lspCompleteTimeout = 2500 * time.Millisecond
+	lspAutoTimeout     = 700 * time.Millisecond
 	lspHoverTimeout    = 2500 * time.Millisecond
+
+	// A server that has only just started is still reading the standard library
+	// and answers with nothing; one retry covers that.
+	lspCompleteRetry = 250 * time.Millisecond
 
 	// How many completions the popup shows before it scrolls.
 	completionRows = 10
@@ -61,37 +68,84 @@ func wordBeforeCursor(text string, offset int) (start int) {
 
 // complete is Ctrl-Space: it asks the language server what could go here and
 // offers the answers in a list at the cursor.
-func (e *Editor) complete() {
+func (e *Editor) complete() { e.completeWith(false) }
+
+// completeAutomatically is the same request made because a trigger character
+// was typed. It says nothing when there is nothing to say, since a message on
+// every "." would be noise.
+func (e *Editor) completeAutomatically() { e.completeWith(true) }
+
+func (e *Editor) completeWith(automatic bool) {
 	b := e.buf()
 	if b == nil {
 		return
 	}
 	switch {
 	case e.lsp == nil:
-		e.setStatus("No language server; put one on PATH, or set " + lsp.EnvServer)
+		if !automatic {
+			e.setStatus("No language server; put one on PATH, or set " + lsp.EnvServer)
+		}
 		return
 	case !e.lsp.CanComplete():
-		e.setStatus(e.lsp.Name() + " does not offer completions")
-		return
-	case b.path == "":
-		e.setStatus("Save this buffer to a file first")
+		if !automatic {
+			e.setStatus(e.lsp.Name() + " does not offer completions")
+		}
 		return
 	}
 
-	text := b.area.GetText()
-	ctx, cancel := context.WithTimeout(context.Background(), lspCompleteTimeout)
+	timeout := lspCompleteTimeout
+	if automatic {
+		timeout = lspAutoTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	items, err := e.lsp.Complete(ctx, b.path, text, e.cursorPosition(b))
+	text := b.area.GetText()
+	items, err := e.lsp.Complete(ctx, b.lspPath(), text, e.cursorPosition(b))
+	if err == nil && len(items) == 0 && !automatic {
+		// A server that has only just started has not read the standard library
+		// yet and answers with nothing at all; ask once more.
+		time.Sleep(lspCompleteRetry)
+		items, err = e.lsp.Complete(ctx, b.lspPath(), text, e.cursorPosition(b))
+	}
 	if err != nil {
-		e.setStatus("Complete: " + err.Error())
+		if !automatic {
+			e.setStatus("Complete: " + err.Error())
+		}
 		return
 	}
 	if len(items) == 0 {
-		e.setStatus("No completions here")
+		if !automatic {
+			e.setStatus("No completions here")
+		}
 		return
 	}
 	e.showCompletions(b, items)
+}
+
+// autoTriggers are the characters after which this editor asks for completions
+// without being told to.
+//
+// Servers are free to ask for more, and lua-language-server asks for a great
+// deal: space, tab, newline, "(", "=", "-", "," and more besides. Opening a
+// completion list on every space is not help, it is an obstacle, so the
+// server's list is narrowed to member access, which is where an unprompted
+// list earns its place. Ctrl-Space still asks anywhere.
+const autoTriggers = ".:"
+
+// isTriggerCharacter reports whether typing r is reason enough to ask for
+// completions: the server has to want it, and it has to be one of the few
+// characters where a list is welcome.
+func (e *Editor) isTriggerCharacter(r rune) bool {
+	if e.lsp == nil || !e.lsp.CanComplete() || !strings.ContainsRune(autoTriggers, r) {
+		return false
+	}
+	for _, trigger := range e.lsp.TriggerCharacters() {
+		if trigger == string(r) {
+			return true
+		}
+	}
+	return false
 }
 
 // showCompletions floats the list under the cursor, the way a completion list
@@ -139,8 +193,21 @@ func (e *Editor) showCompletions(b *buffer, items []lsp.CompletionItem) {
 	help.SetText(tview.Escape(oneLine(items[0].Help())))
 
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
+		switch event.Key() {
+		case tcell.KeyEscape:
 			e.closeModal(name)
+			return nil
+
+		case tcell.KeyRune, tcell.KeyBackspace, tcell.KeyBackspace2:
+			// A completion list must not stand in the way of typing: the key
+			// goes into the text, and the list comes back narrowed to whatever
+			// the word now is.
+			e.closeModal(name)
+			e.sendKeyToText(event)
+			if event.Key() != tcell.KeyRune || isNameRune(event.Rune()) ||
+				e.isTriggerCharacter(event.Rune()) {
+				e.completeAutomatically()
+			}
 			return nil
 		}
 		return event
@@ -204,15 +271,12 @@ func (e *Editor) hover() {
 	case !e.lsp.CanHover():
 		e.setStatus(e.lsp.Name() + " does not offer hover help")
 		return
-	case b.path == "":
-		e.setStatus("Save this buffer to a file first")
-		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), lspHoverTimeout)
 	defer cancel()
 
-	help, err := e.lsp.Hover(ctx, b.path, b.area.GetText(), e.cursorPosition(b))
+	help, err := e.lsp.Hover(ctx, b.lspPath(), b.area.GetText(), e.cursorPosition(b))
 	if err != nil {
 		e.setStatus("Help: " + err.Error())
 		return

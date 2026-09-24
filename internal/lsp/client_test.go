@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -325,5 +326,22 @@ func TestCompleteWithANullAnswer(t *testing.T) {
 	}
 	if len(items) != 0 {
 		t.Errorf("got %d items", len(items))
+	}
+}
+
+func TestTriggerCharacters(t *testing.T) {
+	client := startFake(t)
+	got := strings.Join(client.TriggerCharacters(), "")
+	if got != ".: (=,-" {
+		t.Errorf("trigger characters = %q, want the ones the server named", got)
+	}
+
+	// A server that offers completions without naming any gets Lua's two.
+	if got := triggerCharacters(json.RawMessage(`true`)); strings.Join(got, "") != ".:" {
+		t.Errorf("got %v", got)
+	}
+	// One that offers no completions has none.
+	if got := triggerCharacters(nil); got != nil {
+		t.Errorf("got %v", got)
 	}
 }
