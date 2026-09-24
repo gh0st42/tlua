@@ -84,6 +84,7 @@ once, and F5 to run.
 | `F4` | show or hide the output pane |
 | `F5` | run the primary file |
 | `F6` | next buffer |
+| `Ctrl-B` | comment or uncomment the line, or the selection |
 | `Ctrl-F` | find |
 | `F7`, `F8` | find next, find previous |
 | `Ctrl-R` | replace |
@@ -101,8 +102,15 @@ once, and F5 to run.
 
 In the text itself: `Ctrl-Z` undo, `Ctrl-Y` redo, `Ctrl-Q` copy, `Ctrl-X` cut,
 `Ctrl-V` paste, `Ctrl-L` select all. The clipboard is shared by every buffer.
-`PgUp` and `PgDn` page through a file; `Ctrl-F`, which tview's text widget would
-otherwise use for paging, searches instead.
+`PgUp` and `PgDn` page through a file; `Ctrl-F` and `Ctrl-B`, which tview's text
+widget would otherwise use for paging, search and comment instead.
+
+`Ctrl-B` comments the line the cursor is on, or every line the selection
+touches. It uncomments only when every line with code on it is already
+commented, so one key works both ways and a half-commented block comments
+first. The `--` goes in at the shallowest indentation in the block, lining up
+with the code rather than with the left margin, blank lines are left alone, and
+the whole thing is one undo step.
 
 The mouse works throughout: click a menu title to drop it down and an entry to
 run it, click a name on the buffer bar to switch to it, click or drag in the

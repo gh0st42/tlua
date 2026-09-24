@@ -295,6 +295,10 @@ func (e *Editor) handleKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyF12:
 		e.formatCurrent()
 		return nil
+	case tcell.KeyCtrlB:
+		// tview's text area pages up on Ctrl-B; PgUp still does.
+		e.toggleComment()
+		return nil
 	case tcell.KeyCtrlC:
 		// Not "quit": in an IDE this is what stops the running program.
 		e.stopProgram()
