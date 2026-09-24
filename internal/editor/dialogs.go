@@ -268,7 +268,8 @@ func (e *Editor) showHelp() {
 		"  F3, Ctrl-O  open a file            F7   find next",
 		"  F4          show or hide output    F8   find previous",
 		"  Ctrl-N      new file               F9   check syntax",
-		"  Ctrl-B      comment or uncomment   F12  format (language server)",
+		"  Ctrl-B      comment or uncomment   F11  what is under the cursor",
+		"  Ctrl-Space  complete               F12  format (language server)",
 		"  Ctrl-F      find                   F10  menu bar",
 		"  Ctrl-R      replace                Alt-1..9  pick a buffer",
 		"  Ctrl-G      go to line             Alt-F2    list functions",
@@ -337,8 +338,8 @@ func center(p tview.Primitive, width, height int) tview.Primitive {
 }
 
 // at places a primitive at a fixed row and column, which is how a dropdown
-// lines up under its menu title.
-func at(p tview.Primitive, col, row, width, height int) tview.Primitive {
+// lines up under its menu title and a completion list under the cursor.
+func at2(p tview.Primitive, col, row, width, height int) tview.Primitive {
 	return &blocker{Flex: tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(nil, row, 0, false).
 		AddItem(tview.NewFlex().
@@ -425,4 +426,52 @@ func (e *Editor) outlineDialog() {
 		height = 20
 	}
 	e.showModal(name, frame, 64, height)
+}
+
+// point is a place on the screen.
+type point struct{ col, row int }
+
+// cursorScreenPosition is where the cursor is drawn, which is where a
+// completion list should appear.
+func (e *Editor) cursorScreenPosition(b *buffer) point {
+	x, y, _, _ := b.area.GetInnerRect()
+	row, column, _, _ := b.area.GetCursor()
+	rowOffset, columnOffset := b.area.GetOffset()
+	return point{col: x + column - columnOffset, row: y + row - rowOffset}
+}
+
+// showAt floats a dialog just below a point, nudged back onto the screen when
+// it would hang off an edge, the way a completion list has to behave near the
+// bottom or the right of a window.
+func (e *Editor) showAt(name string, p tview.Primitive, at point, width, height int) {
+	screenWidth, screenHeight := e.screenSize()
+
+	col, row := at.col, at.row+1
+	if col+width > screenWidth {
+		col = screenWidth - width
+	}
+	if col < 0 {
+		col = 0
+	}
+	if row+height > screenHeight {
+		// No room below: put it above the cursor instead.
+		row = at.row - height
+	}
+	if row < 0 {
+		row = 0
+	}
+
+	e.modals++
+	e.modalStack = append(e.modalStack, p)
+	e.pages.AddPage(name, at2(p, col, row, width, height), true, true)
+	e.app.SetFocus(p)
+}
+
+// screenSize is how much room there is to place things in.
+func (e *Editor) screenSize() (width, height int) {
+	_, _, width, height = e.pages.GetRect()
+	if width <= 0 || height <= 0 {
+		return 80, 25 // before the first draw
+	}
+	return width, height
 }

@@ -242,9 +242,6 @@ func (e *Editor) handleKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 
 	switch event.Key() {
-	case tcell.KeyF1:
-		e.showHelp()
-		return nil
 	case tcell.KeyF2:
 		e.saveCurrent()
 		return nil
@@ -298,6 +295,22 @@ func (e *Editor) handleKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyCtrlB:
 		// tview's text area pages up on Ctrl-B; PgUp still does.
 		e.toggleComment()
+		return nil
+	case tcell.KeyCtrlSpace:
+		// Ctrl-Space arrives as NUL, which is the same key in tcell's book.
+		e.complete()
+		return nil
+	case tcell.KeyF11:
+		e.hover()
+		return nil
+	case tcell.KeyF1:
+		// Turbo Pascal put help on the word under the cursor on Ctrl-F1, and
+		// terminals that send it get that here too.
+		if event.Modifiers()&tcell.ModCtrl != 0 {
+			e.hover()
+			return nil
+		}
+		e.showHelp()
 		return nil
 	case tcell.KeyCtrlC:
 		// Not "quit": in an IDE this is what stops the running program.

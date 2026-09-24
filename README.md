@@ -89,6 +89,8 @@ once, and F5 to run.
 | `F7`, `F8` | find next, find previous |
 | `Ctrl-R` | replace |
 | `F9` | check the current buffer's syntax without running it |
+| `Ctrl-Space` | complete what is being typed (language server) |
+| `F11`, `Ctrl-F1` | what is under the cursor (language server) |
 | `F12` | format the buffer through the language server |
 | `F10` | the menu bar |
 | `Ctrl-N` | new file |
@@ -134,28 +136,58 @@ match at the cursor and moves to the next, and *Replace all*. Replacements go
 through the text widget one at a time, so `Ctrl-Z` walks back through them
 individually rather than losing the file in one step.
 
-### Formatting, through a language server
+### What a language server adds
 
 If a Lua language server is on PATH, the editor starts it in the background and
-uses it to format each buffer as it is saved, so what lands on disk is what the
-screen shows. It looks for `lua-language-server`, `emmylua_ls` and `lua-lsp`, in
-that order; `TLUA_LSP` names a different one (with arguments, if it needs them)
-and `TLUA_LSP=off` does without.
+uses it for three things. It looks for `lua-language-server`, `emmylua_ls` and
+`lua-lsp`, in that order; `TLUA_LSP` names a different one (with arguments, if it
+needs them) and `TLUA_LSP=off` does without.
 
-`F12` formats the current buffer without saving. *Edit › Format on save*
+**Formatting.** Each buffer is formatted as it is saved, so what lands on disk is
+what the screen shows. `F12` formats without saving. *Edit › Format on save*
 turns the pass on and off when a server's idea of tidy is not yours, and
 *Edit › Language server...* says what was found.
 
+**Completion.** `Ctrl-Space` asks what could go at the cursor and lists the
+answers in a panel under it, with the kind of each beside it and the server's
+description of the selected one along the bottom:
+
+```
+local x = pri
+             ╔═════ 5 completions ═════╗
+             ║print  function          ║
+             ║pairs  function          ║
+             ║table_insert  function   ║
+             ║for_loop  snippet        ║
+             ║replaced_word  variable  ║
+             ║function print(...)      ║
+             ╚═════════════════════════╝
+```
+
+`Enter` or a click inserts. An item that brings its own edit says exactly what to
+replace; otherwise the word being typed makes way for it, and a dotted or colon
+prefix is left alone so `table.ins` completes to `table.insert` rather than
+doubling the prefix. Snippets go in with their placeholders reduced to defaults,
+since this editor has no tab stops to walk.
+
+**Hover help.** `F11`, or `Ctrl-F1` where the terminal sends it — which is where
+Turbo Pascal put help on the word under the cursor — shows what the server knows
+about it. The answer arrives as markdown and is reduced to text: fences,
+emphasis, links and rules go, and what they wrapped stays. Plain `F1` is still
+the key list.
+
 None of this is required: with no server the editor behaves exactly as it did
-before, and a server that fails or goes quiet costs you a formatting pass, never
-a save — the write goes ahead with the text as it stands and the reason is kept
-for the Language server dialog. A formatting pass arrives as a single edit, so
-one `Ctrl-Z` takes it back, and the cursor keeps its line.
+before, each of the three keys says so plainly, and a server that fails or goes
+quiet costs a formatting pass, never a save — the write goes ahead with the text
+as it stands and the reason is kept for the Language server dialog. A formatting
+pass arrives as a single edit, so one `Ctrl-Z` takes it back, and the cursor
+keeps its line. A server that answers `null`, as one still reading a workspace
+does, simply has nothing to offer yet.
 
 The client itself is [internal/lsp](internal/lsp/): the initialize handshake,
-document synchronisation and `textDocument/formatting`, which is all that
-formatting needs. Its tests run against a fake server in `testdata`, and against
-whatever real server is installed when there is one.
+document synchronisation, formatting, completion and hover — the part of the
+protocol these three keys need. Its tests run against a fake server in
+`testdata`, and against whatever real server is installed when there is one.
 
 ### The function list
 
@@ -370,6 +402,8 @@ bin/               build output (git-ignored)
 | [internal/editor/format.go](internal/editor/format.go) | starting a language server and formatting with it |
 | [internal/lsp/client.go](internal/lsp/client.go) | the Language Server Protocol client |
 | [internal/lsp/edits.go](internal/lsp/edits.go) | applying a server's edits to a document |
+| [internal/lsp/text.go](internal/lsp/text.go) | markdown and snippets reduced to plain text |
+| [internal/editor/complete.go](internal/editor/complete.go) | the completion panel and the hover box |
 
 Tests sit beside what they cover: unit tests in each `internal` package, and
 end-to-end tests in [cmd/tlua](cmd/tlua/) that build the binary and drive it as

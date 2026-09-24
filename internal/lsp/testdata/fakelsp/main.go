@@ -3,9 +3,14 @@
 // document, and its idea of formatting is to trim trailing whitespace and turn
 // leading tabs into two spaces.
 //
+// It also completes and hovers: the completions are a fixed set that covers the
+// shapes a client has to handle, and the hover answer is markdown.
+//
 // Its behaviour is steered by environment variables, so a test can ask for a
-// server that cannot format (FAKELSP_NOFORMAT), one that never answers a
-// formatting request (FAKELSP_HANG), or one that fails it (FAKELSP_ERROR).
+// server that cannot format (FAKELSP_NOFORMAT), complete (FAKELSP_NOCOMPLETE)
+// or hover (FAKELSP_NOHOVER), one that answers completion with null as a server
+// still reading a workspace does (FAKELSP_NULLCOMPLETE), one that never answers
+// a formatting request (FAKELSP_HANG), or one that fails it (FAKELSP_ERROR).
 package main
 
 import (
@@ -41,9 +46,17 @@ func main() {
 
 		switch msg.Method {
 		case "initialize":
-			formatting := os.Getenv("FAKELSP_NOFORMAT") == ""
+			capabilities := map[string]any{
+				"documentFormattingProvider": os.Getenv("FAKELSP_NOFORMAT") == "",
+				"hoverProvider":              os.Getenv("FAKELSP_NOHOVER") == "",
+			}
+			if os.Getenv("FAKELSP_NOCOMPLETE") == "" {
+				capabilities["completionProvider"] = map[string]any{
+					"triggerCharacters": []string{".", ":"},
+				}
+			}
 			reply(out, msg.ID, map[string]any{
-				"capabilities": map[string]any{"documentFormattingProvider": formatting},
+				"capabilities": capabilities,
 				"serverInfo":   map[string]any{"name": "fakelsp", "version": "1.0"},
 			})
 
@@ -95,6 +108,41 @@ func main() {
 			_ = json.Unmarshal(msg.Params, &params)
 			reply(out, msg.ID, edits(documents[params.TextDocument.URI]))
 
+		case "textDocument/completion":
+			var params struct {
+				TextDocument struct {
+					URI string `json:"uri"`
+				} `json:"textDocument"`
+				Position struct {
+					Line      int `json:"line"`
+					Character int `json:"character"`
+				} `json:"position"`
+			}
+			_ = json.Unmarshal(msg.Params, &params)
+			if os.Getenv("FAKELSP_NULLCOMPLETE") != "" {
+				reply(out, msg.ID, nil) // as a server still reading a workspace does
+				continue
+			}
+			reply(out, msg.ID, completions(documents[params.TextDocument.URI],
+				params.Position.Line, params.Position.Character))
+
+		case "textDocument/hover":
+			var params struct {
+				Position struct {
+					Line      int `json:"line"`
+					Character int `json:"character"`
+				} `json:"position"`
+			}
+			_ = json.Unmarshal(msg.Params, &params)
+			reply(out, msg.ID, map[string]any{
+				"contents": map[string]any{
+					"kind": "markdown",
+					"value": fmt.Sprintf("```lua\nfunction print(...)\n```\n\n"+
+						"Prints its arguments. **Asked at line %d, character %d.**",
+						params.Position.Line, params.Position.Character),
+				},
+			})
+
 		case "shutdown":
 			reply(out, msg.ID, nil)
 
@@ -102,6 +150,51 @@ func main() {
 			return
 		}
 	}
+}
+
+// completions covers the shapes a client has to deal with: a plain label, an
+// insertText that differs from it, a snippet, and an explicit textEdit that
+// replaces the word being typed.
+func completions(text string, line, character int) []map[string]any {
+	word, wordStart := wordAt(text, line, character)
+
+	items := []map[string]any{
+		{"label": "print", "kind": 3, "detail": "function print(...)"},
+		{"label": "pairs", "kind": 3, "detail": "function pairs(t)",
+			"documentation": map[string]any{"kind": "markdown", "value": "Iterates **a table**."}},
+		{"label": "table_insert", "kind": 3, "insertText": "table.insert"},
+		{"label": "for_loop", "kind": 15, "insertTextFormat": 2,
+			"insertText": "for ${1:i} = 1, ${2:n} do\n\t$0\nend"},
+		{"label": "replaced_word", "kind": 6, "textEdit": map[string]any{
+			"range": map[string]any{
+				"start": map[string]any{"line": line, "character": wordStart},
+				"end":   map[string]any{"line": line, "character": wordStart + len(utf16.Encode([]rune(word)))},
+			},
+			"newText": "REPLACED",
+		}},
+	}
+	return items
+}
+
+// wordAt reports the word being typed at a position, and where it starts.
+func wordAt(text string, line, character int) (string, int) {
+	lines := strings.Split(text, "\n")
+	if line < 0 || line >= len(lines) {
+		return "", character
+	}
+	runes := []rune(lines[line])
+	if character > len(runes) {
+		character = len(runes)
+	}
+	start := character
+	for start > 0 && isWordRune(runes[start-1]) {
+		start--
+	}
+	return string(runes[start:character]), start
+}
+
+func isWordRune(r rune) bool {
+	return r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
 }
 
 // edits returns one edit per line that formatting would change.

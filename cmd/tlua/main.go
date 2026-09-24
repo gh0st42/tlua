@@ -40,12 +40,12 @@ Environment:
                  searched as <dir>/?.lua and <dir>/?/init.lua
   TLUA_PATH      package.path patterns, as LUA_PATH but tlua-only
   TLUA_INIT      chunk to run at startup ("@file" runs a file)
-  TLUA_LSP       language server for the editor to format with, or "off";
-                 by default it looks for one on PATH
+  TLUA_LSP       language server the editor formats, completes and hovers
+                 with, or "off"; by default it looks for one on PATH
 
 The edit subcommand opens a full-screen Lua editor: a menu bar, several files
-at once, F5 to run the primary file, F9 to check its syntax, and formatting on
-save through a language server when one is on PATH.
+at once, F5 to run the primary file, F9 to check its syntax, and, when a
+language server is on PATH, formatting on save, completion and hover help.
 
 The fuse subcommand attaches a Lua program to a copy of this binary, producing
 a standalone executable; "tlua fuse -h" explains it. A zip concatenated onto
@@ -225,8 +225,9 @@ func editCommand(args []string) int {
 		if a == "-h" || a == "--help" {
 			fmt.Print("usage: tlua edit [file...]\n\n" +
 				"Opens a full-screen Lua editor. F1 lists the keys.\n" +
-				"A language server on PATH is used to format on save;\n" +
-				"TLUA_LSP names another one, or \"off\" for none.\n")
+				"A language server on PATH adds formatting on save,\n" +
+				"completion on Ctrl-Space and help on F11; TLUA_LSP\n" +
+				"names another one, or \"off\" for none.\n")
 			return 0
 		}
 	}

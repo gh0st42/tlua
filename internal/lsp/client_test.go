@@ -211,3 +211,119 @@ func TestPathToURI(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+func TestComplete(t *testing.T) {
+	client := startFake(t)
+	if !client.CanComplete() {
+		t.Fatal("the server offers completions, but CanComplete is false")
+	}
+
+	path := filepath.Join(t.TempDir(), "main.lua")
+	text := "local x = 1\npri\n"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	items, err := client.Complete(ctx, path, text, Position{Line: 1, Character: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) == 0 {
+		t.Fatal("no completions came back")
+	}
+
+	byLabel := map[string]CompletionItem{}
+	for _, item := range items {
+		byLabel[item.Label] = item
+	}
+
+	if got := byLabel["print"]; got.Kind != KindFunction || got.Detail != "function print(...)" {
+		t.Errorf("print = %+v", got)
+	}
+	if got := byLabel["table_insert"].Text(); got != "table.insert" {
+		t.Errorf("insertText was ignored: %q", got)
+	}
+	if got := byLabel["for_loop"].Text(); !strings.HasPrefix(got, "for i = 1, n do") {
+		t.Errorf("snippet = %q", got)
+	}
+	// An item may bring its own edit, which says what to replace.
+	edit := byLabel["replaced_word"].TextEdit
+	if edit == nil {
+		t.Fatal("the item with a textEdit lost it")
+	}
+	if edit.Range.Start.Character != 0 || edit.Range.End.Character != 3 {
+		t.Errorf("the edit covers %+v, want the word being typed", edit.Range)
+	}
+	formatted, err := ApplyEdits(text, []TextEdit{*edit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "local x = 1\nREPLACED\n"; formatted != want {
+		t.Errorf("applying the edit gave %q, want %q", formatted, want)
+	}
+}
+
+func TestCompleteOnAServerWithoutIt(t *testing.T) {
+	client := startFake(t, "FAKELSP_NOCOMPLETE=1")
+	if client.CanComplete() {
+		t.Fatal("CanComplete is true for a server without completions")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := client.Complete(ctx, "main.lua", "x\n", Position{}); err == nil {
+		t.Error("completion was attempted anyway")
+	}
+}
+
+func TestHover(t *testing.T) {
+	client := startFake(t)
+	if !client.CanHover() {
+		t.Fatal("CanHover is false")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	help, err := client.Hover(ctx, filepath.Join(t.TempDir(), "main.lua"),
+		"print(1)\n", Position{Line: 0, Character: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(help, "function print(...)") {
+		t.Errorf("hover = %q", help)
+	}
+	if !strings.Contains(help, "line 0, character 2") {
+		t.Errorf("the position did not reach the server: %q", help)
+	}
+	// The markdown the server sent has been reduced to text.
+	if strings.Contains(help, "```") || strings.Contains(help, "**") {
+		t.Errorf("markdown survived: %q", help)
+	}
+}
+
+func TestHoverOnAServerWithoutIt(t *testing.T) {
+	client := startFake(t, "FAKELSP_NOHOVER=1")
+	if client.CanHover() {
+		t.Fatal("CanHover is true for a server without hover")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := client.Hover(ctx, "main.lua", "x\n", Position{}); err == nil {
+		t.Error("hover was attempted anyway")
+	}
+}
+
+// A server with nothing to offer, or nothing yet, answers null. That is an
+// empty list, not a failure.
+func TestCompleteWithANullAnswer(t *testing.T) {
+	client := startFake(t, "FAKELSP_NULLCOMPLETE=1")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	items, err := client.Complete(ctx, filepath.Join(t.TempDir(), "main.lua"),
+		"x\n", Position{Line: 0, Character: 1})
+	if err != nil {
+		t.Fatalf("a null answer was treated as an error: %v", err)
+	}
+	if len(items) != 0 {
+		t.Errorf("got %d items", len(items))
+	}
+}

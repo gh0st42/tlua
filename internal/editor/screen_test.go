@@ -438,3 +438,62 @@ func TestFunctionListColoursByKind(t *testing.T) {
 		t.Errorf("the legend's \"nested\" is %v", got)
 	}
 }
+
+func TestCompletionPopupOnScreen(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"),
+		"local t = {}\nlocal x = pri\nprint(x)\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanComplete() })
+
+	onEditor(t, e, func() {
+		b := e.buffers[0]
+		offset := offsetAt(b.area.GetText(), 1, 13)
+		b.area.Select(offset, offset)
+	})
+	press(screen, tcell.KeyCtrlSpace, 0, tcell.ModNone)
+	waitFor(t, e, "the completion list", func() bool { return e.modals == 1 })
+	redraw(t, e)
+
+	rows := dump(screen)
+	t.Logf("screen:\n%s", strings.Join(rows, "\n"))
+	joined := strings.Join(rows, "\n")
+	for _, want := range []string{"completions", "print", "function", "table_insert", "for_loop", "snippet"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the popup is missing %q", want)
+		}
+	}
+	// It hangs under the cursor rather than in the middle of the screen.
+	x, y, _, _ := e.modalStack[0].GetRect()
+	cursor := e.cursorScreenPosition(e.buffers[0])
+	if y != cursor.row+1 {
+		t.Errorf("the popup is on row %d, want just under the cursor at %d", y, cursor.row+1)
+	}
+	if x > cursor.col {
+		t.Errorf("the popup starts at column %d, right of the cursor at %d", x, cursor.col)
+	}
+	// Its panel is grey, like every other one.
+	if n := panelBackgrounds(screen, e.modalStack[0])[egaBlue]; n > 0 {
+		t.Errorf("the popup has %d cells of desktop blue", n)
+	}
+}
+
+func TestHoverBoxOnScreen(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"), "print(1)\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanHover() })
+
+	press(screen, tcell.KeyF11, 0, tcell.ModNone)
+	waitFor(t, e, "the help box", func() bool { return e.modals == 1 })
+	redraw(t, e)
+
+	rows := dump(screen)
+	t.Logf("screen:\n%s", strings.Join(rows, "\n"))
+	if !strings.Contains(strings.Join(rows, "\n"), "function print(...)") {
+		t.Error("the help box does not show what the server said")
+	}
+	if n := panelBackgrounds(screen, e.modalStack[0])[egaBlue]; n > 0 {
+		t.Errorf("the help box has %d cells of desktop blue", n)
+	}
+}

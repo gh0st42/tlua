@@ -39,8 +39,10 @@ type Client struct {
 
 	writeMu sync.Mutex
 
-	canFormat  bool
-	serverName string
+	canFormat   bool
+	canComplete bool
+	canHover    bool
+	serverName  string
 }
 
 // shutdownTimeout is how long the client waits for a server to leave before it
@@ -109,6 +111,21 @@ func (c *Client) initialize(ctx context.Context, root string) error {
 					"didSave":             true,
 				},
 				"formatting": map[string]any{"dynamicRegistration": false},
+				"completion": map[string]any{
+					"dynamicRegistration": false,
+					"completionItem": map[string]any{
+						"snippetSupport":       false,
+						"documentationFormat":  []string{"markdown", "plaintext"},
+						"insertReplaceSupport": false,
+						"deprecatedSupport":    false,
+						"resolveSupport":       map[string]any{"properties": []string{"documentation", "detail"}},
+					},
+					"contextSupport": true,
+				},
+				"hover": map[string]any{
+					"dynamicRegistration": false,
+					"contentFormat":       []string{"markdown", "plaintext"},
+				},
 			},
 			"workspace": map[string]any{"configuration": true},
 		},
@@ -120,6 +137,8 @@ func (c *Client) initialize(ctx context.Context, root string) error {
 		return fmt.Errorf("initialize: %w", err)
 	}
 	c.canFormat = hasCapability(result.Capabilities.DocumentFormattingProvider)
+	c.canComplete = hasCapability(result.Capabilities.CompletionProvider)
+	c.canHover = hasCapability(result.Capabilities.HoverProvider)
 	c.serverName = result.ServerInfo.Name
 
 	return c.notify("initialized", map[string]any{})
@@ -432,4 +451,69 @@ func pathToURI(path string) string {
 	}
 	u := url.URL{Scheme: "file", Path: abs}
 	return u.String()
+}
+
+// CanComplete reports whether the server offers completions.
+func (c *Client) CanComplete() bool { return c.canComplete }
+
+// CanHover reports whether the server offers hover help.
+func (c *Client) CanHover() bool { return c.canHover }
+
+// Complete asks what could go at a position. The text is synced first, so the
+// server completes against what the editor has rather than what is on disk.
+func (c *Client) Complete(ctx context.Context, path, text string, pos Position) ([]CompletionItem, error) {
+	if !c.canComplete {
+		return nil, errors.New("the language server does not offer completions")
+	}
+	if err := c.Sync(path, text); err != nil {
+		return nil, err
+	}
+
+	var raw json.RawMessage
+	err := c.call(ctx, "textDocument/completion", map[string]any{
+		"textDocument": map[string]any{"uri": pathToURI(path)},
+		"position":     pos,
+		"context":      map[string]any{"triggerKind": 1}, // invoked by hand
+	}, &raw)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		// A server may answer null when it has nothing to offer, or nothing
+		// yet: it is still reading the workspace. That is not an error.
+		return nil, nil
+	}
+
+	// The answer is either the items or a list wrapping them.
+	var items []CompletionItem
+	if err := json.Unmarshal(raw, &items); err == nil {
+		return items, nil
+	}
+	var list completionList
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return nil, fmt.Errorf("completion: %w", err)
+	}
+	return list.Items, nil
+}
+
+// Hover asks what is at a position and returns it as plain text.
+func (c *Client) Hover(ctx context.Context, path, text string, pos Position) (string, error) {
+	if !c.canHover {
+		return "", errors.New("the language server does not offer hover help")
+	}
+	if err := c.Sync(path, text); err != nil {
+		return "", err
+	}
+
+	var result struct {
+		Contents json.RawMessage `json:"contents"`
+	}
+	err := c.call(ctx, "textDocument/hover", map[string]any{
+		"textDocument": map[string]any{"uri": pathToURI(path)},
+		"position":     pos,
+	}, &result)
+	if err != nil {
+		return "", err
+	}
+	return PlainText(markupText(result.Contents)), nil
 }
