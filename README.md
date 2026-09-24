@@ -90,6 +90,7 @@ once, and F5 to run.
 | `Ctrl-R` | replace |
 | `F9` | check the current buffer's syntax without running it |
 | `Ctrl-Space` | complete what is being typed (language server) |
+| `Ctrl-P` | the parameters of the call being typed (language server) |
 | `F11`, `Ctrl-F1` | what is under the cursor (language server) |
 | `F12` | format the buffer through the language server |
 | `F10` | the menu bar |
@@ -181,6 +182,22 @@ a dozen others — and a list that opens on every space is an obstacle rather th
 help, so the server's list is narrowed to member access. A buffer that has never
 been saved completes too: the server is told about it under its name in the
 working directory, and the file need not exist.
+
+**Parameters.** Typing the `(` that opens a call, or a `,` inside one, shows what
+the call takes on the line above it, with the argument being typed picked out:
+
+```
+local s = string.format(
+                         function string.format(s: string|number, ...any)
+```
+
+The hint takes no focus, so typing carries on underneath it; it follows the
+cursor from one argument to the next, goes when the call is closed or `Esc` is
+pressed, and `Ctrl-P` asks for it at any point inside a call. As with
+completions the server's list of trigger characters is narrowed —
+lua-language-server asks to be consulted after a space as well — since a hint
+that appears on every space is noise. *Edit › Parameters on status line* moves
+it to the status bar for anyone who would rather it never covered a line of code.
 
 **Hover help.** `F11`, or `Ctrl-F1` where the terminal sends it — which is where
 Turbo Pascal put help on the word under the cursor — shows what the server knows

@@ -270,11 +270,11 @@ func (e *Editor) showHelp() {
 		"  Ctrl-N      new file               F9   check syntax",
 		"  Ctrl-B      comment or uncomment   F11  what is under the cursor",
 		"  Ctrl-Space  complete               F12  format (language server)",
-		"  Ctrl-F      find                   F10  menu bar",
-		"  Ctrl-R      replace                Alt-1..9  pick a buffer",
-		"  Ctrl-G      go to line             Alt-F2    list functions",
-		"  Ctrl-C      stop the program       Alt-F3    close buffer",
-		"                                     Alt-X     leave",
+		"  Ctrl-P      parameters of a call   F10  menu bar",
+		"  Ctrl-F      find                   Alt-1..9  pick a buffer",
+		"  Ctrl-R      replace                Alt-F2    list functions",
+		"  Ctrl-G      go to line             Alt-F3    close buffer",
+		"  Ctrl-C      stop the program       Alt-X     leave",
 		"",
 		"  In the text: Ctrl-Z undo, Ctrl-Y redo, Ctrl-Q copy,",
 		"  Ctrl-X cut, Ctrl-V paste, Ctrl-L select all. PgUp and",
@@ -335,6 +335,18 @@ func center(p tview.Primitive, width, height int) tview.Primitive {
 			AddItem(p, height, 0, true).
 			AddItem(nil, 0, 1, false), width, 0, true).
 		AddItem(nil, 0, 1, false)}
+}
+
+// place puts a primitive at a fixed row and column without blocking anything:
+// it is for hints, which take no focus and swallow no clicks.
+func place(p tview.Primitive, col, row, width, height int) tview.Primitive {
+	return tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, row, 0, false).
+		AddItem(tview.NewFlex().
+			AddItem(nil, col, 0, false).
+			AddItem(p, width, 0, false).
+			AddItem(nil, 0, 1, false), height, 0, false).
+		AddItem(nil, 0, 1, false)
 }
 
 // at places a primitive at a fixed row and column, which is how a dropdown

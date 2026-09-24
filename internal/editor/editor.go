@@ -49,12 +49,18 @@ type Editor struct {
 	formatOnSave bool
 	leaving      bool
 
-	outputShown bool
-	outputBytes int       // how much the pane holds, against outputLimit
-	outputFull  bool      // set once the pane stopped accepting more
-	running     *exec.Cmd // the program started by F5, while it runs
-	exe         string    // this binary, used to run scripts
-	status      string    // the message shown until something replaces it
+	// The parameter hint: whether it is up, and whether it shows at the cursor
+	// or on the status line.
+	signatureShown    bool
+	signatureInStatus bool
+
+	outputShown  bool
+	outputBytes  int       // how much the pane holds, against outputLimit
+	outputFull   bool      // set once the pane stopped accepting more
+	running      *exec.Cmd // the program started by F5, while it runs
+	exe          string    // this binary, used to run scripts
+	status       string    // the message shown until something replaces it
+	taggedStatus string    // a message that brings its own colours
 }
 
 const outputHeight = 10
@@ -197,6 +203,9 @@ func (e *Editor) refreshStatus() {
 	if e.status != "" {
 		hint = tagBar + " " + tview.Escape(e.status)
 	}
+	if e.taggedStatus != "" {
+		hint = tagBar + " " + e.taggedStatus
+	}
 	e.statusKeys.SetText(hint)
 
 	right := tagBar
@@ -214,10 +223,26 @@ func (e *Editor) refreshStatus() {
 // setStatus shows a message on the status line until the next keystroke.
 func (e *Editor) setStatus(msg string) {
 	e.status = msg
+	e.taggedStatus = ""
 	e.refreshStatus()
 }
 
-// clearStatus puts the function key hints back.
+// setTaggedStatus shows a message that carries its own colour tags, which is
+// how the parameter hint picks out the argument being typed.
+func (e *Editor) setTaggedStatus(text string) {
+	e.taggedStatus = text
+	e.refreshStatus()
+}
+
+func (e *Editor) clearTaggedStatus() {
+	if e.taggedStatus != "" {
+		e.taggedStatus = ""
+		e.refreshStatus()
+	}
+}
+
+// clearStatus puts the function key hints back. The parameter hint stays: it
+// belongs to the call being typed, not to the last key pressed.
 func (e *Editor) clearStatus() {
 	if e.status != "" {
 		e.status = ""
@@ -303,6 +328,9 @@ func (e *Editor) handleKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyF11:
 		e.hover()
 		return nil
+	case tcell.KeyCtrlP:
+		e.signatureHelp(false)
+		return nil
 	case tcell.KeyF1:
 		// Turbo Pascal put help on the word under the cursor on Ctrl-F1, and
 		// terminals that send it get that here too.
@@ -317,7 +345,12 @@ func (e *Editor) handleKey(event *tcell.EventKey) *tcell.EventKey {
 		e.stopProgram()
 		return nil
 	case tcell.KeyEscape:
-		// Escape comes back from the output pane to the text.
+		// Escape puts the parameter hint away, and otherwise comes back from
+		// the output pane to the text.
+		if e.signatureShown {
+			e.hideSignature()
+			return nil
+		}
 		if b := e.buf(); b != nil {
 			e.app.SetFocus(b.area)
 		}
@@ -330,10 +363,17 @@ func (e *Editor) handleKey(event *tcell.EventKey) *tcell.EventKey {
 		// being left to tview: queueing the request instead would deadlock,
 		// since tview's QueueUpdate waits for the work it queues and this is
 		// the goroutine that would have to do it.
-		if e.isTriggerCharacter(event.Rune()) && e.textHasFocus() {
-			e.sendKeyToText(event)
-			e.completeAutomatically()
-			return nil
+		if e.textHasFocus() {
+			switch {
+			case e.isTriggerCharacter(event.Rune()):
+				e.sendKeyToText(event)
+				e.completeAutomatically()
+				return nil
+			case e.isSignatureTrigger(event.Rune()):
+				e.sendKeyToText(event)
+				e.signatureHelp(true)
+				return nil
+			}
 		}
 		return event
 	}

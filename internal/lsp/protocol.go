@@ -69,6 +69,7 @@ type serverCapabilities struct {
 	DocumentFormattingProvider json.RawMessage `json:"documentFormattingProvider"`
 	CompletionProvider         json.RawMessage `json:"completionProvider"`
 	HoverProvider              json.RawMessage `json:"hoverProvider"`
+	SignatureHelpProvider      json.RawMessage `json:"signatureHelpProvider"`
 }
 
 type initializeResult struct {
@@ -183,4 +184,89 @@ func (item CompletionItem) Help() string {
 type completionList struct {
 	IsIncomplete bool             `json:"isIncomplete"`
 	Items        []CompletionItem `json:"items"`
+}
+
+/* --- signature help --- */
+
+// ParameterInformation is one parameter of a signature. Its label is either the
+// text itself or a pair of offsets into the signature's label, measured in
+// UTF-16 code units, so it arrives raw.
+type ParameterInformation struct {
+	Label         json.RawMessage `json:"label"`
+	Documentation json.RawMessage `json:"documentation"`
+}
+
+// SignatureInformation is one way a function can be called.
+type SignatureInformation struct {
+	Label           string                 `json:"label"`
+	Documentation   json.RawMessage        `json:"documentation"`
+	Parameters      []ParameterInformation `json:"parameters"`
+	ActiveParameter *int                   `json:"activeParameter"`
+}
+
+// SignatureHelp is the answer to "what does this call take?".
+type SignatureHelp struct {
+	Signatures      []SignatureInformation `json:"signatures"`
+	ActiveSignature *int                   `json:"activeSignature"`
+	ActiveParameter *int                   `json:"activeParameter"`
+}
+
+// Active is the signature being called, with the parameter the cursor is at.
+// The protocol lets either be missing, or carries the parameter on the
+// signature instead of on the help, so this settles all of that.
+func (help *SignatureHelp) Active() (signature SignatureInformation, parameter int, ok bool) {
+	if help == nil || len(help.Signatures) == 0 {
+		return SignatureInformation{}, 0, false
+	}
+	index := 0
+	if help.ActiveSignature != nil && *help.ActiveSignature >= 0 &&
+		*help.ActiveSignature < len(help.Signatures) {
+		index = *help.ActiveSignature
+	}
+	signature = help.Signatures[index]
+
+	parameter = -1
+	if help.ActiveParameter != nil {
+		parameter = *help.ActiveParameter
+	}
+	if signature.ActiveParameter != nil {
+		parameter = *signature.ActiveParameter
+	}
+	return signature, parameter, true
+}
+
+// Span reports where a parameter sits inside the signature's label, as byte
+// offsets, so it can be picked out on screen.
+func (p ParameterInformation) Span(label string) (start, end int, ok bool) {
+	// The label may be the text itself, which has to be found in the signature.
+	var text string
+	if err := json.Unmarshal(p.Label, &text); err == nil {
+		if text == "" {
+			return 0, 0, false
+		}
+		if i := strings.Index(label, text); i >= 0 {
+			return i, i + len(text), true
+		}
+		return 0, 0, false
+	}
+
+	// Or a pair of offsets in UTF-16 code units.
+	var offsets [2]int
+	if err := json.Unmarshal(p.Label, &offsets); err != nil {
+		return 0, 0, false
+	}
+	start, err1 := Offset(label, Position{Line: 0, Character: offsets[0]})
+	end, err2 := Offset(label, Position{Line: 0, Character: offsets[1]})
+	if err1 != nil || err2 != nil || end < start {
+		return 0, 0, false
+	}
+	return start, end, true
+}
+
+// Text is the parameter as it reads in the signature.
+func (p ParameterInformation) Text(label string) string {
+	if start, end, ok := p.Span(label); ok {
+		return label[start:end]
+	}
+	return ""
 }

@@ -66,6 +66,13 @@ func main() {
 				"documentFormattingProvider": os.Getenv("FAKELSP_NOFORMAT") == "",
 				"hoverProvider":              os.Getenv("FAKELSP_NOHOVER") == "",
 			}
+			if os.Getenv("FAKELSP_NOSIGNATURE") == "" {
+				capabilities["signatureHelpProvider"] = map[string]any{
+					// As broad as a real server's, for the editor to narrow.
+					"triggerCharacters":   []string{"(", ",", " "},
+					"retriggerCharacters": []string{")"},
+				}
+			}
 			if os.Getenv("FAKELSP_NOCOMPLETE") == "" {
 				capabilities["completionProvider"] = map[string]any{
 					// As broad as a real server's: the editor is expected to
@@ -145,6 +152,20 @@ func main() {
 			reply(out, msg.ID, completions(documents[params.TextDocument.URI],
 				params.Position.Line, params.Position.Character))
 
+		case "textDocument/signatureHelp":
+			var params struct {
+				TextDocument struct {
+					URI string `json:"uri"`
+				} `json:"textDocument"`
+				Position struct {
+					Line      int `json:"line"`
+					Character int `json:"character"`
+				} `json:"position"`
+			}
+			_ = json.Unmarshal(msg.Params, &params)
+			reply(out, msg.ID, signatureHelp(documents[params.TextDocument.URI],
+				params.Position.Line, params.Position.Character))
+
 		case "textDocument/hover":
 			var params struct {
 				Position struct {
@@ -193,6 +214,72 @@ func completions(text string, line, character int) []map[string]any {
 		}},
 	}
 	return items
+}
+
+// signatureHelp answers for a call the cursor is inside, and for nothing else.
+// The active parameter is the number of commas between the opening bracket and
+// the cursor, which is how a real server works it out too.
+//
+// The first signature labels its parameters with offsets, the second with their
+// text, so both shapes a client has to handle are exercised.
+func signatureHelp(text string, line, character int) any {
+	lines := strings.Split(text, "\n")
+	if line < 0 || line >= len(lines) {
+		return nil
+	}
+	runes := []rune(lines[line])
+	if character > len(runes) {
+		character = len(runes)
+	}
+
+	// Walk back to the bracket that opened the call the cursor is in.
+	depth, open := 0, -1
+	for i := character - 1; i >= 0; i-- {
+		switch runes[i] {
+		case ')':
+			depth++
+		case '(':
+			if depth == 0 {
+				open = i
+			} else {
+				depth--
+			}
+		}
+		if open >= 0 {
+			break
+		}
+	}
+	if open < 0 {
+		return nil // not inside a call
+	}
+
+	commas := 0
+	for _, r := range runes[open+1 : character] {
+		if r == ',' {
+			commas++
+		}
+	}
+
+	const label = "string.format(format, ...)"
+	start := len("string.format(")
+	return map[string]any{
+		"activeSignature": 0,
+		"activeParameter": commas,
+		"signatures": []map[string]any{
+			{
+				"label": label,
+				"parameters": []map[string]any{
+					{"label": []int{start, start + len("format")}},
+					{"label": []int{start + len("format, "), len(label) - 1}},
+				},
+				"documentation": map[string]any{"kind": "plaintext", "value": "Formats a string."},
+			},
+			{
+				"label":      "string.format(format)",
+				"parameters": []map[string]any{{"label": "format"}},
+			},
+		},
+	}
 }
 
 // wordAt reports the word being typed at a position, and where it starts.

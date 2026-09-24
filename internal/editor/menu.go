@@ -48,6 +48,8 @@ func (e *Editor) buildMenus() []*menu {
 			{label: "Select all", shortcut: "Ctrl-L", action: func() { e.sendToText(tcell.KeyCtrlL) }},
 			{separator: true},
 			{label: "Complete", shortcut: "Ctrl-Space", action: e.complete},
+			{label: "Parameters", shortcut: "Ctrl-P", action: func() { e.signatureHelp(false) }},
+			{label: e.signaturePlaceLabel(), action: e.toggleSignaturePlace},
 			{label: "Toggle comment", shortcut: "Ctrl-B", action: e.toggleComment},
 			{label: "Format document", shortcut: "F12", action: e.formatCurrent},
 			{label: e.formatOnSaveLabel(), action: e.toggleFormatOnSave},

@@ -373,6 +373,17 @@ func TestSearchMenuOnScreen(t *testing.T) {
 	}
 }
 
+// columnOf reports the screen column a substring is drawn at. A dumped row is
+// full of box-drawing runes of three bytes each, so a byte offset into it is
+// not a column.
+func columnOf(row, substring string) int {
+	i := strings.Index(row, substring)
+	if i < 0 {
+		return -1
+	}
+	return len([]rune(row[:i]))
+}
+
 // colorOfWordIn reports the foreground colour a word is drawn in, looking only
 // inside one primitive: the text behind a dialog says the same words.
 func colorOfWordIn(t *testing.T, screen tcell.SimulationScreen, p tview.Primitive, word string) tcell.Color {
@@ -380,18 +391,12 @@ func colorOfWordIn(t *testing.T, screen tcell.SimulationScreen, p tview.Primitiv
 	x, y, width, height := p.GetRect()
 	rows := dump(screen)
 	for row := y; row < y+height && row < len(rows); row++ {
-		line := rows[row]
-		if len(line) < x {
+		col := columnOf(rows[row], word)
+		if col < x || col >= x+width {
 			continue
 		}
-		end := x + width
-		if end > len(line) {
-			end = len(line)
-		}
-		if col := strings.Index(line[x:end], word); col >= 0 {
-			fg, _ := colorAt(screen, x+col, row)
-			return fg
-		}
+		fg, _ := colorAt(screen, col, row)
+		return fg
 	}
 	t.Fatalf("%q is not inside the panel", word)
 	return tcell.ColorDefault
@@ -495,5 +500,52 @@ func TestHoverBoxOnScreen(t *testing.T) {
 	}
 	if n := panelBackgrounds(screen, e.modalStack[0])[egaBlue]; n > 0 {
 		t.Errorf("the help box has %d cells of desktop blue", n)
+	}
+}
+
+func TestParameterHintOnScreen(t *testing.T) {
+	withLanguageServer(t)
+	dir := t.TempDir()
+	e, screen := start(t, write(t, filepath.Join(dir, "main.lua"),
+		"local name = \"world\"\nlocal s = string.format\nprint(s)\n"))
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanSignature() })
+
+	onEditor(t, e, func() {
+		b := e.buffers[0]
+		offset := offsetAt(b.area.GetText(), 1, 23)
+		b.area.Select(offset, offset)
+	})
+	typeText(screen, "(")
+	waitFor(t, e, "the parameter hint", func() bool { return e.signatureShown })
+	redraw(t, e)
+
+	rows := dump(screen)
+	t.Logf("screen:\n%s", strings.Join(rows, "\n"))
+
+	hintRow := -1
+	for i, row := range rows {
+		if strings.Contains(row, "string.format(format, ...)") {
+			hintRow = i
+		}
+	}
+	if hintRow < 0 {
+		t.Fatal("the hint is not on screen")
+	}
+	// It sits on the line above the call, out of the way of what is being typed.
+	cursor := e.cursorScreenPosition(e.buffers[0])
+	if hintRow != cursor.row-1 {
+		t.Errorf("the hint is on row %d, want the line above the cursor at %d", hintRow, cursor.row)
+	}
+	// The parameter being typed is picked out, on the green of a selection.
+	col := columnOf(rows[hintRow], "format,")
+	if col < 0 {
+		t.Fatal("the first parameter is not in the hint")
+	}
+	if _, bg := colorAt(screen, col, hintRow); bg != egaGreen {
+		t.Errorf("the active parameter is on %v, want the green of a selection", bg)
+	}
+	// And the rest of the hint is an ordinary grey panel.
+	if _, bg := colorAt(screen, col-1, hintRow); bg != egaLightGray {
+		t.Errorf("the hint's background is %v", bg)
 	}
 }

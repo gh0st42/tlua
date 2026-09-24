@@ -78,3 +78,56 @@ func TestRealServerCompletesAfterADot(t *testing.T) {
 	})
 	onEditor(t, e, func() { t.Logf("buffer now: %q", e.buffers[0].area.GetText()) })
 }
+
+// TestRealServerShowsParameters types an opening bracket after a standard
+// library call and checks the hint, with whatever server is installed.
+func TestRealServerShowsParameters(t *testing.T) {
+	command, args, ok := lsp.Find()
+	if !ok {
+		t.Skip("no language server on PATH")
+	}
+	t.Setenv(lsp.EnvServer, strings.Join(append([]string{command}, args...), " "))
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.lua")
+	if err := os.WriteFile(path, []byte("local s = string.format\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e, screen := start(t, path)
+	waitFor(t, e, "the language server", func() bool { return e.lsp != nil && e.lsp.CanSignature() })
+	onEditor(t, e, func() {
+		t.Logf("server: %s, signature triggers %v", e.lsp.Name(), e.lsp.SignatureTriggerCharacters())
+	})
+
+	onEditor(t, e, func() {
+		b := e.buffers[0]
+		offset := offsetAt(b.area.GetText(), 0, 23)
+		b.area.Select(offset, offset)
+	})
+
+	// A real server may still be reading the library, so ask again if need be.
+	typeText(screen, "(")
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		shown := false
+		onEditor(t, e, func() { shown = e.signatureShown })
+		if shown {
+			break
+		}
+		press(screen, tcell.KeyCtrlP, 0, tcell.ModNone)
+		time.Sleep(300 * time.Millisecond)
+	}
+	redraw(t, e)
+
+	onEditor(t, e, func() {
+		if !e.signatureShown {
+			t.Fatalf("no parameter hint appeared; status is %q", e.status)
+		}
+	})
+	for _, row := range dump(screen) {
+		if strings.Contains(row, "format") && strings.Contains(row, "(") {
+			t.Logf("hint row: %s", strings.TrimSpace(row))
+		}
+	}
+}

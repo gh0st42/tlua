@@ -39,11 +39,13 @@ type Client struct {
 
 	writeMu sync.Mutex
 
-	canFormat    bool
-	canComplete  bool
-	canHover     bool
-	triggerChars []string
-	serverName   string
+	canFormat      bool
+	canComplete    bool
+	canHover       bool
+	canSignature   bool
+	triggerChars   []string
+	signatureChars []string
+	serverName     string
 }
 
 // shutdownTimeout is how long the client waits for a server to leave before it
@@ -127,6 +129,15 @@ func (c *Client) initialize(ctx context.Context, root string) error {
 					"dynamicRegistration": false,
 					"contentFormat":       []string{"markdown", "plaintext"},
 				},
+				"signatureHelp": map[string]any{
+					"dynamicRegistration": false,
+					"signatureInformation": map[string]any{
+						"documentationFormat":    []string{"markdown", "plaintext"},
+						"parameterInformation":   map[string]any{"labelOffsetSupport": true},
+						"activeParameterSupport": true,
+					},
+					"contextSupport": true,
+				},
 			},
 			"workspace": map[string]any{"configuration": true},
 		},
@@ -140,6 +151,8 @@ func (c *Client) initialize(ctx context.Context, root string) error {
 	c.canFormat = hasCapability(result.Capabilities.DocumentFormattingProvider)
 	c.canComplete = hasCapability(result.Capabilities.CompletionProvider)
 	c.triggerChars = triggerCharacters(result.Capabilities.CompletionProvider)
+	c.canSignature = hasCapability(result.Capabilities.SignatureHelpProvider)
+	c.signatureChars = signatureCharacters(result.Capabilities.SignatureHelpProvider)
 	c.canHover = hasCapability(result.Capabilities.HoverProvider)
 	c.serverName = result.ServerInfo.Name
 
@@ -516,6 +529,55 @@ func (c *Client) Complete(ctx context.Context, path, text string, pos Position) 
 		return nil, fmt.Errorf("completion: %w", err)
 	}
 	return list.Items, nil
+}
+
+// CanSignature reports whether the server offers signature help.
+func (c *Client) CanSignature() bool { return c.canSignature }
+
+// SignatureTriggerCharacters are the characters after which the server expects
+// to be asked what a call takes; a server that names none gets the two that
+// matter, which open a call and separate its arguments.
+func (c *Client) SignatureTriggerCharacters() []string { return c.signatureChars }
+
+// signatureCharacters reads them out of the signature help capability.
+func signatureCharacters(raw json.RawMessage) []string {
+	if !hasCapability(raw) {
+		return nil
+	}
+	var options struct {
+		TriggerCharacters   []string `json:"triggerCharacters"`
+		RetriggerCharacters []string `json:"retriggerCharacters"`
+	}
+	if err := json.Unmarshal(raw, &options); err == nil {
+		both := append(options.TriggerCharacters, options.RetriggerCharacters...)
+		if len(both) > 0 {
+			return both
+		}
+	}
+	return []string{"(", ","}
+}
+
+// Signature asks what the call at a position takes.
+func (c *Client) Signature(ctx context.Context, path, text string, pos Position) (*SignatureHelp, error) {
+	if !c.canSignature {
+		return nil, errors.New("the language server does not offer signature help")
+	}
+	if err := c.Sync(path, text); err != nil {
+		return nil, err
+	}
+
+	var help SignatureHelp
+	err := c.call(ctx, "textDocument/signatureHelp", map[string]any{
+		"textDocument": map[string]any{"uri": pathToURI(path)},
+		"position":     pos,
+	}, &help)
+	if err != nil {
+		return nil, err
+	}
+	if len(help.Signatures) == 0 {
+		return nil, nil // nothing being called here
+	}
+	return &help, nil
 }
 
 // Hover asks what is at a position and returns it as plain text.

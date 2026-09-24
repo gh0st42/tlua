@@ -34,7 +34,12 @@ func (e *Editor) newBuffer(path, name, text string) *buffer {
 		}
 		e.refreshStatus()
 	})
-	area.SetMovedFunc(e.refreshStatus)
+	area.SetMovedFunc(func() {
+		e.refreshStatus()
+		// The text and the cursor are already up to date here, which is what
+		// the parameter hint needs to follow them.
+		e.refreshSignature()
+	})
 
 	b.area = area
 	return b
@@ -217,6 +222,7 @@ func (e *Editor) selectBuffer(i int) {
 	if i < 0 || i >= len(e.buffers) {
 		return
 	}
+	e.hideSignature() // it belonged to the buffer being left
 	e.current = i
 	e.editors.SwitchToPage(pageName(i))
 	e.app.SetFocus(e.buffers[i].area)
