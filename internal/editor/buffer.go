@@ -84,6 +84,9 @@ func (e *Editor) openFile(path string) error {
 	}
 
 	b := e.newBuffer(abs, displayName(abs), text)
+	if e.lsp != nil {
+		_ = e.lsp.Sync(abs, text)
+	}
 	e.addBuffer(b)
 	if err != nil {
 		e.setStatus(fmt.Sprintf("New file %s", b.name))
@@ -108,9 +111,18 @@ func (e *Editor) addBuffer(b *buffer) {
 
 // save writes a buffer back to disk. A buffer with no path needs a name first,
 // which is the caller's job.
+//
+// When a language server is formatting, the buffer is formatted first, so what
+// lands on disk is what the screen shows.
 func (e *Editor) save(b *buffer) error {
 	if b.path == "" {
 		return fmt.Errorf("%s has never been saved", b.name)
+	}
+	if e.formatOnSave && e.canFormat() {
+		if err := e.formatBuffer(b); err != nil {
+			// A server that cannot be reached must not stop a save.
+			e.lspNote = "Not formatted: " + err.Error()
+		}
 	}
 	text := b.area.GetText()
 	if !strings.HasSuffix(text, "\n") && text != "" {
@@ -118,6 +130,9 @@ func (e *Editor) save(b *buffer) error {
 	}
 	if err := os.WriteFile(b.path, []byte(text), 0o644); err != nil {
 		return err
+	}
+	if e.lsp != nil {
+		_ = e.lsp.DidSave(b.path, text)
 	}
 	b.dirty = false
 	e.refreshTabs()
@@ -172,6 +187,9 @@ func (e *Editor) closeBuffer(b *buffer) {
 		}
 	}
 
+	if b.path != "" && e.lsp != nil {
+		_ = e.lsp.DidClose(b.path)
+	}
 	if len(e.buffers) == 0 {
 		e.newFile()
 		return

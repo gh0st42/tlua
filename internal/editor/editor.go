@@ -11,6 +11,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"tlua/internal/lsp"
 )
 
 // Editor is one editing session.
@@ -40,6 +42,12 @@ type Editor struct {
 	menuList   *clickList // the open dropdown, for the mouse
 	modals     int        // how many dialogs are stacked on the desktop
 	modalStack []tview.Primitive
+
+	// The language server, when one was found on PATH.
+	lsp          *lsp.Client
+	lspNote      string
+	formatOnSave bool
+	leaving      bool
 
 	outputShown bool
 	outputBytes int       // how much the pane holds, against outputLimit
@@ -120,6 +128,7 @@ func New(cfg Config) (*Editor, error) {
 
 	e.menus = e.buildMenus()
 	e.drawMenuBar()
+	e.formatOnSave = true
 
 	for _, f := range cfg.Files {
 		if err := e.openFile(f); err != nil {
@@ -131,11 +140,15 @@ func New(cfg Config) (*Editor, error) {
 	}
 	e.selectBuffer(0)
 	e.setStatus("F5 runs the file marked ».  F10 opens the menu.")
+	// A language server is optional: this looks for one and starts it in the
+	// background, and the editor is usable whether or not it finds one.
+	e.startLanguageServer()
 	return e, nil
 }
 
 // Run takes over the terminal until the user leaves.
 func (e *Editor) Run() error {
+	defer e.stopLanguageServer()
 	return e.app.Run()
 }
 
@@ -279,6 +292,9 @@ func (e *Editor) handleKey(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyF8:
 		e.findPrevious()
 		return nil
+	case tcell.KeyF12:
+		e.formatCurrent()
+		return nil
 	case tcell.KeyCtrlC:
 		// Not "quit": in an IDE this is what stops the running program.
 		e.stopProgram()
@@ -379,9 +395,11 @@ func (e *Editor) quit() {
 	}
 	if len(dirty) > 0 {
 		e.confirm("Exit", "Unsaved changes in "+strings.Join(dirty, ", ")+". Leave anyway?", func() {
+			e.leaving = true
 			e.app.Stop()
 		})
 		return
 	}
+	e.leaving = true
 	e.app.Stop()
 }

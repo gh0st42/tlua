@@ -46,6 +46,10 @@ func (e *Editor) buildMenus() []*menu {
 			{label: "Copy", shortcut: "Ctrl-Q", action: func() { e.sendToText(tcell.KeyCtrlQ) }},
 			{label: "Paste", shortcut: "Ctrl-V", action: func() { e.sendToText(tcell.KeyCtrlV) }},
 			{label: "Select all", shortcut: "Ctrl-L", action: func() { e.sendToText(tcell.KeyCtrlL) }},
+			{separator: true},
+			{label: "Format document", shortcut: "F12", action: e.formatCurrent},
+			{label: e.formatOnSaveLabel(), action: e.toggleFormatOnSave},
+			{label: "Language server...", action: e.languageServerDialog},
 		}},
 		{title: "Search", hotkey: 'S', items: []menuItem{
 			{label: "Find...", shortcut: "Ctrl-F", action: e.findDialog},

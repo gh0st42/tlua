@@ -88,6 +88,7 @@ once, and F5 to run.
 | `F7`, `F8` | find next, find previous |
 | `Ctrl-R` | replace |
 | `F9` | check the current buffer's syntax without running it |
+| `F12` | format the buffer through the language server |
 | `F10` | the menu bar |
 | `Ctrl-N` | new file |
 | `Ctrl-G` | go to line |
@@ -124,6 +125,29 @@ and remembers whether case mattered. Replace offers *Replace*, which changes the
 match at the cursor and moves to the next, and *Replace all*. Replacements go
 through the text widget one at a time, so `Ctrl-Z` walks back through them
 individually rather than losing the file in one step.
+
+### Formatting, through a language server
+
+If a Lua language server is on PATH, the editor starts it in the background and
+uses it to format each buffer as it is saved, so what lands on disk is what the
+screen shows. It looks for `lua-language-server`, `emmylua_ls` and `lua-lsp`, in
+that order; `TLUA_LSP` names a different one (with arguments, if it needs them)
+and `TLUA_LSP=off` does without.
+
+`F12` formats the current buffer without saving. *Edit › Format on save*
+turns the pass on and off when a server's idea of tidy is not yours, and
+*Edit › Language server...* says what was found.
+
+None of this is required: with no server the editor behaves exactly as it did
+before, and a server that fails or goes quiet costs you a formatting pass, never
+a save — the write goes ahead with the text as it stands and the reason is kept
+for the Language server dialog. A formatting pass arrives as a single edit, so
+one `Ctrl-Z` takes it back, and the cursor keeps its line.
+
+The client itself is [internal/lsp](internal/lsp/): the initialize handshake,
+document synchronisation and `textDocument/formatting`, which is all that
+formatting needs. Its tests run against a fake server in `testdata`, and against
+whatever real server is installed when there is one.
 
 ### The function list
 
@@ -269,6 +293,7 @@ sources only cost one lookup each.
 | `TLUA_INCLUDE` | Site-wide library directories, listed the way `PATH` is (`:` on Unix, `;` on Windows). Each entry is searched as `<dir>/?.lua` and `<dir>/?/init.lua`; an entry containing `?` is taken as a literal pattern instead. |
 | `TLUA_PATH` | `package.path` patterns in Lua's own notation, for full control. `;;` expands to the built-in default. Takes precedence over `TLUA_INCLUDE` and `LUA_PATH`. |
 | `TLUA_INIT` | A chunk to run before anything else; `@file` runs a file. Takes precedence over `LUA_INIT`. |
+| `TLUA_LSP` | The language server `tlua edit` formats with, as a command with any arguments. `off` uses none. Unset, the editor looks for one on PATH. |
 | `LUA_PATH`, `LUA_INIT` | The standard Lua variables, honoured as the reference interpreter does. |
 
 So a machine declares its shared Lua libraries once:
@@ -309,6 +334,7 @@ internal/interp/   the interpreter: state, search path, arg, REPL, fused apps
 internal/payload/  the format of a program attached to a binary, and its archive
 internal/fuse/     the fuse subcommand: packing a program onto the interpreter
 internal/editor/   the full-screen editor
+internal/lsp/      a small Language Server Protocol client
 examples/          hello.lua, and app/ to fuse
 bin/               build output (git-ignored)
 ```
@@ -333,6 +359,9 @@ bin/               build output (git-ignored)
 | [internal/editor/outline.go](internal/editor/outline.go) | finding the functions a buffer defines |
 | [internal/editor/mouse.go](internal/editor/mouse.go) | clicks on the bars, and keeping menus and dialogs modal |
 | [internal/editor/find.go](internal/editor/find.go) | searching, replacing, and their dialogs |
+| [internal/editor/format.go](internal/editor/format.go) | starting a language server and formatting with it |
+| [internal/lsp/client.go](internal/lsp/client.go) | the Language Server Protocol client |
+| [internal/lsp/edits.go](internal/lsp/edits.go) | applying a server's edits to a document |
 
 Tests sit beside what they cover: unit tests in each `internal` package, and
 end-to-end tests in [cmd/tlua](cmd/tlua/) that build the binary and drive it as

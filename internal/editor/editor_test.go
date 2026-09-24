@@ -12,6 +12,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
+
+	"tlua/internal/lsp"
 )
 
 var (
@@ -46,6 +48,11 @@ func interpreter(t *testing.T) string {
 // would, so that key handling and the event loop are part of the test.
 func start(t *testing.T, files ...string) (*Editor, tcell.SimulationScreen) {
 	t.Helper()
+	// Unless a test asked for a language server, do without one: whatever is
+	// installed on the machine running the tests is none of their business.
+	if os.Getenv(lsp.EnvServer) == "" {
+		t.Setenv(lsp.EnvServer, "off")
+	}
 	screen := tcell.NewSimulationScreen("UTF-8")
 	if err := screen.Init(); err != nil {
 		t.Fatal(err)
