@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"tlua/internal/editor"
 	"tlua/internal/fuse"
 	"tlua/internal/interp"
 	"tlua/internal/payload"
@@ -19,6 +20,7 @@ import (
 const version = "tlua 0.1.0 (Lua 5.1 via gopher-lua, pure Go)"
 
 const usage = `usage: tlua [options] [script [args]]
+       tlua edit [file...]
        tlua fuse [-o output] <main.lua | directory | archive.zip>
 
 Options:
@@ -38,6 +40,9 @@ Environment:
                  searched as <dir>/?.lua and <dir>/?/init.lua
   TLUA_PATH      package.path patterns, as LUA_PATH but tlua-only
   TLUA_INIT      chunk to run at startup ("@file" runs a file)
+
+The edit subcommand opens a full-screen Lua editor: a menu bar, several files
+at once, F5 to run the primary file, F9 to check its syntax.
 
 The fuse subcommand attaches a Lua program to a copy of this binary, producing
 a standalone executable; "tlua fuse -h" explains it. A zip concatenated onto
@@ -60,8 +65,13 @@ func main() {
 		}
 	}
 
-	if len(os.Args) > 1 && os.Args[1] == "fuse" {
-		os.Exit(fuse.Command(os.Args[2:]))
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "fuse":
+			os.Exit(fuse.Command(os.Args[2:]))
+		case "edit":
+			os.Exit(editCommand(os.Args[2:]))
+		}
 	}
 
 	c, err := parseArgs(os.Args[1:])
@@ -202,6 +212,26 @@ func run(c *cli) int {
 		if err := r.DoScript("-", nil); err != nil {
 			return r.Report(err)
 		}
+	}
+	return 0
+}
+
+// editCommand opens the editor on the named files.
+func editCommand(args []string) int {
+	for _, a := range args {
+		if a == "-h" || a == "--help" {
+			fmt.Print("usage: tlua edit [file...]\n\nOpens a full-screen Lua editor. F1 lists the keys.\n")
+			return 0
+		}
+	}
+	ed, err := editor.New(editor.Config{Files: args})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tlua edit: %v\n", err)
+		return 1
+	}
+	if err := ed.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "tlua edit: %v\n", err)
+		return 1
 	}
 	return 0
 }
