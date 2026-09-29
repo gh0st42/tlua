@@ -25,7 +25,7 @@ const banner = "tlua " + version.Number + " (Lua 5.1 via gopher-lua, pure Go)"
 const usage = `usage: tlua [options] [script [args]]
        tlua edit [file...]
        tlua play [script | directory] [args]
-       tlua fuse [-o output] <main.lua | directory | archive.zip>
+       tlua fuse [-o output] [-play] <main.lua | directory | archive.zip>
 
 Options:
   -e stat    execute string 'stat'
@@ -58,8 +58,9 @@ sprites, input and a program built out of _update() and _draw(). The calls
 are listed in docs/pico.md; "tlua play -h" explains the options.
 
 The fuse subcommand attaches a Lua program to a copy of this binary, producing
-a standalone executable; "tlua fuse -h" explains it. A zip concatenated onto
-the binary (cat tlua app.zip > app) works the same way.
+a standalone executable; with -play the executable opens a window and runs the
+program against the console. "tlua fuse -h" explains it. A zip concatenated
+onto the binary (cat tlua app.zip > app) works the same way.
 `
 
 func main() {
@@ -74,6 +75,11 @@ func main() {
 		}
 		if p != nil {
 			defer p.Close()
+			// A program fused with -play wants a window and the console API;
+			// anything else is run as an ordinary script.
+			if p.Kind.Game() {
+				os.Exit(game.RunFused(p, exe))
+			}
 			os.Exit(interp.RunFused(p, exe))
 		}
 	}

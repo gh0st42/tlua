@@ -10,12 +10,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"tlua/internal/payload"
 )
 
-const usage = `usage: tlua fuse [-o output] [--base interpreter] <main.lua | directory | archive.zip>
+const usage = `usage: tlua fuse [-o output] [-play] [--base interpreter] <main.lua | directory | archive.zip>
 
 Attaches a Lua program to a copy of the interpreter, producing a standalone
 executable that runs the program instead of reading options.
@@ -26,6 +27,8 @@ executable that runs the program instead of reading options.
 
 Options:
   -o output     where to write the executable (default: named after the source)
+  -play         the program is written for the console: the executable opens a
+                window and runs it the way "tlua play" does
   --base path   interpreter to build on (default: this binary; use a
                 cross-compiled tlua to build for another platform)
 `
@@ -36,6 +39,7 @@ func Command(args []string) int {
 	fs.SetOutput(os.Stderr)
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	out := fs.String("o", "", "output executable")
+	play := fs.Bool("play", false, "the program wants a window")
 	base := fs.String("base", "", "interpreter to build on")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -62,6 +66,15 @@ func Command(args []string) int {
 	if err != nil {
 		return fatal("%v", err)
 	}
+	if *play {
+		kind = kind.AsGame()
+	} else if looksLikeAGame(mainSource(kind, data)) {
+		// Fused without -play, a console program fails at the first drawing
+		// call with "attempt to call a non-function object", which says
+		// nothing about what is actually wrong. Better to say it here.
+		fmt.Fprintf(os.Stderr,
+			"note: %s defines _draw or _update; fuse it with -play if it should open a window\n", src)
+	}
 
 	if *out == "" {
 		*out = defaultOutputName(src, *base)
@@ -75,10 +88,14 @@ func Command(args []string) int {
 }
 
 func kindName(k payload.Kind) string {
-	if k == payload.Zip {
-		return "archive"
+	what := "single file"
+	if k.Shape() == payload.Zip {
+		what = "archive"
 	}
-	return "single file"
+	if k.Game() {
+		what += ", opens a window"
+	}
+	return what
 }
 
 // buildPayload turns a source path into the bytes to attach.
@@ -221,4 +238,36 @@ func defaultOutputName(src, base string) string {
 func fatal(format string, args ...any) int {
 	fmt.Fprintf(os.Stderr, "tlua fuse: "+format+"\n", args...)
 	return 1
+}
+
+// gameCallbacks is what a program written for the console defines, and nothing
+// else much does: the two functions the frame loop calls.
+var gameCallbacks = regexp.MustCompile(`(?:^|[^\w])(?:function\s+)?_(?:draw|update)\s*[=(]`)
+
+// looksLikeAGame reports whether a program appears to be written for the
+// console. It is only ever used to offer a hint, so a wrong guess costs a line
+// of output and nothing else.
+func looksLikeAGame(src []byte) bool {
+	return src != nil && gameCallbacks.Match(src)
+}
+
+// mainSource reports the program's main chunk, for looking at before it is
+// attached. It gives up quietly: this is only used for the hint above.
+func mainSource(kind payload.Kind, data []byte) []byte {
+	if kind.Shape() != payload.Zip {
+		return data
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil
+	}
+	archive, err := payload.NewArchive(zr)
+	if err != nil {
+		return nil
+	}
+	src, err := archive.Read(payload.EntryName)
+	if err != nil {
+		return nil
+	}
+	return src
 }

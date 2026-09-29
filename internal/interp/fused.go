@@ -12,50 +12,75 @@ import (
 	"tlua/internal/payload"
 )
 
-// RunFused executes the program attached to the binary. In this mode tlua is
+// Fused is the program attached to a binary, ready to run: an interpreter with
+// the program's own modules and data loadable out of the payload, and the chunk
+// itself waiting to be called.
+//
+// It is separate from running it because there are two ways to run one. A plain
+// program runs and ends, which is RunFused below; a program written for the
+// console has an API installed on it and is then driven a frame at a time, and
+// package game does that with the same state.
+type Fused struct {
+	*Interp
+
+	src   []byte
+	chunk string
+}
+
+// OpenFused prepares the program attached to the binary. In this mode tlua is
 // not an interpreter any more: it parses no options of its own and passes the
 // whole command line to the program, like a .love executable does.
-func RunFused(p *payload.Payload, exe string) int {
-	opts := &Options{ScriptArgIdx: 0} // arg[0] is the executable itself
-	r := New(opts)
-	defer r.Close()
-
+func OpenFused(p *payload.Payload, exe string) (*Fused, error) {
+	r := New(&Options{ScriptArgIdx: 0}) // arg[0] is the executable itself
 	r.name = filepath.Base(exe)
 	if dir, err := filepath.Abs(filepath.Dir(exe)); err == nil {
 		// Files shipped next to the executable are still importable.
 		r.prependPath(dir)
 	}
 
-	var (
-		src   []byte
-		chunk string
-	)
-	switch p.Kind {
+	f := &Fused{Interp: r}
+	switch p.Kind.Shape() {
 	case payload.Zip:
 		r.installArchive(p.Archive)
 		data, err := p.Archive.Read(payload.EntryName)
 		if err != nil {
-			return r.Report(err)
+			r.Close()
+			return nil, err
 		}
-		src, chunk = data, payload.EntryName
+		f.src, f.chunk = data, payload.EntryName
 	default:
 		r.installSource(p.Source)
-		src, chunk = p.Source, r.name
+		f.src, f.chunk = p.Source, r.name
 	}
+	return f, nil
+}
 
-	err := r.protect(func() error {
-		fn, err := r.L.Load(bytes.NewReader(src), chunk)
+// Run calls the attached program's main chunk, handing it the arguments the
+// executable was started with.
+func (f *Fused) Run(args []string) error {
+	return f.protect(func() error {
+		fn, err := f.L.Load(bytes.NewReader(stripShebang(f.src)), f.chunk)
 		if err != nil {
 			return err
 		}
-		r.L.Push(fn)
-		args := os.Args[1:]
+		f.L.Push(fn)
 		for _, a := range args {
-			r.L.Push(lua.LString(a))
+			f.L.Push(lua.LString(a))
 		}
-		return r.L.PCall(len(args), lua.MultRet, nil)
+		return f.L.PCall(len(args), lua.MultRet, nil)
 	})
-	return r.Report(err)
+}
+
+// RunFused executes an attached program as a script, and reports the exit
+// status for the process.
+func RunFused(p *payload.Payload, exe string) int {
+	f, err := OpenFused(p, exe)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", filepath.Base(exe), err)
+		return 1
+	}
+	defer f.Close()
+	return f.Report(f.Run(os.Args[1:]))
 }
 
 // installSource gives a single-file fused program the same "embed" module the
@@ -91,7 +116,7 @@ func (r *Interp) installArchive(fs *payload.Archive) {
 			if err != nil {
 				continue
 			}
-			fn, err := L.Load(bytes.NewReader(src), cand)
+			fn, err := L.Load(bytes.NewReader(stripShebang(src)), cand)
 			if err != nil {
 				L.RaiseError("%s", err.Error())
 			}
@@ -217,4 +242,21 @@ func tailcall(L *lua.LState, fn lua.LValue) int {
 	}
 	L.Call(n, lua.MultRet)
 	return L.GetTop()
+}
+
+// stripShebang removes the "#!" line a Lua file meant to be run directly starts
+// with.
+//
+// Loading a file from disk skips it, so a fused copy of the same file has to as
+// well, or a program that ran perfectly well as a script fails to parse once it
+// is attached to a binary. The newline stays behind, so the line numbers in any
+// error still match the file the person wrote.
+func stripShebang(src []byte) []byte {
+	if len(src) == 0 || src[0] != '#' {
+		return src
+	}
+	if i := bytes.IndexByte(src, '\n'); i >= 0 {
+		return src[i:]
+	}
+	return nil
 }

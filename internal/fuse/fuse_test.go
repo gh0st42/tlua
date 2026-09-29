@@ -97,3 +97,50 @@ func TestBuildPayloadFromLuaFile(t *testing.T) {
 		t.Errorf("kind = %q, data = %q", rune(kind), data)
 	}
 }
+
+func TestNoticingAProgramWrittenForTheConsole(t *testing.T) {
+	games := []string{
+		"function _draw()\nend\n",
+		"function _update()\n end\n",
+		"_draw = function() end\n",
+		"local x = 1\nfunction _init() end\nfunction _draw() cls(1) end\n",
+	}
+	for _, src := range games {
+		if !looksLikeAGame([]byte(src)) {
+			t.Errorf("not noticed as a console program:\n%s", src)
+		}
+	}
+
+	scripts := []string{
+		"print('hello')\n",
+		"-- this one mentions _draw in a comment only\n",
+		"local drawing = {}\nfunction drawing.update() end\n",
+		"function my_draw() end\n",
+		"",
+	}
+	for _, src := range scripts {
+		if looksLikeAGame([]byte(src)) {
+			t.Errorf("wrongly taken for a console program:\n%s", src)
+		}
+	}
+	if looksLikeAGame(nil) {
+		t.Error("nothing at all is not a console program")
+	}
+}
+
+func TestTheMainChunkIsFoundInsideAnArchive(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.lua"), []byte("function _draw() end\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	kind, data, err := buildPayload(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !looksLikeAGame(mainSource(kind, data)) {
+		t.Error("a console program in a directory was not noticed")
+	}
+	if got := mainSource(payload.Zip, []byte("not a zip")); got != nil {
+		t.Errorf("reading a main chunk out of nonsense gave %q", got)
+	}
+}

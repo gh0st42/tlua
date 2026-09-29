@@ -19,6 +19,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"tlua/internal/interp"
+	"tlua/internal/payload"
 	"tlua/internal/picolua"
 )
 
@@ -167,7 +168,11 @@ type session struct {
 	opts   Options
 	interp *interp.Interp
 	rt     *picolua.Runtime
-	script string
+
+	// start runs the program's main chunk. There are two kinds of program
+	// here — a file on disk, and one attached to this binary — and this is
+	// the only thing that differs between them.
+	start func() error
 
 	interrupt chan os.Signal
 }
@@ -195,14 +200,45 @@ func load(opts Options) (*session, error) {
 		ScriptArgIdx: opts.ArgIdx,
 	})
 
-	s := &session{opts: opts, interp: in, script: script}
+	s := &session{opts: opts, interp: in}
+	s.start = func() error { return in.DoScript(script, opts.Args) }
 	s.rt = picolua.New(in.L, picolua.Options{
 		Title:       title,
 		Out:         os.Stdout,
 		FPS:         ebiten.ActualFPS,
 		ButtonLabel: buttonLabel,
+		ReadFile:    besideProgram(filepath.Dir(script)),
 	})
 	return s, nil
+}
+
+// RunFused shows a program attached to this binary, which is what a game built
+// with `tlua fuse -play` runs when it is started.
+//
+// It is the same session as a program read off disk: the difference is only
+// where the program and its modules come from, which the interpreter has
+// already been told.
+func RunFused(p *payload.Payload, exe string) int {
+	f, err := interp.OpenFused(p, exe)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", filepath.Base(exe), err)
+		return 1
+	}
+	defer f.Close()
+
+	s := &session{interp: f.Interp}
+	// A fused program is handed the whole command line, as a .love executable
+	// is, so there are no options of ours to read here.
+	args := os.Args[1:]
+	s.start = func() error { return f.Run(args) }
+	s.rt = picolua.New(f.L, picolua.Options{
+		Title:       titleFor(exe),
+		Out:         os.Stdout,
+		FPS:         ebiten.ActualFPS,
+		ButtonLabel: buttonLabel,
+		ReadFile:    attachedFirst(p),
+	})
+	return s.play()
 }
 
 // titleFor names the window after the program: the folder for a main.lua, the
@@ -226,7 +262,7 @@ func (s *session) close() {
 
 // runMain runs the program's top level, then its _init.
 func (s *session) runMain() error {
-	if err := s.interp.DoScript(s.script, s.opts.Args); err != nil {
+	if err := s.start(); err != nil {
 		return err
 	}
 	return s.rt.Init()
@@ -248,7 +284,11 @@ func Run(opts Options) int {
 		return 1
 	}
 	defer s.close()
+	return s.play()
+}
 
+// play runs a loaded program and then shows it, whichever way it was loaded.
+func (s *session) play() int {
 	if err := s.runMain(); err != nil {
 		return s.report(err)
 	}
@@ -326,4 +366,41 @@ func startScale(monitorW, monitorH, w, h int) int {
 	}
 	scale := min(monitorW*fits/100/w, monitorH*fits/100/h)
 	return min(max(scale, 1), biggest)
+}
+
+// attachedFirst reads a file out of the program attached to the binary, and
+// falls back to the disk.
+//
+// That way a game's artwork ships inside it and loadpng("art.png") finds it,
+// while a file the person running it puts beside the executable is still
+// readable. The archive comes first for the same reason require() prefers it:
+// what was shipped is what the game was tested with.
+func attachedFirst(p *payload.Payload) func(string) ([]byte, error) {
+	return func(name string) ([]byte, error) {
+		if p.Archive != nil {
+			if data, err := p.Archive.Read(name); err == nil {
+				return data, nil
+			}
+		}
+		return os.ReadFile(name)
+	}
+}
+
+// besideProgram reads a file named by a program, looking first where the
+// program itself is.
+//
+// A game started from somewhere else — from a menu, from another directory —
+// still means the artwork next to its own main.lua when it says
+// loadpng("art.png"), which is the same rule require() follows for modules. An
+// absolute path, and a relative one that is not there, are left to the working
+// directory to answer for.
+func besideProgram(dir string) func(string) ([]byte, error) {
+	return func(name string) ([]byte, error) {
+		if !filepath.IsAbs(name) {
+			if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
+				return data, nil
+			}
+		}
+		return os.ReadFile(name)
+	}
 }

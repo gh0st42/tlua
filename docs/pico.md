@@ -241,6 +241,35 @@ left to right and then down. Tiles are 8 by 8 unless told otherwise.
 `examples/pico/platformer.lua` writes its level out as text, turns it into
 numbers once, and then uses that same grid both to draw with and to walk on.
 
+## Files
+
+A game is not only Lua: there is artwork, and usually a level or a table of
+numbers kept beside it.
+
+| Call | What it does |
+| --- | --- |
+| `loadpng(path)` | Reads a PNG and reduces it to the palette. |
+| `fetch(path)` | Reads a file and gives it back as a string. |
+
+Both look in two places, in order: **inside the executable**, if the program was
+fused with `tlua fuse -play`, and then **beside the program's own main.lua**. So
+a game started from somewhere else still finds its own artwork, and the same
+`loadpng("art.png")` works whether the game is a directory or a single
+executable. An absolute path is taken as it stands.
+
+```lua
+local sheet = loadpng("art/tiles.png")
+local level = fetch("levels/1.txt")
+```
+
+`require` reads the same way, out of the attached archive before the disk, so a
+game split across modules ships as one file too. Lua's own `io` is untouched
+and always means the disk — which is what a program wants for a save file, and
+not what it wants for the artwork it shipped with.
+
+There is no sound yet. When there is, its loader will read through the same two
+places, because that is the only way anything here reads a file.
+
 ## Input
 
 | Call | What it does |
@@ -393,11 +422,33 @@ gives the garbage collector to do is its own.
 
 ## Shipping a game
 
-`tlua fuse` attaches a program to a copy of the binary, so that a script and
-its modules ship as one executable. A fused program runs as an ordinary script
-though: the console API is not installed in it, and `cls` would be a nil value.
+`tlua fuse -play` attaches a program to a copy of the binary and marks it as one
+that wants a window. What comes out is a single executable with nothing beside
+it: no interpreter to install, no files to keep together, no Lua on the machine
+it runs on.
 
-So a game is shipped as its files plus a tlua binary, and started with
-`tlua play`. Making `tlua fuse` able to produce a game that opens its own
-window is a small change to the payload format and an obvious next step, but it
-is not there yet.
+```sh
+tlua fuse -play -o mygame mygame/     # a directory with main.lua in it
+./mygame
+```
+
+It takes the same three shapes `tlua fuse` always did — one `.lua` file, a
+directory, or a zip — and `require` inside the program reads modules out of the
+attached archive, so a game split across files ships as one thing.
+
+Whatever the executable is started with is handed to the program, as it is for
+a `.love` file, so a fused game reads `arg` the way any other program does. The
+window is named after the executable until `window{title=}` says otherwise.
+
+Without `-play` the program is fused as an ordinary script, with no console API
+in it: `cls` would be a nil value. Fusing notices a program that defines
+`_draw` or `_update` and says so rather than leaving that to be discovered at
+the first drawing call.
+
+Building for another machine is what `--base` is for: cross-compile tlua for it
+first, then fuse against that binary.
+
+```sh
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o tlua.exe ./cmd/tlua
+tlua fuse -play --base tlua.exe -o mygame.exe mygame/
+```

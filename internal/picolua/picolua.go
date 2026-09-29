@@ -52,6 +52,17 @@ type Options struct {
 	// FPS reports the frame rate for fps(); zero when the host has no idea.
 	FPS func() float64
 
+	// ReadFile reads a file the program asks for by name. The default reads
+	// the disk, beside the program; a game fused into one executable reads
+	// what is attached to it first, so that the same loadpng("art.png") works
+	// either way and a game ships as one file.
+	//
+	// Every call that reads a file goes through here — loadpng and fetch
+	// today, a sound or a font whenever there is one. Anything that opened a
+	// path for itself would work from a directory and quietly fail once the
+	// game was fused, which is the sort of thing found only after shipping.
+	ReadFile func(name string) ([]byte, error)
+
 	// ButtonLabel reports what the key that works a console button is called
 	// on the keyboard in front of the person, which is not the same as where
 	// that key sits. Without one, btnkey() falls back to the place's own name.
@@ -79,6 +90,7 @@ type Runtime struct {
 	clock func() float64
 	fps   func() float64
 	label func(player, button int) string
+	read  func(name string) ([]byte, error)
 	rng   *rand.Rand
 
 	window        Window
@@ -136,6 +148,10 @@ func New(L *lua.LState, opts Options) *Runtime {
 	r.label = opts.ButtonLabel
 	if r.label == nil {
 		r.label = defaultButtonLabel
+	}
+	r.read = opts.ReadFile
+	if r.read == nil {
+		r.read = os.ReadFile
 	}
 
 	r.installSurfaceType()

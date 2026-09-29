@@ -12,6 +12,9 @@ dependencies — so any of them can be copied somewhere else and changed.
 tlua play examples/pico/snake.lua
 tlua play -scale 3 examples/pico/starfield.lua
 tlua play -fullscreen examples/pico/plasma.lua
+
+tlua fuse -play -o snake examples/pico/snake.lua   # one executable, no tlua
+./snake
 ```
 
 | Example | What it is for |

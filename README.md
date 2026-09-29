@@ -29,7 +29,7 @@ be deleted there.
 usage: tlua [options] [script [args]]
        tlua edit [file...]
        tlua play [script | directory] [args]
-       tlua fuse [-o output] <main.lua | directory | archive.zip>
+       tlua fuse [-o output] [-play] <main.lua | directory | archive.zip>
 
 Options:
   -e stat    execute string 'stat'
@@ -120,6 +120,18 @@ there is.
 While a program runs, the window keeps `alt-enter` and `F11` for fullscreen,
 `ctrl-D` for a frame rate counter and `ctrl-Q` for closing it; the program is
 not shown those keys.
+
+A finished game ships as one executable with nothing beside it:
+
+```sh
+tlua fuse -play -o mygame mygame/   # a directory with main.lua in it
+./mygame                            # opens its own window
+```
+
+Its artwork and data go in with it. `loadpng("art.png")`, `fetch("level.txt")`
+and `require` all read what was attached before they read the disk, so the same
+game runs from a directory while it is being written and from one file once it
+is finished.
 
 In the editor, the Run menu's "Run with" setting decides what `F5` does:
 `tlua`, a console window, or love2d.

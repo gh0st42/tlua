@@ -3,11 +3,16 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"tlua/internal/pico"
 )
 
 // fuseApp builds a standalone executable from src and returns its path.
@@ -244,4 +249,181 @@ func writeZip(t *testing.T, path string, files map[string]string) {
 		t.Fatal(err)
 	}
 	write(t, path, buf.String())
+}
+
+// A game fused with -play opens a window, which is no use in a test; a program
+// that calls exit() before the first frame goes through everything else — the
+// payload, the console API, the modules beside it — and stops short of opening
+// one.
+func TestFusePlayRunsAConsoleProgram(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "main.lua"), `
+		local art = require("art")
+		local w, h = screen()
+		printh("screen is " .. w .. "x" .. h)
+		printh("sprite is " .. art.ship:width() .. " wide")
+		cls(1)
+		spr(art.ship, 10, 10)
+		printh("pixel " .. pget(11, 10))
+		function _init() exit(7) end
+	`)
+	write(t, filepath.Join(dir, "art.lua"), `return { ship = sprite[[.cc.|cccc]] }`)
+
+	app := fuseApp(t, dir, "-play")
+	got := runApp(t, app, t.TempDir())
+
+	if got.code != 7 {
+		t.Errorf("exit status %d, want the 7 the program asked for (stderr %s)", got.code, got.stderr)
+	}
+	for _, want := range []string{"screen is 480x270", "sprite is 4 wide", "pixel 12"} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("output does not say %q:\n%s", want, got.stdout)
+		}
+	}
+}
+
+// Without -play the console API is not installed, and the program that needs it
+// says so rather than doing something surprising.
+func TestFuseWithoutPlayIsStillAScript(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "main.lua"), "print('a script')\ncls(1)\n")
+
+	app := fuseApp(t, dir)
+	got := runApp(t, app, t.TempDir())
+
+	if !strings.Contains(got.stdout, "a script") {
+		t.Errorf("the script did not run: %q", got.stdout)
+	}
+	if got.code == 0 {
+		t.Error("calling cls() in a plain fused script should fail")
+	}
+	// The interpreter's own complaint is about calling something that is not a
+	// function; what matters is that it says where.
+	if !strings.Contains(got.stderr, "main.lua:2") {
+		t.Errorf("the error should say where it happened: %q", got.stderr)
+	}
+}
+
+// A single file works the same way as a directory.
+func TestFusePlayFromOneFile(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "game.lua")
+	write(t, src, `
+		printh(tostr(rrectfill and "have rrectfill" or "no rrectfill"))
+		function _init() exit(0) end
+	`)
+
+	app := fuseApp(t, src, "-play")
+	got := runApp(t, app, t.TempDir())
+	if got.code != 0 || !strings.Contains(got.stdout, "have rrectfill") {
+		t.Errorf("status %d, output %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+}
+
+// A console program fused as a script fails on its first drawing call with a
+// message that explains nothing, so fusing says something while it still can.
+func TestFuseNoticesAProgramThatWantsAWindow(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "game.lua")
+	write(t, src, "function _draw()\n  cls(1)\nend\n")
+
+	cmd := exec.Command(bin(t), "fuse", "-o", filepath.Join(t.TempDir(), "app"), src)
+	said, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("fuse: %v\n%s", err, said)
+	}
+	if !strings.Contains(string(said), "-play") {
+		t.Errorf("fusing a console program as a script said %q; it should suggest -play", said)
+	}
+
+	// And an ordinary script is not nagged about it.
+	plain := filepath.Join(t.TempDir(), "plain.lua")
+	write(t, plain, "print('hello')\n-- nothing to do with _draw here\n")
+	cmd = exec.Command(bin(t), "fuse", "-o", filepath.Join(t.TempDir(), "app2"), plain)
+	said, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("fuse: %v\n%s", err, said)
+	}
+	if strings.Contains(string(said), "-play") {
+		t.Errorf("a plain script was told about -play: %q", said)
+	}
+}
+
+// Fusing says what it made, so that a game not opening a window is easy to
+// explain.
+func TestFuseSaysWhenItMadeAGame(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "game.lua")
+	write(t, src, "function _init() exit(0) end\n")
+	out := filepath.Join(t.TempDir(), "app")
+
+	cmd := exec.Command(bin(t), "fuse", "-play", "-o", out, src)
+	said, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("fuse: %v\n%s", err, said)
+	}
+	if !strings.Contains(string(said), "window") {
+		t.Errorf("fuse -play said %q; it should mention the window", said)
+	}
+}
+
+// A game is not only Lua: it has artwork, a level or two, and modules of its
+// own. All of that goes into the one executable, and this is the test that it
+// comes back out — run from a directory where none of those files exist.
+func TestFusePlayCarriesTheWholeGame(t *testing.T) {
+	dir := t.TempDir()
+	mkdirs(t, filepath.Join(dir, "data"))
+
+	write(t, filepath.Join(dir, "main.lua"), `
+		local levels = require("data.levels")
+
+		local art, arterr = loadpng("data/art.png")
+		printh("art: " .. (art and (art:width() .. "x" .. art:height()) or tostr(arterr)))
+		printh("pixel: " .. art:get(0, 0) .. "," .. art:get(1, 0))
+
+		local config, err = fetch("data/config.txt")
+		printh("config: " .. (config and config or tostr(err)))
+
+		printh("module: " .. levels.first)
+		printh("missing: " .. tostr(select(2, fetch("nowhere.txt")) ~= nil))
+
+		function _init() exit(0) end
+	`)
+	write(t, filepath.Join(dir, "data", "levels.lua"), `return { first = "the cellar" }`)
+	write(t, filepath.Join(dir, "data", "config.txt"), "lives=3\nspeed=fast\n")
+	writePNG(t, filepath.Join(dir, "data", "art.png"))
+
+	app := fuseApp(t, dir, "-play")
+	// Somewhere else entirely: none of those files are next to the binary.
+	got := runApp(t, app, t.TempDir())
+
+	if got.code != 0 {
+		t.Fatalf("exit status %d\nstdout: %s\nstderr: %s", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"art: 2x1",           // the PNG was decoded
+		"pixel: 8,12",        // and reduced to the palette
+		"config: lives=3",    // a text file came out whole
+		"module: the cellar", // and require() read the archive
+		"missing: true",      // while a file nobody packed is still missing
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("output does not contain %q:\n%s", want, got.stdout)
+		}
+	}
+}
+
+// writePNG puts two known colours on disk as a real PNG.
+func writePNG(t *testing.T, path string) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 2, 1))
+	for i, col := range []uint8{8, 12} {
+		r, g, b := pico.Default.RGB(col)
+		img.Set(i, 0, color.RGBA{r, g, b, 255})
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := png.Encode(f, img); err != nil {
+		t.Fatal(err)
+	}
 }

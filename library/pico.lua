@@ -253,10 +253,17 @@ function surface(w, h) end
 ---@return Surface
 function sprite(art) end
 
---- Reads a PNG file and reduces it to the palette.
+--- Reads a PNG and reduces it to the palette. Looks inside the executable first
+--- when the game was fused with `tlua fuse -play`, then beside the program.
 ---@param path string
 ---@return Surface|nil surface, string? err
 function loadpng(path) end
+
+--- Reads a file and gives it back as a string: a level, a table of numbers,
+--- whatever a game keeps beside itself. Reads the same two places loadpng does.
+---@param path string
+---@return string|nil contents, string? err
+function fetch(path) end
 
 --- Draws a surface at its own size.
 ---@param s Surface

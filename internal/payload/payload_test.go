@@ -171,3 +171,61 @@ func TestArchiveWithoutEntryPointIsRejected(t *testing.T) {
 		t.Fatal("accepted an archive with no main.lua")
 	}
 }
+
+func TestAKindIsAShapeAndHowToRunIt(t *testing.T) {
+	cases := []struct {
+		kind  Kind
+		shape Kind
+		game  bool
+	}{
+		{Lua, Lua, false},
+		{Zip, Zip, false},
+		{LuaGame, Lua, true},
+		{ZipGame, Zip, true},
+	}
+	for _, c := range cases {
+		if got := c.kind.Shape(); got != c.shape {
+			t.Errorf("%q is shaped %q, want %q", rune(c.kind), rune(got), rune(c.shape))
+		}
+		if got := c.kind.Game(); got != c.game {
+			t.Errorf("%q.Game() = %v, want %v", rune(c.kind), got, c.game)
+		}
+		if got := c.kind.AsGame(); !got.Game() || got.Shape() != c.shape {
+			t.Errorf("%q.AsGame() = %q", rune(c.kind), rune(got))
+		}
+	}
+}
+
+func TestAGamePayloadKeepsItsMarkThroughTheTrailer(t *testing.T) {
+	for _, kind := range []Kind{Lua, Zip, LuaGame, ZipGame} {
+		program := []byte("print('x')\n")
+		if kind.Shape() == Zip {
+			program = zipBytes(t, map[string]string{EntryName: "print('x')\n"})
+		}
+
+		exe := filepath.Join(t.TempDir(), "app")
+		body := append([]byte("binary"), program...)
+		body = append(body, Trailer(kind, len(program))...)
+		if err := os.WriteFile(exe, body, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		p, err := Open(exe)
+		if err != nil {
+			t.Fatalf("%q: %v", rune(kind), err)
+		}
+		if p == nil {
+			t.Fatalf("%q: nothing was found attached", rune(kind))
+		}
+		if p.Kind != kind {
+			t.Errorf("read back %q, want %q", rune(p.Kind), rune(kind))
+		}
+		if p.Kind.Game() != kind.Game() {
+			t.Errorf("%q lost its mark", rune(kind))
+		}
+		if p.PrefixLen != int64(len("binary")) {
+			t.Errorf("%q: the interpreter is %d bytes, want 6", rune(kind), p.PrefixLen)
+		}
+		p.Close()
+	}
+}

@@ -1,11 +1,16 @@
 package game
 
 import (
+	"archive/zip"
+	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"tlua/internal/payload"
 	"tlua/internal/pico"
 )
 
@@ -244,4 +249,88 @@ func TestTheCounterDrawsItself(t *testing.T) {
 	if again.W != picture.W || again.H != picture.H {
 		t.Errorf("the box changed size from %dx%d to %dx%d", picture.W, picture.H, again.W, again.H)
 	}
+}
+
+func TestAProgramsFilesAreFoundBesideIt(t *testing.T) {
+	// A game started from somewhere else still means its own art.png.
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, "art.png"), []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	elsewhere := t.TempDir()
+	if err := os.WriteFile(filepath.Join(elsewhere, "other.txt"), []byte("theirs"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	read := besideProgram(home)
+
+	if got, err := read("art.png"); err != nil || string(got) != "mine" {
+		t.Errorf("a file beside the program read as %q, %v", got, err)
+	}
+	// An absolute path is meant literally.
+	absolute := filepath.Join(elsewhere, "other.txt")
+	if got, err := read(absolute); err != nil || string(got) != "theirs" {
+		t.Errorf("an absolute path read as %q, %v", got, err)
+	}
+	if _, err := read("nothing.png"); err == nil {
+		t.Error("a file that is nowhere should be an error")
+	}
+}
+
+func TestAFusedProgramReadsWhatIsAttachedToItFirst(t *testing.T) {
+	archive := archiveOf(t, map[string]string{
+		payload.EntryName: "-- the game\n",
+		"art.png":         "attached",
+	})
+	read := attachedFirst(&payload.Payload{Archive: archive})
+
+	if got, err := read("art.png"); err != nil || string(got) != "attached" {
+		t.Errorf("read %q, %v; want what was attached", got, err)
+	}
+
+	// What is not attached still comes off the disk, so a file put beside the
+	// executable is readable.
+	dir := t.TempDir()
+	outside := filepath.Join(dir, "extra.txt")
+	if err := os.WriteFile(outside, []byte("beside it"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := read(outside); err != nil || string(got) != "beside it" {
+		t.Errorf("read %q, %v", got, err)
+	}
+
+	// And a program with a single file attached, rather than an archive, reads
+	// the disk for everything.
+	plain := attachedFirst(&payload.Payload{})
+	if _, err := plain("art.png"); err == nil {
+		t.Error("there is nothing attached to read")
+	}
+}
+
+// archiveOf builds a payload archive for a test.
+func archiveOf(t *testing.T, files map[string]string) *payload.Archive {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, body := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive, err := payload.NewArchive(zr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return archive
 }

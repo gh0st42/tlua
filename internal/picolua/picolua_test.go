@@ -1,7 +1,11 @@
 package picolua
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"os"
 	"path/filepath"
@@ -659,4 +663,77 @@ func TestDrawingSurvivesAChangeOfResolution(t *testing.T) {
 	if got := f.Screen().Get(159, 89); got != 9 {
 		t.Errorf("the far corner of the new screen is %d, want 9", got)
 	}
+}
+
+func TestFilesAreReadThroughTheHost(t *testing.T) {
+	// Everything a program loads goes through one door, so that a host which
+	// keeps its files somewhere other than the disk — a game fused into one
+	// executable — only has to answer at that door.
+	asked := []string{}
+	L := lua.NewState()
+	defer L.Close()
+	rt := New(L, Options{
+		Width: 4, Height: 2, Out: io.Discard,
+		ReadFile: func(name string) ([]byte, error) {
+			asked = append(asked, name)
+			switch name {
+			case "level.txt":
+				return []byte("1,2,3"), nil
+			case "art.png":
+				return smallPNG(t), nil
+			}
+			return nil, fmt.Errorf("no such thing as %s", name)
+		},
+	})
+	_ = rt
+
+	if err := L.DoString(`
+		level = fetch("level.txt")
+		art, arterr = loadpng("art.png")
+		missing, err = fetch("nothing.txt")
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := lua.LVAsString(L.GetGlobal("level")); got != "1,2,3" {
+		t.Errorf("fetch gave %q", got)
+	}
+	if L.GetGlobal("art") == lua.LNil {
+		t.Errorf("loadpng did not read through the host: %v", L.GetGlobal("arterr"))
+	}
+	if L.GetGlobal("missing") != lua.LNil {
+		t.Error("a file that is not there should come back as nothing")
+	}
+	if got := lua.LVAsString(L.GetGlobal("err")); !strings.Contains(got, "nothing.txt") {
+		t.Errorf("the error does not name the file: %q", got)
+	}
+	if strings.Join(asked, " ") != "level.txt art.png nothing.txt" {
+		t.Errorf("the host was asked for %v", asked)
+	}
+}
+
+func TestWithoutAHostFilesComeFromTheDisk(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "greeting.txt")
+	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	f := start(t, 2, 1, "")
+	if got := f.str(fmt.Sprintf("fetch(%q)", path)); got != "hello" {
+		t.Errorf("fetch read %q", got)
+	}
+}
+
+// smallPNG is two pixels of a known colour, for a test that needs a real image.
+func smallPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 2, 1))
+	r, g, b := pico.Default.RGB(8)
+	img.Set(0, 0, color.RGBA{r, g, b, 255})
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }

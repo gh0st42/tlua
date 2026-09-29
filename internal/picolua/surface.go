@@ -97,15 +97,39 @@ func (r *Runtime) installSurfaces() {
 		},
 
 		// loadpng(path) reads a PNG and reduces it to the palette in use, so the
-		// same file under a different palette gives a different picture.
+		// same file under a different palette gives a different picture. Where
+		// it reads from is the host's business: a game fused into a single
+		// executable finds its artwork inside itself.
 		"loadpng": func(L *lua.LState) int {
-			s, err := pico.LoadPNG(L.CheckString(1), r.Vid.Palette())
+			path := L.CheckString(1)
+			data, err := r.read(path)
+			if err == nil {
+				var s *pico.Surface
+				s, err = pico.DecodePNG(data, r.Vid.Palette())
+				if err == nil {
+					L.Push(r.newSurface(s))
+					return 1
+				}
+				err = fmt.Errorf("%s: %w", path, err)
+			}
+			L.Push(lua.LNil)
+			L.Push(lua.LString(err.Error()))
+			return 2
+		},
+
+		// fetch(path) reads a file and gives it back as a string: a level, a
+		// table of numbers, whatever a game keeps beside itself. It reads the
+		// same way loadpng does — out of a fused executable first, then from
+		// beside the program — so a game does not care which it is.
+		"fetch": func(L *lua.LState) int {
+			path := L.CheckString(1)
+			data, err := r.read(path)
 			if err != nil {
 				L.Push(lua.LNil)
 				L.Push(lua.LString(err.Error()))
 				return 2
 			}
-			L.Push(r.newSurface(s))
+			L.Push(lua.LString(data))
 			return 1
 		},
 

@@ -1,6 +1,7 @@
 package pico
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image"
@@ -186,18 +187,30 @@ func FromImage(img image.Image, pal *Palette) *Surface {
 	return s
 }
 
-// LoadPNG reads a PNG file into a surface, reduced to a palette. PNG is the one
-// format built in: image/png needs no cgo and no third-party decoder, which is
-// the constraint the whole of tlua is built under.
-func LoadPNG(path string, pal *Palette) (*Surface, error) {
-	f, err := os.Open(path)
+// DecodePNG reads a PNG from memory into a surface, reduced to a palette.
+//
+// Memory rather than a path because a program's artwork does not always come
+// from the disk: a game fused into one executable carries its own, and reads it
+// out of itself. PNG is the one format built in — image/png needs no cgo and no
+// third-party decoder, which is the constraint the whole of tlua is built
+// under.
+func DecodePNG(data []byte, pal *Palette) (*Surface, error) {
+	img, err := png.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	img, err := png.Decode(f)
+	return FromImage(img, pal), nil
+}
+
+// LoadPNG reads a PNG file from disk.
+func LoadPNG(path string, pal *Palette) (*Surface, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	s, err := DecodePNG(data, pal)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	return FromImage(img, pal), nil
+	return s, nil
 }

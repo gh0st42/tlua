@@ -29,16 +29,50 @@ const (
 	EntryName = "main.lua"
 )
 
-// Kind tells the two payload shapes apart.
+// Kind says what shape a payload is, and how it wants to be run.
+//
+// The capital is an ordinary program, run as a script; the small letter is the
+// same shape of program written for the console, which wants a window around
+// it. Spelling the pair this way keeps the trailer the size it has always been,
+// so a binary made by an older tlua still reads.
 type Kind byte
 
 const (
 	Lua Kind = 'L' // a single Lua source file
 	Zip Kind = 'Z' // a zip archive rooted at main.lua
+
+	LuaGame Kind = 'l' // the same, for a program that wants a window
+	ZipGame Kind = 'z'
 )
+
+// Shape reports the payload's shape with the question of how to run it set
+// aside: Lua for a single file, Zip for an archive.
+func (k Kind) Shape() Kind {
+	switch k {
+	case LuaGame:
+		return Lua
+	case ZipGame:
+		return Zip
+	}
+	return k
+}
+
+// Game reports whether the program wants a window and the console API, which is
+// what `tlua fuse -play` marks it as.
+func (k Kind) Game() bool { return k == LuaGame || k == ZipGame }
+
+// AsGame reports the kind that means the same shape, run as a game.
+func (k Kind) AsGame() Kind {
+	if k.Shape() == Zip {
+		return ZipGame
+	}
+	return LuaGame
+}
 
 // Payload is the program attached to a binary.
 type Payload struct {
+	// Kind is the shape of the program and how it asked to be run; Kind.Shape()
+	// and Kind.Game() take it apart.
 	Kind Kind
 
 	Source  []byte   // Lua
@@ -118,13 +152,13 @@ func readTrailer(f *os.File, size int64) (*Payload, error) {
 		return nil, errors.New("fused payload has a corrupt trailer")
 	}
 
-	switch kind {
+	switch kind.Shape() {
 	case Lua:
 		src := make([]byte, n)
 		if _, err := f.ReadAt(src, start); err != nil {
 			return nil, err
 		}
-		return &Payload{Kind: Lua, Source: src, PrefixLen: start}, nil
+		return &Payload{Kind: kind, Source: src, PrefixLen: start}, nil
 	case Zip:
 		zr, err := zip.NewReader(io.NewSectionReader(f, start, n), n)
 		if err != nil {
@@ -134,7 +168,7 @@ func readTrailer(f *os.File, size int64) (*Payload, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Payload{Kind: Zip, Archive: archive, PrefixLen: start}, nil
+		return &Payload{Kind: kind, Archive: archive, PrefixLen: start}, nil
 	default:
 		return nil, fmt.Errorf("fused payload has an unknown kind %q", rune(kind))
 	}
