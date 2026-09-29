@@ -215,13 +215,19 @@ func optCoord(L *lua.LState, n, def int) int {
 	return coord(L, n)
 }
 
-// toColorIndex wraps a number into the palette, so that colour 70 is colour 6
-// rather than an error or a crash.
-func toColorIndex(v float64) uint8 {
+// colorIndex wraps a number round the palette in use, so that colour 70 in a
+// palette of 64 is colour 6 rather than an error, a crash, or a colour nobody
+// loaded. Wrapping rather than clamping is what these consoles do, and it is
+// what makes "colour + 1" round a ramp work.
+func (r *Runtime) colorIndex(v float64) uint8 {
 	if math.IsNaN(v) {
 		return 0
 	}
-	return uint8(((int(math.Floor(v)) % pico.Colors) + pico.Colors) % pico.Colors)
+	size := r.Vid.Palette().Size()
+	if size <= 0 {
+		return 0
+	}
+	return uint8(((int(math.Floor(v)) % size) + size) % size)
 }
 
 // isNone reports whether an argument was left out or passed as nil.
@@ -235,18 +241,18 @@ func (r *Runtime) penArg(L *lua.LState, n int) uint8 {
 	if isNone(L, n) {
 		return r.Vid.Pen()
 	}
-	col := toColorIndex(float64(L.CheckNumber(n)))
+	col := r.colorIndex(float64(L.CheckNumber(n)))
 	r.Vid.Color(col)
 	return col
 }
 
-// optColorIndex reads a colour that does not touch the pen, such as the one
-// cls() clears to.
-func optColorIndex(L *lua.LState, n int, def uint8) uint8 {
+// optColor reads a colour that does not touch the pen, such as the one cls()
+// clears to.
+func (r *Runtime) optColor(L *lua.LState, n int, def uint8) uint8 {
 	if isNone(L, n) {
 		return def
 	}
-	return toColorIndex(float64(L.CheckNumber(n)))
+	return r.colorIndex(float64(L.CheckNumber(n)))
 }
 
 // register puts functions in the global table, which is where a program written

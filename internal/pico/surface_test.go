@@ -231,11 +231,11 @@ func TestDrawingIntoASurfaceThenDrawingItBack(t *testing.T) {
 
 func TestFromImageReducesToThePalette(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 3, 1))
-	r, g, b := RGB(8)
+	r, g, b := Default.RGB(8)
 	img.Set(0, 0, color.RGBA{r, g, b, 255})           // exactly a palette colour
 	img.Set(1, 0, color.RGBA{r - 2, g, b + 1, 255})   // near enough to be the same
 	img.Set(2, 0, color.RGBA{0xff, 0xff, 0xff, 0x10}) // too faint to count
-	s := FromImage(img)
+	s := FromImage(img, Default)
 	if got := s.Get(0, 0); got != 8 {
 		t.Errorf("exact colour became %d, want 8", got)
 	}

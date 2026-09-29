@@ -70,6 +70,19 @@ func (r *Runtime) installStdlib() {
 			return 1
 		},
 
+		// clamp(x, lo, hi) keeps a number between two others. It is mid() by
+		// another name, and the name is the point: "clamp" says what it is for
+		// where "the middle of three" says what it does.
+		"clamp": func(L *lua.LState) int {
+			x := float64(L.CheckNumber(1))
+			lo, hi := float64(L.CheckNumber(2)), float64(L.CheckNumber(3))
+			if lo > hi {
+				lo, hi = hi, lo
+			}
+			L.Push(lua.LNumber(math.Max(lo, math.Min(x, hi))))
+			return 1
+		},
+
 		// rnd() is a fraction below one, rnd(n) a number below n, and rnd(table)
 		// one of the things in it.
 		"rnd": func(L *lua.LState) int {

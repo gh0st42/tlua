@@ -369,3 +369,120 @@ func TestFillpReportsThePatternItReplaced(t *testing.T) {
 		t.Errorf("Fillp reported %#04x as the previous pattern", old)
 	}
 }
+
+func TestRoundedRectangleTakesAWidthAndAHeight(t *testing.T) {
+	// Unlike the other rectangles, these are given a size rather than a second
+	// corner, which is how Picotron spells them.
+	c := New(8, 6)
+	c.RRectFill(1, 1, 6, 4, 1, 7)
+	wantScreen(t, c, `
+		........
+		..7777..
+		.777777.
+		.777777.
+		..7777..
+		........`)
+
+	c.Cls(0)
+	c.RRect(1, 1, 6, 4, 1, 8)
+	wantScreen(t, c, `
+		........
+		..8888..
+		.8....8.
+		.8....8.
+		..8888..
+		........`)
+}
+
+func TestARadiusOfNothingIsAPlainRectangle(t *testing.T) {
+	plain, rounded := New(8, 5), New(8, 5)
+	plain.RectFill(1, 1, 6, 3, 7)
+	rounded.RRectFill(1, 1, 6, 3, 0, 7)
+	if got, want := dump(rounded.Screen), dump(plain.Screen); got != want {
+		t.Errorf("rounded by nothing:\n%s\nplain:\n%s", got, want)
+	}
+}
+
+func TestARadiusIsHeldToWhatFits(t *testing.T) {
+	// Asked for more rounding than the shape can take, the corners meet in the
+	// middle and it becomes a circle rather than turning inside out.
+	c := New(11, 11)
+	c.RRectFill(0, 0, 11, 11, 40, 7)
+
+	round := New(11, 11)
+	round.CircFill(5, 5, 5, 7)
+	if got, want := dump(c.Screen), dump(round.Screen); got != want {
+		t.Errorf("over-rounded:\n%s\nwant the circle:\n%s", got, want)
+	}
+}
+
+func TestRoundedRectangleCornersMatchACircle(t *testing.T) {
+	// A rounded corner is a quarter of the circle circ() would draw, so that
+	// the two sit together without one of them looking flatter.
+	const r = 6
+	rect, circle := New(24, 24), New(24, 24)
+	rect.RRectFill(2, 2, 20, 20, r, 7)
+	circle.CircFill(2+r, 2+r, r, 7)
+
+	for y := 2; y <= 2+r; y++ {
+		for x := 2; x <= 2+r; x++ {
+			if rect.Screen.Get(x, y) != circle.Screen.Get(x, y) {
+				t.Fatalf("the corner differs from the circle at %d,%d:\n%s\n%s",
+					x, y, dump(rect.Screen), dump(circle.Screen))
+			}
+		}
+	}
+}
+
+func TestRoundedRectangleOutlineIsExactlyTheEdgeOfItsFill(t *testing.T) {
+	sizes := [][5]int{
+		{2, 2, 20, 12, 4}, {2, 2, 21, 13, 5}, {1, 1, 22, 22, 11},
+		{3, 3, 8, 18, 3}, {2, 2, 5, 5, 2}, {2, 2, 4, 4, 1}, {2, 2, 18, 9, 0},
+	}
+	for _, s := range sizes {
+		t.Run(fmt.Sprint(s), func(t *testing.T) {
+			filled, outlined := New(24, 24), New(24, 24)
+			filled.RRectFill(s[0], s[1], s[2], s[3], s[4], 7)
+			outlined.RRect(s[0], s[1], s[2], s[3], s[4], 7)
+
+			inside := func(x, y int) bool { return filled.Screen.Get(x, y) != 0 }
+			for y := 0; y < 24; y++ {
+				for x := 0; x < 24; x++ {
+					edge := inside(x, y) &&
+						(!inside(x-1, y) || !inside(x+1, y) || !inside(x, y-1) || !inside(x, y+1))
+					if got := outlined.Screen.Get(x, y) != 0; got != edge {
+						t.Fatalf("pixel %d,%d is %v, want %v\noutline:\n%s\nfill:\n%s",
+							x, y, got, edge, dump(outlined.Screen), dump(filled.Screen))
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestARoundedRectangleOfNoSizeDrawsNothing(t *testing.T) {
+	c := New(4, 4)
+	c.RRectFill(1, 1, 0, 3, 1, 7)
+	c.RRect(1, 1, 3, -2, 1, 7)
+	wantScreen(t, c, `
+		....
+		....
+		....
+		....`)
+}
+
+func TestRoundedRectanglesFollowTheCameraAndTheClip(t *testing.T) {
+	c := New(8, 6)
+	c.Clip(0, 0, 4, 6, false)
+	c.Camera(-2, 0)
+	c.RRectFill(0, 0, 4, 4, 1, 7)
+	// Drawn two to the right by the camera, and cut off by the clip at four:
+	// the left half of a rounded square, corners and all.
+	wantScreen(t, c, `
+		...7....
+		..77....
+		..77....
+		...7....
+		........
+		........`)
+}

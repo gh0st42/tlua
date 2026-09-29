@@ -47,12 +47,11 @@ func (s *Surface) Set(x, y int, col uint8) {
 	if !s.In(x, y) {
 		return
 	}
-	s.Pix[y*s.W+x] = col & (Colors - 1)
+	s.Pix[y*s.W+x] = col
 }
 
 // Fill paints the whole surface one colour.
 func (s *Surface) Fill(col uint8) {
-	col &= Colors - 1
 	for i := range s.Pix {
 		s.Pix[i] = col
 	}
@@ -80,8 +79,9 @@ func (s *Surface) Resize(w, h int) {
 
 // spriteDigits is the alphabet ParseSprite reads: a palette index per
 // character, so a sprite can be written out as text in the program that uses
-// it. It covers the first 16 colours, the ones a hand-drawn sprite is most
-// likely to be in; anything larger needs a surface and Set.
+// it. It covers the first 16 colours, as many as there are hex digits and as
+// many as a hand-drawn sprite is likely to want; anything beyond them needs a
+// surface and Set.
 const spriteDigits = "0123456789abcdef"
 
 // ParseSprite reads a sprite drawn as text, one character per pixel:
@@ -160,9 +160,9 @@ func ParseSprite(art string) (*Surface, error) {
 	return s, nil
 }
 
-// FromImage reduces an ordinary image to the console's palette. Pixels that
-// are more transparent than not become colour 0, the one sprite drawing skips.
-func FromImage(img image.Image) *Surface {
+// FromImage reduces an ordinary image to a palette. Pixels that are more
+// transparent than not become colour 0, the one sprite drawing skips.
+func FromImage(img image.Image, pal *Palette) *Surface {
 	b := img.Bounds()
 	s := NewSurface(b.Dx(), b.Dy())
 	// Real artwork repeats colours heavily, so remembering the last answer
@@ -178,7 +178,7 @@ func FromImage(img image.Image) *Surface {
 			r, g, bb := uint8(r16>>8), uint8(g16>>8), uint8(b16>>8)
 			key := uint32(r)<<16 | uint32(g)<<8 | uint32(bb)
 			if key != lastKey {
-				lastKey, lastCol = key, Nearest(r, g, bb)
+				lastKey, lastCol = key, pal.Nearest(r, g, bb)
 			}
 			s.Pix[y*s.W+x] = lastCol
 		}
@@ -186,10 +186,10 @@ func FromImage(img image.Image) *Surface {
 	return s
 }
 
-// LoadPNG reads a PNG file into a surface. PNG is the one format built in:
-// image/png needs no cgo and no third-party decoder, which is the constraint
-// the whole of tlua is built under.
-func LoadPNG(path string) (*Surface, error) {
+// LoadPNG reads a PNG file into a surface, reduced to a palette. PNG is the one
+// format built in: image/png needs no cgo and no third-party decoder, which is
+// the constraint the whole of tlua is built under.
+func LoadPNG(path string, pal *Palette) (*Surface, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -199,5 +199,5 @@ func LoadPNG(path string) (*Surface, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	return FromImage(img), nil
+	return FromImage(img, pal), nil
 }

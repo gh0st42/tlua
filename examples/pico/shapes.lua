@@ -25,15 +25,16 @@ function _draw()
 
 	-- Outlines on one row, the same shapes filled on the next.
 	fillp()
-	print("outlines", 8, 8, 6)
+	print("outlines  (the rounded one is rrect: x, y, width, height)", 8, 8, 6)
 	line(16, 24, 68, 52, 7)
 	rect(84, 24, 140, 52, 8)
 	circ(172, 38, 14, 9)
 	oval(200, 24, 260, 52, 10)
 	tri(280, 52, 308, 24, 336, 52, 11)
+	rrect(352, 24, 56, 28, 8, 14)      -- a width and a height, not a corner
 	for i = 0, 28 do
-		pset(360 + i * 2, 24 + i, 7)   -- pset, one pixel at a time
-		pset(361 + i * 2, 52 - i, 12)
+		pset(424 + i, 24 + i, 7)       -- pset, one pixel at a time
+		pset(425 + i, 52 - i, 12)
 	end
 
 	print("filled", 8, 66, 6)
@@ -41,6 +42,7 @@ function _draw()
 	circfill(172, 94, 14, 9)
 	ovalfill(200, 80, 260, 108, 10)
 	trifill(280, 108, 308, 80, 336, 108, 11)
+	rrectfill(352, 80, 56, 28, 8, 14)
 	for i = 0, 6 do
 		circfill(24 + i * 8, 94, 3, 7 + i) -- a row of dots, for the palette
 	end
@@ -56,12 +58,13 @@ function _draw()
 	circfill(172, 174, 26)
 	ovalfill(200, 148, 260, 200)
 	trifill(280, 200, 308, 148, 336, 200)
+	rrectfill(344, 148, 48, 52, 12)
 
 	-- With a second argument the pattern leaves holes instead of drawing the
 	-- second colour, so whatever is behind shows through.
-	rectfill(360, 148, 460, 200, 3)
+	rectfill(402, 148, 470, 200, 3)
 	fillp(pattern, true)
-	circfill(410, 174, 26, 10)
+	circfill(436, 174, 24, 10)
 
 	fillp()
 	print("fillp " .. tostr(pattern, true) .. ": " .. name, 8, h - 32, 7)

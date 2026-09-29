@@ -15,7 +15,7 @@ It is a window and a framebuffer, nothing more: no sound, no cartridges, no
 editor of sprites or maps. Artwork is written out as text in the program
 itself, which is why every example ships as a single file.
 
-- [examples/pico](../examples/pico) has eleven programs written against this.
+- [examples/pico](../examples/pico) has twelve programs written against this.
 - [library/pico.lua](../library/pico.lua) declares it all for
   lua-language-server, so an editor can complete these names and show what they
   take. The `.luarc.json` at the root of this repository points at it.
@@ -41,18 +41,67 @@ An error in any of them stops the program, printing the file and the line.
 
 ## The screen
 
-480 by 270 pixels and 64 colours, one byte a pixel. `screen()` reports the
-size, and `window{width=, height=}` changes it — a smaller screen is the way to
-afford per-pixel work, and the window scales whatever it is given up to fit,
-by a whole number, with black around the edges.
+480 by 270 pixels, one byte a pixel, so 256 colours at the very most and 64 to
+begin with. The window scales whatever it is given up to fit, by a whole
+number, with black around the edges.
 
-Colours are numbered 0 to 63. **0 to 15 are PICO-8's palette and 16 to 31 its
-extended one**, both exactly as they are there. 32 to 63 are tlua's own: a grey
-scale at 32, then ramps of blue at 40, green at 46, warm at 52 and violet at
-58, each running dark to light. Picotron's own 64 are not reproduced.
-`examples/pico/palette.lua` shows all of them with their numbers.
+`vid(mode)` switches resolution:
 
-A colour outside 0-63 wraps, so 70 is 6.
+| Mode | Size | |
+| --- | --- | --- |
+| `vid(0)` | 480x270 | the console's own |
+| `vid(1)` | 240x135 | half of it |
+| `vid(2)` | 160x90 | a quarter, and enough to work out every pixel in Lua |
+| `vid(13)` | 320x200 | what a VGA card called mode 13h |
+
+`vid()` on its own says which mode is in use and how big it is; a size asked
+for some other way reports as mode -1. `window{width=, height=}` still takes
+any size at all, and `screen()` reports it.
+
+Only the fourth of those is Picotron's; mode 13 is here because a great deal of
+pixel art was drawn at 320x200, and because it goes with the VGA palette below.
+
+### Colours
+
+A colour is a number, and what it looks like is up to the palette. Colour
+numbers wrap round the size of the palette in use, so in the 64 the console
+starts with, colour 70 is colour 6.
+
+The palette to begin with has 64 colours. **0 to 15 are PICO-8's palette and 16
+to 31 its extended one**, both exactly as they are there. 32 to 63 are tlua's
+own: a grey scale at 32, then ramps of blue at 40, green at 46, warm at 52 and
+violet at 58, each running dark to light. Picotron's own are not published as a
+list and are not reproduced. `examples/pico/palette.lua` shows whichever
+palette is loaded, with the numbers.
+
+| Call | What it does |
+| --- | --- |
+| `palette()` | The name of the palette in use, and how many colours it has. |
+| `palette("vga")` | One of the console's own: `"default"` or `"vga"`. |
+| `palette("some.gpl")` | A palette file, as any pixel art tool will export. |
+| `palette(table)` | The colours outright: `0xRRGGBB` each, or `{r, g, b}`. |
+| `palette(i)` | What colour `i` looks like. |
+| `palette(i, 0xRRGGBB)` | Changes it, and reports what it was. |
+| `rgb(i)` | The same as `palette(i)`, for reading in the middle of an expression. |
+
+`"vga"` is the 256 colours an IBM VGA card came up in. The first 16 are the EGA
+colours and the next 16 the grey scale, both as they were; the 216 after them
+are built the way the card's table was laid out — three tiers of brightness,
+each with three of saturation, each running 24 hues round the wheel from
+blue — rather than copied entry by entry, so a few are a shade off. The last
+eight are black, as they were there.
+
+Changing one entry changes every pixel already drawn in that colour, since the
+screen holds indices and not colours:
+
+```lua
+for i = 0, 15 do          -- fade the whole picture towards black
+	palette(i, 0)
+end
+```
+
+That is a different thing from `pal(from, to)`, which remaps one index onto
+another and leaves the palette alone.
 
 ## Drawing
 
@@ -72,8 +121,16 @@ makes it the pen colour, so the next call without one follows suit.
 | `circfill(x, y, [r], [c])` | A filled one. |
 | `oval(x0, y0, x1, y1, [c])` | The ellipse that fits a rectangle. |
 | `ovalfill(x0, y0, x1, y1, [c])` | A filled one. |
+| `rrect(x, y, w, h, [r], [c])` | The outline of a rounded rectangle. |
+| `rrectfill(x, y, w, h, [r], [c])` | A filled one. |
 | `tri(x0, y0, x1, y1, x2, y2, [c])` | The outline of a triangle. |
 | `trifill(...)` | A filled one. |
+
+**The two rounded rectangles take a width and a height** where the others take
+a second corner, because that is how Picotron spells them. The radius defaults
+to 4 and is held to half the shorter side, so asking for more rounding than the
+shape can take gives a circle rather than something inside out. The corners are
+quarters of the circle `circ()` would draw at that radius.
 
 Coordinates are pixels, counting from the top left, and are rounded down; a
 number far off the screen costs nothing, because everything is clipped before
@@ -232,8 +289,8 @@ and `ctrl-C` in the terminal does too.
 These are the names PICO-8 and Picotron programs are written with. They exist
 here so that such a program reads the way it was written.
 
-**Numbers.** `flr` `ceil` `abs` `sqrt` `sgn` `min` `max` `mid` `rnd` `srand`
-`sin` `cos` `atan2`
+**Numbers.** `flr` `ceil` `abs` `sqrt` `sgn` `min` `max` `mid` `clamp` `rnd`
+`srand` `sin` `cos` `atan2`
 
 - Angles are **turns**: a whole circle is 1.
 - `sin` runs the same way round as the screen's y axis, which is downwards, so
@@ -241,7 +298,8 @@ here so that such a program reads the way it was written.
   `atan2(dx, dy)` gives back the turn those two came from.
 - `sgn(0)` is 1, and `sqrt` of a negative number is 0, both as on PICO-8.
 - `min(x)` and `max(x)` compare against 0. `mid(a, b, c)` is the middle of
-  three, which is how a value is kept inside a range.
+  three, and `clamp(x, lo, hi)` is the same thing said plainly: it keeps a
+  number between two others, whichever way round they are given.
 - `rnd()` is below 1, `rnd(n)` below n, `rnd(table)` one of the things in it.
 
 **Lists.** `add` `del` `deli` `all` `foreach` `count`
@@ -266,11 +324,13 @@ Lua's own libraries are all still there — `math`, `string`, `table`, `io`,
   memory layout to poke at, and artwork is written as text in the program.
 - **No `flip()`.** A program is built from `_update` and `_draw`; it cannot
   draw from inside a loop of its own.
-- **Colours 32 to 63 are not Picotron's**, as above.
+- **Colours 32 to 63 are not Picotron's**, as above, and neither are the video
+  modes: Picotron's own numbering is not reproduced, only the idea.
 - `color(c, c2)` takes the fill pattern's second colour as its own argument
   rather than packing two colours into one number, because 64 colours do not
   fit in a nibble each.
-- Triangles, `held()`, `typed()`, `textwidth()` and `loadpng()` are additions.
+- Triangles, `held()`, `typed()`, `textwidth()`, `clamp()`, `loadpng()` and the
+  whole of `palette()` are additions.
 
 ## Shipping a game
 

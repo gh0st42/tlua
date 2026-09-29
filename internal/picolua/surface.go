@@ -31,11 +31,11 @@ func (r *Runtime) installSurfaceType() {
 			return 1
 		},
 		"set": func(L *lua.LState) int {
-			checkSurface(L, 1).Set(coord(L, 2), coord(L, 3), optColorIndex(L, 4, r.Vid.Pen()))
+			checkSurface(L, 1).Set(coord(L, 2), coord(L, 3), r.optColor(L, 4, r.Vid.Pen()))
 			return 0
 		},
 		"fill": func(L *lua.LState) int {
-			checkSurface(L, 1).Fill(optColorIndex(L, 2, 0))
+			checkSurface(L, 1).Fill(r.optColor(L, 2, 0))
 			return 0
 		},
 		"clone": func(L *lua.LState) int {
@@ -96,9 +96,10 @@ func (r *Runtime) installSurfaces() {
 			return 1
 		},
 
-		// loadpng(path) reads a PNG and reduces it to the palette.
+		// loadpng(path) reads a PNG and reduces it to the palette in use, so the
+		// same file under a different palette gives a different picture.
 		"loadpng": func(L *lua.LState) int {
-			s, err := pico.LoadPNG(L.CheckString(1))
+			s, err := pico.LoadPNG(L.CheckString(1), r.Vid.Palette())
 			if err != nil {
 				L.Push(lua.LNil)
 				L.Push(lua.LString(err.Error()))

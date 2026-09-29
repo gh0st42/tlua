@@ -68,6 +68,10 @@ type Console struct {
 	// transparent marks the colours sprite drawing skips.
 	transparent [Colors]bool
 
+	// pal is what the indices look like. It is the console's hardware palette:
+	// changing an entry changes every pixel already drawn in that colour.
+	pal *Palette
+
 	// The text cursor print() advances when it is called without a position.
 	cursorX, cursorY int
 }
@@ -76,7 +80,7 @@ type Console struct {
 // colour 6 on a black screen, no camera, no clipping, colour 0 transparent in
 // sprites.
 func New(w, h int) *Console {
-	c := &Console{Screen: NewSurface(w, h)}
+	c := &Console{Screen: NewSurface(w, h), pal: Default.Clone()}
 	c.target = c.Screen
 	c.Reset()
 	return c
@@ -103,6 +107,30 @@ func (c *Console) ResetPal() {
 		c.transparent[i] = false
 	}
 	c.transparent[0] = true
+}
+
+// Palette reports the colours in use.
+func (c *Console) Palette() *Palette { return c.pal }
+
+// SetPalette changes what the indices look like, and reports the palette it
+// replaced. Every pixel on the screen keeps its index and so changes colour.
+//
+// The palette is copied, so that a console always owns its own: a program
+// changing one entry of the built-in palette would otherwise change it for
+// everything else using it.
+//
+// The draw and screen palettes go back to passing colours through untouched: a
+// remap of one index onto another rarely means the same thing in a palette it
+// was not written for, and a swap left over from the last one is harder to find
+// than one that has to be asked for again.
+func (c *Console) SetPalette(p *Palette) *Palette {
+	if p == nil {
+		p = Default
+	}
+	old := c.pal
+	c.pal = p.Clone()
+	c.ResetPal()
+	return old
 }
 
 /* --- what is being drawn on --- */
@@ -138,7 +166,7 @@ func (c *Console) Resize(w, h int) {
 // the Lua binding return the previous colour the way PICO-8's color() does.
 func (c *Console) Color(col uint8) uint8 {
 	old := c.pen
-	c.pen = col & (Colors - 1)
+	c.pen = col
 	return old
 }
 
@@ -146,7 +174,7 @@ func (c *Console) Color(col uint8) uint8 {
 func (c *Console) Pen() uint8 { return c.pen }
 
 // SetPenAlt sets the colour the set bits of a fill pattern draw in.
-func (c *Console) SetPenAlt(col uint8) { c.penAlt = col & (Colors - 1) }
+func (c *Console) SetPenAlt(col uint8) { c.penAlt = col }
 
 // Camera shifts every later drawing call by -x, -y, so a program can draw a
 // world in world coordinates and move the view instead of the world.
@@ -201,15 +229,15 @@ func intersect(a, b Rect) Rect {
 // display, leaving the framebuffer alone.
 func (c *Console) Pal(from, to uint8, screen bool) {
 	if screen {
-		c.screenPal[from&(Colors-1)] = to & (Colors - 1)
+		c.screenPal[from] = to
 		return
 	}
-	c.drawPal[from&(Colors-1)] = to & (Colors - 1)
+	c.drawPal[from] = to
 }
 
 // Palt marks a colour transparent, or opaque again, for sprite drawing.
 func (c *Console) Palt(col uint8, transparent bool) {
-	c.transparent[col&(Colors-1)] = transparent
+	c.transparent[col] = transparent
 }
 
 // PaltNone makes every colour opaque, including colour 0.
@@ -243,7 +271,7 @@ func (c *Console) plot(x, y int, col uint8) {
 		}
 		col = c.penAlt
 	}
-	c.target.Pix[y*c.target.W+x] = c.drawPal[col&(Colors-1)]
+	c.target.Pix[y*c.target.W+x] = c.drawPal[col]
 }
 
 // put draws one pixel without the fill pattern, for sprites and text, where a
@@ -252,7 +280,7 @@ func (c *Console) put(x, y int, col uint8) {
 	if x < c.clip.X0 || x >= c.clip.X1 || y < c.clip.Y0 || y >= c.clip.Y1 {
 		return
 	}
-	c.target.Pix[y*c.target.W+x] = c.drawPal[col&(Colors-1)]
+	c.target.Pix[y*c.target.W+x] = c.drawPal[col]
 }
 
 // span fills a horizontal run, which is where a filled shape spends its time.
@@ -273,7 +301,7 @@ func (c *Console) span(x0, x1, y int, col uint8) {
 		return
 	}
 	row := c.target.Pix[y*c.target.W:]
-	mapped := c.drawPal[col&(Colors-1)]
+	mapped := c.drawPal[col]
 	for x := x0; x <= x1; x++ {
 		row[x] = mapped
 	}
@@ -290,17 +318,17 @@ func (c *Console) Pixels(dst []byte) int {
 	if len(dst) < n {
 		return 0
 	}
-	// The screen palette is a second indirection per pixel, so it is folded
-	// into a table of ready-made pixels once per frame instead. They are packed
-	// into a word each, which turns the inner loop into one load and one store
-	// rather than four of each.
+	// The screen palette and the colours behind it are two indirections per
+	// pixel, so they are folded into one table of ready-made pixels per frame
+	// instead. Each is packed into a word, which turns the inner loop into one
+	// load and one store rather than four of each.
 	var lut [Colors]uint32
 	for i := 0; i < Colors; i++ {
-		e := rgba[c.screenPal[i]&(Colors-1)]
+		e := c.pal.pix[c.screenPal[i]]
 		lut[i] = uint32(e[0]) | uint32(e[1])<<8 | uint32(e[2])<<16 | uint32(e[3])<<24
 	}
 	for i, col := range c.Screen.Pix {
-		binary.LittleEndian.PutUint32(dst[i*4:], lut[col&(Colors-1)])
+		binary.LittleEndian.PutUint32(dst[i*4:], lut[col])
 	}
 	return n
 }

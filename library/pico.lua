@@ -124,6 +124,25 @@ function oval(x0, y0, x1, y1, colour) end
 ---@param colour? integer
 function ovalfill(x0, y0, x1, y1, colour) end
 
+--- The outline of a rounded rectangle. Given a width and a height rather than a
+--- second corner, as Picotron spells it.
+---@param x number
+---@param y number
+---@param w number
+---@param h number
+---@param radius? number defaults to 4, and is held to what fits
+---@param colour? integer
+function rrect(x, y, w, h, radius, colour) end
+
+--- A filled rounded rectangle.
+---@param x number
+---@param y number
+---@param w number
+---@param h number
+---@param radius? number defaults to 4, and is held to what fits
+---@param colour? integer
+function rrectfill(x, y, w, h, radius, colour) end
+
 --- Draws the outline of a triangle.
 function tri(x0, y0, x1, y1, x2, y2, colour) end
 
@@ -196,6 +215,30 @@ function fillp(pattern, holes) end
 --- The size of the screen.
 ---@return integer width, integer height
 function screen() end
+
+--- The palette: which colours the numbers stand for.
+---
+--- With nothing, says which one is in use. With a name, loads one of the
+--- console's own ("default", "vga") or a .gpl palette file. With a table, takes
+--- the colours outright, each either 0xRRGGBB or {r, g, b}. With a number, reads
+--- one entry; with a number and a colour, changes it, which is the cheapest way
+--- to fade or flash a whole picture.
+---@param what? string|table|integer
+---@param colour? integer
+---@return string name, integer size
+function palette(what, colour) end
+
+--- What a colour looks like, as 0xRRGGBB, in whichever palette is loaded.
+---@param colour integer
+---@return integer rgb
+function rgb(colour) end
+
+--- Switches resolution: 0 is 480x270, 1 is 240x135, 2 is 160x90, and 13 is
+--- 320x200, what a VGA card called mode 13h. With nothing, says which mode is in
+--- use (-1 for a size asked for some other way) and how big it is.
+---@param mode? integer
+---@return integer width, integer height
+function vid(mode) end
 
 --- A new blank surface, every pixel transparent.
 ---@param w integer
@@ -383,6 +426,13 @@ function max(a, b) end
 ---@param c number
 ---@return number
 function mid(a, b, c) end
+
+--- Keeps a number between two others, whichever way round they are given.
+---@param x number
+---@param lo number
+---@param hi number
+---@return number
+function clamp(x, lo, hi) end
 
 --- A fraction below 1, a number below n, or one of the things in a table.
 ---@param n? number|table

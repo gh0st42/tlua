@@ -23,6 +23,10 @@ func TestTheMathHelpers(t *testing.T) {
 		{`mid(5, 1, 9)`, "5"},
 		{`mid(-5, 1, 9)`, "1"},
 		{`mid(50, 1, 9)`, "9"},
+		{`clamp(5, 1, 9)`, "5"},
+		{`clamp(-5, 1, 9)`, "1"},
+		{`clamp(50, 1, 9)`, "9"},
+		{`clamp(50, 9, 1)`, "9"}, // whichever way round the limits are given
 
 		// A turn is a whole circle, and a quarter turn points down the screen.
 		{`cos(0)`, "1"},
@@ -262,10 +266,11 @@ func TestEveryDocumentedNameIsThere(t *testing.T) {
 	names := strings.Fields(`
 		cls color pset pget line rect rectfill circ circfill oval ovalfill
 		tri trifill print cursor textwidth textheight camera clip pal palt
-		fillp screen surface sprite loadpng spr sspr target map
+		rrect rrectfill fillp screen palette rgb surface sprite loadpng
+		spr sspr target map
 		btn btnp held key keyp mouse mousebtn typed
-		t time frame fps printh exit window fullscreen
-		flr ceil abs sqrt sgn sin cos atan2 min max mid rnd srand
+		t time frame fps printh exit window fullscreen vid
+		flr ceil abs sqrt sgn sin cos atan2 min max mid clamp rnd srand
 		add del deli all foreach count sub split tostr tonum chr ord`)
 
 	f := start(t, 2, 1, "")

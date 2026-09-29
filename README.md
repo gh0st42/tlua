@@ -97,7 +97,7 @@ local coin = sprite[[
 ```
 
 [docs/pico.md](docs/pico.md) is the whole API, and
-[examples/pico](examples/pico) has eleven programs written against it — from
+[examples/pico](examples/pico) has twelve programs written against it — from
 `hello.lua` up to a snake game, a platformer with a tile map, and a painting
 program. [library/pico.lua](library/pico.lua) declares it for
 lua-language-server, so an editor completes these names and shows what they
@@ -105,8 +105,16 @@ take; the `.luarc.json` at the root points at it.
 
 Drawing happens on an indexed framebuffer, one byte a pixel, which is scaled to
 the window by a whole number with nearest-neighbour, so pixels stay square.
-Colours 0-15 are PICO-8's palette exactly and 16-31 its extended one; 32-63 are
-tlua's own ramps rather than Picotron's, which are not published as a list.
+`vid(0)` to `vid(2)` switch between 480x270, 240x135 and 160x90, and `vid(13)`
+gives the 320x200 a VGA card called mode 13h.
+
+The palette is whatever a program asks for, up to 256 colours. It starts with
+64: 0-15 are PICO-8's palette exactly and 16-31 its extended one, while 32-63
+are tlua's own ramps rather than Picotron's, which are not published as a list.
+`palette("vga")` swaps in the 256 an IBM VGA card came up in, `palette(path)`
+reads a `.gpl` file from any pixel art tool, and `palette(i, 0xRRGGBB)` changes
+one colour — which changes every pixel already drawn in it, the cheapest fade
+there is.
 
 In the editor, the Run menu's "Run with" setting decides what `F5` does:
 `tlua`, a console window, or love2d.

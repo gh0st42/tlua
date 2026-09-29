@@ -6,7 +6,7 @@ import "math"
 // back in the corner — the fresh start PICO-8's cls() gives, so that a program
 // calling it each frame cannot accumulate state it forgot about.
 func (c *Console) Cls(col uint8) {
-	c.target.Fill(c.drawPal[col&(Colors-1)])
+	c.target.Fill(c.drawPal[col])
 	c.ClipReset()
 	c.cursorX, c.cursorY = 0, 0
 }
@@ -107,26 +107,29 @@ func (c *Console) CircFill(x, y, r int, col uint8) {
 	c.OvalFill(x-r, y-r, x+r, y+r, col)
 }
 
-// OvalFill fills the ellipse that touches the sides of a rectangle.
-func (c *Console) OvalFill(x0, y0, x1, y1 int, col uint8) {
-	o := c.ovalOf(x0, y0, x1, y1)
-	for y := max(o.y0, c.clip.Y0); y <= min(o.y1, c.clip.Y1-1); y++ {
-		l, r := o.extent(y)
+// rowExtent describes a shape one row at a time: the first and last column it
+// fills on that row, the first past the last where the row is empty.
+type rowExtent func(y int) (int, int)
+
+// fillRows fills a shape described row by row.
+func (c *Console) fillRows(y0, y1 int, ext rowExtent, col uint8) {
+	for y := max(y0, c.clip.Y0); y <= min(y1, c.clip.Y1-1); y++ {
+		l, r := ext(y)
 		c.span(l, r, y, col)
 	}
 }
 
-// Oval draws the outline of the ellipse that touches the sides of a rectangle.
+// outlineRows draws the edge of a shape described row by row: every pixel of it
+// that has a neighbour outside.
 //
-// A pixel belongs to the outline when a neighbour of it is outside the ellipse.
-// Taking the rows above and below into account matters: deciding from the row
-// above alone leaves the bottom of the shape open wherever it narrows, and
-// drawing only the two end pixels of each row leaves gaps wherever it widens
-// faster than a pixel a row.
-func (c *Console) Oval(x0, y0, x1, y1 int, col uint8) {
-	o := c.ovalOf(x0, y0, x1, y1)
-	for y := max(o.y0, c.clip.Y0); y <= min(o.y1, c.clip.Y1-1); y++ {
-		l, r := o.extent(y)
+// Taking the rows above and below into account matters. Deciding from the row
+// above alone leaves the bottom of a shape open wherever it narrows, and drawing
+// only the two end pixels of each row leaves gaps wherever it widens faster than
+// a pixel a row. Both are the sort of hole that only shows up on one size of one
+// shape, which is why the two shapes that need this share it.
+func (c *Console) outlineRows(y0, y1 int, ext rowExtent, col uint8) {
+	for y := max(y0, c.clip.Y0); y <= min(y1, c.clip.Y1-1); y++ {
+		l, r := ext(y)
 		if l > r {
 			continue
 		}
@@ -134,17 +137,94 @@ func (c *Console) Oval(x0, y0, x1, y1 int, col uint8) {
 		// sticks out of it is edge.
 		inL, inR := math.MinInt32, math.MaxInt32
 		for _, ny := range [2]int{y - 1, y + 1} {
-			if ny < o.y0 || ny > o.y1 {
+			if ny < y0 || ny > y1 {
 				inL, inR = math.MaxInt32, math.MinInt32 // no neighbour: all edge
 				break
 			}
-			nl, nr := o.extent(ny)
+			nl, nr := ext(ny)
 			inL, inR = max(inL, nl), min(inR, nr)
 		}
 		c.span(l, min(r, inL-1), y, col)
 		c.span(max(l, inR+1), r, y, col)
 		c.plot(l, y, col) // the left and right ends are always edge
 		c.plot(r, y, col)
+	}
+}
+
+// OvalFill fills the ellipse that touches the sides of a rectangle.
+func (c *Console) OvalFill(x0, y0, x1, y1 int, col uint8) {
+	o := c.ovalOf(x0, y0, x1, y1)
+	c.fillRows(o.y0, o.y1, o.extent, col)
+}
+
+// Oval draws the outline of the ellipse that touches the sides of a rectangle.
+func (c *Console) Oval(x0, y0, x1, y1 int, col uint8) {
+	o := c.ovalOf(x0, y0, x1, y1)
+	c.outlineRows(o.y0, o.y1, o.extent, col)
+}
+
+// RRectFill fills a rounded rectangle, and RRect draws its outline.
+//
+// These two take a width and a height where the other rectangles take a second
+// corner, because that is how Picotron spells them and how anyone coming from
+// there will write them.
+func (c *Console) RRectFill(x, y, w, h, radius int, col uint8) {
+	if w <= 0 || h <= 0 {
+		return
+	}
+	top, bottom, ext := c.roundedOf(x, y, w, h, radius)
+	c.fillRows(top, bottom, ext, col)
+}
+
+// RRect draws the outline of a rounded rectangle.
+func (c *Console) RRect(x, y, w, h, radius int, col uint8) {
+	if w <= 0 || h <= 0 {
+		return
+	}
+	top, bottom, ext := c.roundedOf(x, y, w, h, radius)
+	c.outlineRows(top, bottom, ext, col)
+}
+
+// roundedOf describes a rounded rectangle row by row. The corners are quarters
+// of the circle circ() would draw at that radius, so a rounded rectangle and a
+// circle of the same size sit together without one looking flatter.
+func (c *Console) roundedOf(x, y, w, h, radius int) (int, int, rowExtent) {
+	x, y = x-c.camX, y-c.camY
+	left, right := x, x+w-1
+	top, bottom := y, y+h-1
+
+	radius = min(radius, min(w, h)/2)
+	if radius <= 0 {
+		return top, bottom, func(int) (int, int) { return left, right }
+	}
+
+	// The circle the corners are quarters of, placed at the top left: the same
+	// one circ() would draw at that radius, so a rounded corner and a circle of
+	// the same size agree. Its rows say how far in the shape has come at that
+	// height, and the other three corners are those numbers mirrored.
+	corner := oval{
+		cx: float64(left + radius),
+		cy: float64(top + radius),
+		a:  float64(radius),
+		b:  float64(radius),
+		y0: top,
+		y1: top + 2*radius,
+	}
+
+	return top, bottom, func(row int) (int, int) {
+		switch {
+		case row < top+radius: // in the top corners
+		case row > bottom-radius: // in the bottom ones, which are their mirror
+			row = top + (bottom - row)
+		default:
+			return left, right
+		}
+		cl, cr := corner.extent(row)
+		if cl > cr {
+			return 1, 0
+		}
+		inset := cl - left
+		return left + inset, right - inset
 	}
 }
 
@@ -297,10 +377,10 @@ func (c *Console) Blit(src *Surface, sx, sy, sw, sh, dx, dy, dw, dh int, flipX, 
 				col = dw - 1 - col
 			}
 			v := src.Get(sx+col*sw/dw, srcY)
-			if c.transparent[v&(Colors-1)] {
+			if c.transparent[v] {
 				continue
 			}
-			c.target.Pix[py*c.target.W+px] = c.drawPal[v&(Colors-1)]
+			c.target.Pix[py*c.target.W+px] = c.drawPal[v]
 		}
 	}
 }

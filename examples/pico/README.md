@@ -17,20 +17,22 @@ tlua play -fullscreen examples/pico/plasma.lua
 | Example | What it is for |
 | --- | --- |
 | [hello.lua](hello.lua) | The smallest program: `cls`, `print`, `circfill`, and `t()` for motion. |
-| [palette.lua](palette.lua) | All 64 colours with their numbers. Worth keeping open while writing anything else. |
-| [shapes.lua](shapes.lua) | Every drawing call, and what the dither patterns of `fillp` do. |
+| [palette.lua](palette.lua) | Whichever palette is loaded, with the numbers; switches to the 256 VGA colours, and fades by changing them. |
+| [shapes.lua](shapes.lua) | Every drawing call, rounded rectangles included, and what the dither patterns of `fillp` do. |
 | [sprites.lua](sprites.lua) | Sprites written as text: drawing, flipping, stretching, recolouring, transparency. |
 | [bounce.lua](bounce.lua) | A list of things that move: `add`, `all`, and the shape of most games here. |
 | [input.lua](input.lua) | Buttons, keys, the mouse and the wheel, all shown as they are pressed. |
 | [starfield.lua](starfield.lua) | Three hundred stars, one `pset` each, and perspective by division. |
-| [plasma.lua](plasma.lua) | Per-pixel drawing, and `window{}` asking for a smaller screen to afford it. |
+| [plasma.lua](plasma.lua) | Per-pixel drawing, and `vid(2)` asking for a smaller screen to afford it. |
 | [snake.lua](snake.lua) | A whole game: a grid, a score, a title screen and an ending. |
 | [platformer.lua](platformer.lua) | A tile map with `map()`, gravity, collision, and a camera that follows. |
 | [paint.lua](paint.lua) | Drawing with the mouse onto an offscreen surface with `target()`. |
+| [modes.lua](modes.lua) | `vid()`: the same picture at each of the four resolutions. |
 
 Two of them are worth reading before writing anything: `hello.lua` for the
 shape of a program, and `sprites.lua` for how artwork is written without any
-files.
+files. `palette.lua` is worth keeping open beside whatever is being written,
+for the colour numbers.
 
 ## Playing
 

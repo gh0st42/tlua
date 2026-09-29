@@ -1,6 +1,9 @@
 package picolua
 
 import (
+	"fmt"
+	"strings"
+
 	lua "github.com/yuin/gopher-lua"
 
 	"tlua/internal/pico"
@@ -12,14 +15,14 @@ import (
 func (r *Runtime) installDrawing() {
 	r.register(map[string]lua.LGFunction{
 		"cls": func(L *lua.LState) int {
-			r.Vid.Cls(optColorIndex(L, 1, 0))
+			r.Vid.Cls(r.optColor(L, 1, 0))
 			return 0
 		},
 
 		"color": func(L *lua.LState) int {
-			old := r.Vid.Color(optColorIndex(L, 1, 6))
+			old := r.Vid.Color(r.optColor(L, 1, 6))
 			if !isNone(L, 2) {
-				r.Vid.SetPenAlt(optColorIndex(L, 2, 0))
+				r.Vid.SetPenAlt(r.optColor(L, 2, 0))
 			}
 			L.Push(lua.LNumber(old))
 			return 1
@@ -70,6 +73,21 @@ func (r *Runtime) installDrawing() {
 			return 0
 		},
 
+		// rrect and rrectfill are given a width and a height where the other
+		// rectangles are given a second corner, because that is how Picotron
+		// spells them.
+		"rrect": func(L *lua.LState) int {
+			r.Vid.RRect(coord(L, 1), coord(L, 2), coord(L, 3), coord(L, 4),
+				optCoord(L, 5, 4), r.penArg(L, 6))
+			return 0
+		},
+
+		"rrectfill": func(L *lua.LState) int {
+			r.Vid.RRectFill(coord(L, 1), coord(L, 2), coord(L, 3), coord(L, 4),
+				optCoord(L, 5, 4), r.penArg(L, 6))
+			return 0
+		},
+
 		"tri": func(L *lua.LState) int {
 			r.Vid.Tri(coord(L, 1), coord(L, 2), coord(L, 3), coord(L, 4), coord(L, 5), coord(L, 6), r.penArg(L, 7))
 			return 0
@@ -101,7 +119,7 @@ func (r *Runtime) installDrawing() {
 			x, y := r.Vid.CursorAt()
 			r.Vid.Cursor(optCoord(L, 1, 0), optCoord(L, 2, 0))
 			if !isNone(L, 3) {
-				r.Vid.Color(optColorIndex(L, 3, 6))
+				r.Vid.Color(r.optColor(L, 3, 6))
 			}
 			L.Push(lua.LNumber(x))
 			L.Push(lua.LNumber(y))
@@ -157,13 +175,13 @@ func (r *Runtime) installDrawing() {
 					from, okFrom := k.(lua.LNumber)
 					to, okTo := v.(lua.LNumber)
 					if okFrom && okTo {
-						r.Vid.Pal(toColorIndex(float64(from)), toColorIndex(float64(to)), screen)
+						r.Vid.Pal(r.colorIndex(float64(from)), r.colorIndex(float64(to)), screen)
 					}
 				})
 				return 0
 			}
-			from := toColorIndex(float64(L.CheckNumber(1)))
-			to := toColorIndex(float64(L.CheckNumber(2)))
+			from := r.colorIndex(float64(L.CheckNumber(1)))
+			to := r.colorIndex(float64(L.CheckNumber(2)))
 			r.Vid.Pal(from, to, L.OptInt(3, 0) == 1)
 			return 0
 		},
@@ -175,7 +193,7 @@ func (r *Runtime) installDrawing() {
 				r.Vid.ResetPal()
 				return 0
 			}
-			r.Vid.Palt(toColorIndex(float64(L.CheckNumber(1))), L.OptBool(2, true))
+			r.Vid.Palt(r.colorIndex(float64(L.CheckNumber(1))), L.OptBool(2, true))
 			return 0
 		},
 
@@ -192,6 +210,46 @@ func (r *Runtime) installDrawing() {
 			return 1
 		},
 
+		// palette() says which palette is in use and how many colours are in
+		// it; palette("vga") or palette("some.gpl") changes it; palette(table)
+		// takes the colours outright; palette(i) reads one entry and
+		// palette(i, 0xRRGGBB) changes it, which is the cheapest fade there is.
+		"palette": func(L *lua.LState) int {
+			switch v := L.Get(1).(type) {
+			case lua.LNumber:
+				i := r.colorIndex(float64(v))
+				if isNone(L, 2) {
+					L.Push(lua.LNumber(r.Vid.Palette().Hex(i)))
+					return 1
+				}
+				old := r.Vid.Palette().Set(i, uint32(int64(L.CheckNumber(2))&0xffffff))
+				L.Push(lua.LNumber(old))
+				return 1
+
+			case lua.LString:
+				p, err := findPalette(string(v))
+				if err != nil {
+					L.RaiseError("%s", err.Error())
+				}
+				r.Vid.SetPalette(p)
+
+			case *lua.LTable:
+				r.Vid.SetPalette(paletteOf(L, v))
+			}
+
+			current := r.Vid.Palette()
+			L.Push(lua.LString(current.Name))
+			L.Push(lua.LNumber(current.Size()))
+			return 2
+		},
+
+		// rgb(colour) is what a colour looks like, as 0xRRGGBB, whichever
+		// palette is loaded.
+		"rgb": func(L *lua.LState) int {
+			L.Push(lua.LNumber(r.Vid.Palette().Hex(r.colorIndex(float64(L.CheckNumber(1))))))
+			return 1
+		},
+
 		// screen() reports the size of the display, which is what centring
 		// anything needs.
 		"screen": func(L *lua.LState) int {
@@ -200,4 +258,42 @@ func (r *Runtime) installDrawing() {
 			return 2
 		},
 	})
+}
+
+// findPalette reads what palette(name) was given: one of the palettes the
+// console comes with, or a file of colours exported by a drawing program.
+func findPalette(name string) (*pico.Palette, error) {
+	if p, ok := pico.Builtin(name); ok {
+		return p, nil
+	}
+	p, err := pico.LoadGPL(name)
+	if err != nil {
+		return nil, fmt.Errorf("no palette %q: it is not one of %s, and %s",
+			name, strings.Join(pico.BuiltinNames(), ", "), err)
+	}
+	return p, nil
+}
+
+// paletteOf reads a palette given outright: a list of 0xRRGGBB numbers, or of
+// three-number tables, whichever is easier to write down.
+func paletteOf(L *lua.LState, tbl *lua.LTable) *pico.Palette {
+	colors := make([]uint32, 0, tbl.Len())
+	for i := 1; i <= tbl.Len(); i++ {
+		switch v := tbl.RawGetInt(i).(type) {
+		case lua.LNumber:
+			colors = append(colors, uint32(int64(v)&0xffffff))
+		case *lua.LTable:
+			channel := func(n int) uint32 {
+				c, _ := v.RawGetInt(n).(lua.LNumber)
+				return uint32(min(max(int(c), 0), 255))
+			}
+			colors = append(colors, channel(1)<<16|channel(2)<<8|channel(3))
+		default:
+			L.ArgError(1, fmt.Sprintf("colour %d is neither a number nor three of them", i))
+		}
+	}
+	if len(colors) == 0 {
+		L.ArgError(1, "a palette needs at least one colour in it")
+	}
+	return pico.NewPalette("custom", colors)
 }

@@ -2,9 +2,12 @@ package picolua
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	lua "github.com/yuin/gopher-lua"
+
+	"tlua/internal/pico"
 )
 
 func (r *Runtime) installSystem() {
@@ -77,6 +80,33 @@ func (r *Runtime) installSystem() {
 			return 0
 		},
 
+		// vid(mode) switches resolution: 0 is the console's own 480x270, 1 and 2
+		// are half and a quarter of it, and 13 is 320x200, what a VGA card
+		// called mode 13h. vid() on its own says which one is in use.
+		"vid": func(L *lua.LState) int {
+			screen := r.Vid.Screen
+			if isNone(L, 1) {
+				L.Push(lua.LNumber(pico.ModeOf(screen.W, screen.H)))
+				L.Push(lua.LNumber(screen.W))
+				L.Push(lua.LNumber(screen.H))
+				return 3
+			}
+
+			mode := L.CheckInt(1)
+			w, h, ok := pico.Mode(mode)
+			if !ok {
+				L.ArgError(1, fmt.Sprintf("there is no video mode %d; there is %s",
+					mode, modeList()))
+			}
+			if w != screen.W || h != screen.H {
+				r.Vid.Resize(w, h)
+				r.windowChanged = true
+			}
+			L.Push(lua.LNumber(w))
+			L.Push(lua.LNumber(h))
+			return 2
+		},
+
 		// fullscreen() turns it on, fullscreen(false) turns it off.
 		"fullscreen": func(L *lua.LState) int {
 			r.window.Fullscreen = L.OptBool(1, true)
@@ -84,4 +114,15 @@ func (r *Runtime) installSystem() {
 			return 0
 		},
 	})
+}
+
+// modeList names the video modes there are, for the error a program gets when
+// it asks for one there is not.
+func modeList() string {
+	parts := []string{}
+	for _, n := range pico.Modes() {
+		w, h, _ := pico.Mode(n)
+		parts = append(parts, fmt.Sprintf("%s (%dx%d)", strconv.Itoa(n), w, h))
+	}
+	return strings.Join(parts, ", ")
 }

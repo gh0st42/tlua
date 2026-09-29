@@ -1,7 +1,10 @@
 package picolua
 
 import (
+	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -467,4 +470,191 @@ func TestMapCanBeOffsetAndClipped(t *testing.T) {
 	f.want(`
 		..11
 		..11`)
+}
+
+func TestRoundedRectanglesTakeAWidthAndAHeight(t *testing.T) {
+	f := start(t, 8, 6, `
+		rrectfill(1, 1, 6, 4, 1, 7)`)
+	f.want(`
+		........
+		..7777..
+		.777777.
+		.777777.
+		..7777..
+		........`)
+
+	f = start(t, 8, 6, `rrect(1, 1, 6, 4, 1, 8)`)
+	f.want(`
+		........
+		..8888..
+		.8....8.
+		.8....8.
+		..8888..
+		........`)
+}
+
+func TestARoundedRectangleWithoutARadiusStillDrawsOne(t *testing.T) {
+	// The radius may be left out, as a circle's may; the colour is then the
+	// sixth argument, so a colour passed as the fifth is a radius.
+	f := start(t, 12, 10, `
+		color(7)
+		rrectfill(0, 0, 12, 10)`)
+	if f.Screen().Get(0, 0) != 0 {
+		t.Errorf("the corner should have been rounded away:\n%s", f.dump())
+	}
+	if f.Screen().Get(6, 5) != 7 {
+		t.Errorf("the middle should be filled:\n%s", f.dump())
+	}
+}
+
+func TestThePaletteCanBeAskedAboutAndChanged(t *testing.T) {
+	f := start(t, 4, 2, "")
+
+	if got := f.str(`palette()`); got != "default,64" {
+		t.Errorf("palette() = %q, want the default one", got)
+	}
+	if got := f.str(`palette("vga")`); got != "vga,256" {
+		t.Errorf("palette(\"vga\") = %q", got)
+	}
+	if got := f.str(`rgb(1)`); got != "170" { // VGA blue, 0x0000aa
+		t.Errorf("rgb(1) under VGA is %q, want 170", got)
+	}
+	if got := f.str(`palette("default")`); got != "default,64" {
+		t.Errorf("going back gave %q", got)
+	}
+
+	// One entry at a time, which is what a fade is made of.
+	if got := f.str(`palette(0)`); got != "0" {
+		t.Errorf("colour 0 is %q, want black", got)
+	}
+	if got := f.str(`palette(0, 0xff8800)`); got != "0" {
+		t.Errorf("setting an entry reported %q as its old value", got)
+	}
+	if got := f.str(`palette(0)`); got != "16746496" { // 0xff8800
+		t.Errorf("colour 0 is now %q", got)
+	}
+}
+
+func TestAPaletteCanBeGivenOutright(t *testing.T) {
+	f := start(t, 2, 1, `
+		name, size = palette{ 0x000000, 0xff0000, { 0, 255, 0 } }
+		pset(0, 0, 1)
+		pset(1, 0, 2)`)
+	if got := f.str(`name, size`); got != "custom,3" {
+		t.Errorf("palette(table) = %q, want custom,3", got)
+	}
+	if got := f.str(`rgb(1), rgb(2)`); got != "16711680,65280" {
+		t.Errorf("the colours came out as %q", got)
+	}
+	// A palette of three wraps at three: colour 4 is colour 1.
+	if got := f.str(`pget(0, 0), pget(1, 0)`); got != "1,2" {
+		t.Errorf("pixels are %q", got)
+	}
+	f.eval(`pset(0, 0, 4)`)
+	if got := f.str(`pget(0, 0)`); got != "1" {
+		t.Errorf("colour 4 in a palette of three is %q, want 1", got)
+	}
+}
+
+func TestAPaletteCanBeLoadedFromAFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dusk.gpl")
+	if err := os.WriteFile(path, []byte("GIMP Palette\nName: Dusk\n0 0 0\n1 2 3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	f := start(t, 2, 1, "")
+	if got := f.str(fmt.Sprintf("palette(%q)", path)); got != "Dusk,2" {
+		t.Errorf("loading a palette gave %q", got)
+	}
+	if got := f.str(`rgb(1)`); got != "66051" { // 0x010203
+		t.Errorf("colour 1 is %q", got)
+	}
+}
+
+func TestAPaletteThatIsNeitherIsAnError(t *testing.T) {
+	f := start(t, 2, 1, "")
+	err := f.L.DoString(`palette("wat")`)
+	if err == nil {
+		t.Fatal("an unknown palette should be refused")
+	}
+	// The message has to say what would have worked.
+	for _, want := range []string{"wat", "default", "vga"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error does not mention %q: %v", want, err)
+		}
+	}
+	if err := f.L.DoString(`palette{}`); err == nil {
+		t.Error("an empty palette should be refused")
+	}
+}
+
+func TestChangingThePaletteChangesThePictureNotThePixels(t *testing.T) {
+	f := start(t, 1, 1, `
+		pset(0, 0, 8)
+		before = rgb(8)
+		palette(8, 0x102030)
+		after = rgb(8)`)
+	if got := f.str(`pget(0, 0)`); got != "8" {
+		t.Errorf("the pixel is %q; only what 8 looks like should have changed", got)
+	}
+	if got := f.str(`before == after`); got != "false" {
+		t.Error("the colour should have changed")
+	}
+}
+
+func TestVideoModes(t *testing.T) {
+	f := start(t, 4, 2, "")
+	// A size that is not one of the modes has no number.
+	if got := f.str(`vid()`); got != "-1,4,2" {
+		t.Errorf("vid() = %q", got)
+	}
+
+	cases := []struct{ call, want string }{
+		{`vid(0)`, "480,270"},
+		{`vid(1)`, "240,135"},
+		{`vid(2)`, "160,90"},
+		{`vid(13)`, "320,200"}, // what a VGA card called mode 13h
+	}
+	for _, c := range cases {
+		if got := f.str(c.call); got != c.want {
+			t.Errorf("%s = %q, want %q", c.call, got, c.want)
+		}
+		if got := f.str(`screen()`); got != c.want {
+			t.Errorf("after %s the screen is %q, want %q", c.call, got, c.want)
+		}
+	}
+
+	if got := f.str(`vid()`); got != "13,320,200" {
+		t.Errorf("vid() = %q, want the mode it was put in", got)
+	}
+	if w, h := f.Screen().W, f.Screen().H; w != 320 || h != 200 {
+		t.Errorf("the framebuffer is %dx%d", w, h)
+	}
+
+	// The host is told, so that the window can be refitted.
+	if _, changed := f.Window(); !changed {
+		t.Error("a change of resolution should reach the host")
+	}
+}
+
+func TestAVideoModeThatIsNotOneIsAnError(t *testing.T) {
+	f := start(t, 4, 2, "")
+	err := f.L.DoString(`vid(7)`)
+	if err == nil {
+		t.Fatal("there is no mode 7")
+	}
+	if !strings.Contains(err.Error(), "480x270") {
+		t.Errorf("the error should list the modes there are: %v", err)
+	}
+}
+
+func TestDrawingSurvivesAChangeOfResolution(t *testing.T) {
+	f := start(t, 4, 2, `
+		vid(2)
+		cls(3)
+		rectfill(0, 0, 159, 89, 9)`)
+	if got := f.Screen().Get(159, 89); got != 9 {
+		t.Errorf("the far corner of the new screen is %d, want 9", got)
+	}
 }
