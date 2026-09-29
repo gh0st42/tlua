@@ -42,6 +42,7 @@ Environment:
   TLUA_INIT      chunk to run at startup ("@file" runs a file)
   TLUA_LSP       language server the editor formats, completes and hovers
                  with, or "off"; by default it looks for one on PATH
+  TLUA_LOVE      love2d binary for the editor's "Run with LOVE" mode
 
 The edit subcommand opens a full-screen Lua editor: a menu bar, several files
 at once, F5 to run the primary file, F9 to check its syntax, and, when a

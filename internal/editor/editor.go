@@ -76,6 +76,9 @@ type Editor struct {
 	// comes in, and drained by a goroutine that brings the buffers up to date.
 	diagnosticsWake chan struct{}
 
+	// runMode is what F5 starts: this interpreter, or love2d on the folder.
+	runMode runMode
+
 	outputShown bool
 	outputBytes int  // how much the pane holds, against outputLimit
 	outputFull  bool // set once the pane stopped accepting more
@@ -131,8 +134,11 @@ func New(cfg Config) (*Editor, error) {
 		pages:    tview.NewPages(),
 		editors:  tview.NewPages(),
 		openMenu: -1,
-		current:  -1,
-		exe:      exe,
+		// On by default, and set here rather than later: the menus are built
+		// from these, and a menu that misreports a setting is worse than none.
+		formatOnSave: true,
+		current:      -1,
+		exe:          exe,
 	}
 
 	e.diagnosticsWake = make(chan struct{}, 1)
@@ -174,7 +180,6 @@ func New(cfg Config) (*Editor, error) {
 
 	e.menus = e.buildMenus()
 	e.drawMenuBar()
-	e.formatOnSave = true
 
 	for _, f := range cfg.Files {
 		if err := e.openFile(f); err != nil {

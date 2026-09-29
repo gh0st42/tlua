@@ -245,9 +245,9 @@ func (e *Editor) toggleSignaturePlace() {
 // signaturePlaceLabel is what the menu says about the setting.
 func (e *Editor) signaturePlaceLabel() string {
 	if e.signatureInStatus {
-		return "Parameters on status line [on]"
+		return "Parameters on status line: on"
 	}
-	return "Parameters on status line [off]"
+	return "Parameters on status line: off"
 }
 
 // stripTags measures text as it will be drawn, without its colour tags.

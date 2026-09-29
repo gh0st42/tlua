@@ -311,6 +311,29 @@ func (e *Editor) gotoLine(b *buffer, line int) {
 	b.area.Select(offset, offset)
 }
 
+// displayDir names a directory in a way that can be recognised: relative to the
+// working directory when it is inside it, under ~ when it is in the home
+// directory, and in full otherwise. Unlike a file, the last element of a folder's
+// path is rarely enough to tell which folder it is.
+func displayDir(dir string) string {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return dir
+	}
+	if wd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(wd, abs); err == nil && !strings.HasPrefix(rel, "..") {
+			if rel == "." {
+				return "."
+			}
+			return rel
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(abs, home+string(filepath.Separator)) {
+		return "~" + strings.TrimPrefix(abs, home)
+	}
+	return abs
+}
+
 // displayName keeps paths short: a file under the working directory shows as a
 // relative path, anything else keeps its base name.
 func displayName(abs string) string {

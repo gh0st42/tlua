@@ -60,14 +60,17 @@ func (e *Editor) runBuffer(b *buffer) {
 		}
 	}
 
+	cmd, what, err := e.runCommand(b)
+	if err != nil {
+		e.message("Run", err.Error())
+		return
+	}
+	dir := cmd.Dir
+
 	e.showOutput()
 	e.clearOutput()
-	dir, file := filepath.Dir(b.path), filepath.Base(b.path)
-	e.appendOutput(tagNote + "Running " + tview.Escape(file) + "\n")
+	e.appendOutput(tagNote + "Running " + tview.Escape(what) + "\n")
 
-	// "--" so that a file whose name begins with a dash is a file, not an option.
-	cmd := exec.Command(e.exe, "--", file)
-	cmd.Dir = dir
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		e.message("Run", err.Error())
@@ -83,7 +86,7 @@ func (e *Editor) runBuffer(b *buffer) {
 		return
 	}
 	e.running = cmd
-	e.setStatus("Running " + file + " — Ctrl-C stops it")
+	e.setStatus("Running " + what + " — Ctrl-C stops it")
 
 	var (
 		wg      sync.WaitGroup
@@ -106,14 +109,14 @@ func (e *Editor) runBuffer(b *buffer) {
 			switch {
 			case waitErr == nil:
 				e.appendOutput(tagOK + "\nProgram finished.\n")
-				e.setStatus(file + " finished")
+				e.setStatus(what + " finished")
 			default:
 				status := waitErr.Error()
 				if exitErr, ok := waitErr.(*exec.ExitError); ok {
 					status = fmt.Sprintf("exit status %d", exitErr.ExitCode())
 				}
 				e.appendOutput(tagErr + "\nProgram stopped: " + tview.Escape(status) + "\n")
-				e.setStatus(file + ": " + status)
+				e.setStatus(what + ": " + status)
 				e.jumpToError(dir, errText.String())
 			}
 		})

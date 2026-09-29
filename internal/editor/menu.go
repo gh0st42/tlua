@@ -69,6 +69,7 @@ func (e *Editor) buildMenus() []*menu {
 		{title: "Run", hotkey: 'R', items: []menuItem{
 			{label: "Run", shortcut: "F5", action: e.runPrimary},
 			{label: "Run this buffer", action: e.runCurrent},
+			{label: e.runModeLabel(), action: e.toggleRunMode},
 			{label: "Stop program", shortcut: "Ctrl-C", action: e.stopProgram},
 			{separator: true},
 			{label: "Check syntax", shortcut: "F9", action: e.checkCurrent},
@@ -150,9 +151,12 @@ func (e *Editor) openMenuAt(i int) {
 			list.AddItem(strings.Repeat("─", width-2), "", 0, nil)
 			continue
 		}
-		label := item.label
+		// A label is plain text. tview's list reads square brackets as colour
+		// tags, which quietly ate the "[off]" a setting's label ended with.
+		label := tview.Escape(item.label)
 		if item.shortcut != "" {
-			label = fmt.Sprintf("%-*s%s", width-4-len(item.shortcut), item.label, item.shortcut)
+			label = fmt.Sprintf("%-*s%s", width-4-len(item.shortcut),
+				tview.Escape(item.label), item.shortcut)
 		}
 		action := item.action
 		list.AddItem(label, "", 0, func() {

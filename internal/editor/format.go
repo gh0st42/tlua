@@ -185,9 +185,9 @@ func (e *Editor) toggleFormatOnSave() {
 // formatOnSaveLabel is what the Edit menu says about the setting.
 func (e *Editor) formatOnSaveLabel() string {
 	if e.formatOnSave {
-		return "Format on save [on]"
+		return "Format on save: on"
 	}
-	return "Format on save [off]"
+	return "Format on save: off"
 }
 
 // languageServerDialog says what the editor found, or what to do about finding

@@ -46,6 +46,9 @@ Environment:
                  searched as <dir>/?.lua and <dir>/?/init.lua
   TLUA_PATH      package.path patterns, as LUA_PATH but tlua-only
   TLUA_INIT      chunk to run at startup ("@file" runs a file)
+  TLUA_LSP       language server the editor formats, completes and hovers
+                 with, or "off"; by default it looks for one on PATH
+  TLUA_LOVE      love2d binary for the editor's "Run with LOVE" mode
 ```
 
 ```sh
@@ -410,6 +413,7 @@ sources only cost one lookup each.
 | `TLUA_PATH` | `package.path` patterns in Lua's own notation, for full control. `;;` expands to the built-in default. Takes precedence over `TLUA_INCLUDE` and `LUA_PATH`. |
 | `TLUA_INIT` | A chunk to run before anything else; `@file` runs a file. Takes precedence over `LUA_INIT`. |
 | `TLUA_LSP` | The language server `tlua edit` formats with, as a command with any arguments. `off` uses none. Unset, the editor looks for one on PATH. |
+| `TLUA_LOVE` | The love2d binary the editor runs in LÖVE mode, as a command with any arguments. Unset, it looks for `love` on PATH and in `/Applications/love.app` on macOS. |
 | `LUA_PATH`, `LUA_INIT` | The standard Lua variables, honoured as the reference interpreter does. |
 
 So a machine declares its shared Lua libraries once:
@@ -482,6 +486,7 @@ bin/               build output (git-ignored)
 | [internal/editor/complete.go](internal/editor/complete.go) | the completion panel and the hover box |
 | [internal/editor/signature.go](internal/editor/signature.go) | the parameter hint |
 | [internal/editor/diagnostics.go](internal/editor/diagnostics.go) | what the server finds wrong, and moving between it |
+| [internal/editor/love.go](internal/editor/love.go) | the run mode, and finding love2d |
 
 Tests sit beside what they cover: unit tests in each `internal` package, and
 end-to-end tests in [cmd/tlua](cmd/tlua/) that build the binary and drive it as
