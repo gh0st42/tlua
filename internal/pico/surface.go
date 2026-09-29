@@ -23,7 +23,68 @@ type Surface struct {
 	// different thing to draw: a sheet is drawn a cell at a time, by number,
 	// and a picture is drawn all at once.
 	CellW, CellH int
+
+	// flags is eight bits a sprite, meaning whatever the game decides they
+	// mean. It is kept beside the pixels because that is where the artwork
+	// says it: whoever drew the tile is who knows whether it can be walked on.
+	flags []uint8
 }
+
+// Flags reports the eight flags of a sprite, all off for one that has none.
+func (s *Surface) Flags(n int) uint8 {
+	if n < 0 || n >= len(s.flags) {
+		return 0
+	}
+	return s.flags[n]
+}
+
+// SetFlags sets all eight at once.
+func (s *Surface) SetFlags(n int, mask uint8) {
+	if n < 0 || n > maxSprites {
+		return
+	}
+	for len(s.flags) <= n {
+		s.flags = append(s.flags, 0)
+	}
+	s.flags[n] = mask
+}
+
+// Flag reports one flag of a sprite, counted from zero.
+func (s *Surface) Flag(n, bit int) bool {
+	if bit < 0 || bit > 7 {
+		return false
+	}
+	return s.Flags(n)&(1<<uint(bit)) != 0
+}
+
+// SetFlag sets or clears one of them.
+func (s *Surface) SetFlag(n, bit int, on bool) {
+	if bit < 0 || bit > 7 {
+		return
+	}
+	mask := s.Flags(n)
+	if on {
+		mask |= 1 << uint(bit)
+	} else {
+		mask &^= 1 << uint(bit)
+	}
+	s.SetFlags(n, mask)
+}
+
+// AnyFlags reports whether any sprite on the sheet carries a flag, which is
+// how a program can tell artwork that came with them from artwork that did not.
+func (s *Surface) AnyFlags() bool {
+	for _, mask := range s.flags {
+		if mask != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// maxSprites is as far as a flag will be remembered. A sheet of more than this
+// many sprites is not a sheet, it is a typo.
+const maxSprites = 1 << 16
 
 // NewSurface makes a surface filled with colour 0, which is also the colour
 // sprite drawing treats as transparent by default.
@@ -69,6 +130,7 @@ func (s *Surface) Clone() *Surface {
 	out := NewSurface(s.W, s.H)
 	copy(out.Pix, s.Pix)
 	out.CellW, out.CellH = s.CellW, s.CellH
+	out.flags = append([]uint8(nil), s.flags...)
 	return out
 }
 
@@ -131,6 +193,7 @@ func (s *Surface) Resize(w, h int) {
 	}
 	next := NewSurface(w, h)
 	next.CellW, next.CellH = s.CellW, s.CellH
+	next.flags = s.flags
 	for y := 0; y < h && y < s.H; y++ {
 		copy(next.Pix[y*w:y*w+min(w, s.W)], s.Pix[y*s.W:])
 	}
@@ -258,7 +321,12 @@ func DecodePNG(data []byte, pal *Palette) (*Surface, error) {
 	if err != nil {
 		return nil, err
 	}
-	return FromImage(img, pal), nil
+	s := FromImage(img, pal)
+	// A sheet drawn in an editor says how big its sprites are and what flags
+	// they carry, in a text chunk the image decoder ignores. Reading it here
+	// means loadpng("tiles") comes back ready to use.
+	s.Apply(ReadPNGMeta(data))
+	return s, nil
 }
 
 // LoadPNG reads a PNG file from disk.

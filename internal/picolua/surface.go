@@ -2,6 +2,8 @@ package picolua
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	lua "github.com/yuin/gopher-lua"
 
@@ -57,6 +59,21 @@ func (r *Runtime) installSurfaceType() {
 				return 3
 			}
 			s.SetGrid(coord(L, 2), optCoord(L, 3, coord(L, 2)))
+			L.Push(L.Get(1))
+			return 1
+		},
+
+		// flags(n) is the eight flags of a sprite of this sheet; flags(n, mask)
+		// sets them. It is fget and fset for a sheet that is not the current
+		// one.
+		"flags": func(L *lua.LState) int {
+			s := checkSurface(L, 1)
+			n := L.CheckInt(2)
+			if isNone(L, 3) {
+				L.Push(lua.LNumber(s.Flags(n)))
+				return 1
+			}
+			s.SetFlags(n, uint8(L.CheckInt(3)&0xff))
 			L.Push(L.Get(1))
 			return 1
 		},
@@ -152,7 +169,13 @@ func (r *Runtime) installSurfaces() {
 				var s *pico.Surface
 				s, err = pico.DecodePNG(data, r.Vid.Palette())
 				if err == nil {
-					setGrid(L, s, 2)
+					// A tileset file beside the picture says the same things
+					// the picture does, where other tools can see them. It is
+					// read first, so that what the artwork itself says wins.
+					r.applyTileset(s, path)
+					pngMeta := pico.ReadPNGMeta(data)
+					s.Apply(pngMeta)
+					setGrid(L, s, 2) // and what the program asks for wins over both
 					L.Push(r.newSurface(s))
 					return 1
 				}
@@ -236,6 +259,36 @@ func (r *Runtime) installSurfaces() {
 			}
 			L.Push(was)
 			return 1
+		},
+
+		// fget(n) is all eight flags of a sprite as a number, and fget(n, bit)
+		// is one of them as a true or a false. fset writes them the same two
+		// ways. Both mean the current sheet, as sget and sset do.
+		//
+		// Flags are eight bits a sprite that mean whatever a game decides:
+		// solid, water, deadly, a thing to pick up. They come with the artwork
+		// rather than with the program, which is how a level can be walked on
+		// without a table of tile numbers written out anywhere.
+		"fget": func(L *lua.LState) int {
+			sheet := r.currentSheet(L, "fget")
+			n := L.CheckInt(1)
+			if isNone(L, 2) {
+				L.Push(lua.LNumber(sheet.Flags(n)))
+				return 1
+			}
+			L.Push(lua.LBool(sheet.Flag(n, L.CheckInt(2))))
+			return 1
+		},
+
+		"fset": func(L *lua.LState) int {
+			sheet := r.currentSheet(L, "fset")
+			n := L.CheckInt(1)
+			if isNone(L, 3) {
+				sheet.SetFlags(n, uint8(L.CheckInt(2)&0xff))
+				return 0
+			}
+			sheet.SetFlag(n, L.CheckInt(2), lua.LVAsBool(L.Get(3)))
+			return 0
 		},
 
 		// sget and sset read and write the pixels of the current sheet, which
@@ -397,4 +450,23 @@ func setGrid(L *lua.LState, s *pico.Surface, at int) {
 	}
 	w := coord(L, at)
 	s.SetGrid(w, optCoord(L, at+1, w))
+}
+
+// applyTileset reads the Tiled tileset that goes with a picture, when there is
+// one: the same file with .tsj in place of .png.
+//
+// It is how a sheet exported for other tools keeps its sprite flags, and it is
+// looked for quietly — a picture without one is the ordinary case, not a
+// mistake.
+func (r *Runtime) applyTileset(s *pico.Surface, pngPath string) {
+	tsj := strings.TrimSuffix(pngPath, filepath.Ext(pngPath)) + ".tsj"
+	data, err := r.read(tsj)
+	if err != nil {
+		return
+	}
+	meta, err := pico.ReadTSJ(data)
+	if err != nil {
+		return
+	}
+	s.Apply(meta)
 }

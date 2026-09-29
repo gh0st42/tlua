@@ -23,6 +23,18 @@ local tiles = sprite([[
 
 local EARTH, GRASS, STONE, COIN = 1, 2, 3, 4
 
+-- What a tile is, kept as flags on the artwork rather than as a list of tile
+-- numbers down here. A sheet drawn in an editor arrives with its flags already
+-- on it — loadpng() reads them out of the PNG — so a level can be walked on
+-- without the program knowing which number means stone.
+local SOLID, PICKUP = 0, 1
+
+usesheet(tiles)
+fset(EARTH, SOLID, true)
+fset(GRASS, SOLID, true)
+fset(STONE, SOLID, true)
+fset(COIN, PICKUP, true)
+
 -- The level as it starts, written as sprite numbers: 1 earth, 2 grass, 3 stone,
 -- 4 coin, and a dot for the blank sprite 0, which is air.
 local layout = {
@@ -76,14 +88,13 @@ local function cell(col, row)
 end
 
 local function solid(col, row)
-	local what = cell(col, row)
-	return what == EARTH or what == GRASS or what == STONE
+	return fget(cell(col, row), SOLID)
 end
 
 -- take picks up a coin by rubbing it out of the grid, which also stops it being
 -- drawn.
 local function take(col, row)
-	if cell(col, row) == COIN then
+	if fget(cell(col, row), PICKUP) then
 		cells[row][col + 1] = 0
 		collected = collected + 1
 	end
@@ -109,7 +120,7 @@ function _init()
 			local ch = sub(layout[row], col, col)
 			local what = 0
 			if ch ~= "." then what = tonum(ch) or 0 end
-			if what == COIN then coins = coins + 1 end
+			if fget(what, PICKUP) then coins = coins + 1 end
 			add(line, what)
 		end
 		add(cells, line)

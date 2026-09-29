@@ -33,7 +33,7 @@ var (
 	}
 	kindMusic = kind{
 		what: "music",
-		dirs: []string{"", "music", "assets/music", "sfx", "assets/sfx", "assets"},
+		dirs: []string{"", "music", "assets/music", "bgm", "assets/bgm", "sfx", "assets/sfx", "assets"},
 		exts: []string{".ogg", ".wav"},
 	}
 	kindData = kind{

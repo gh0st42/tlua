@@ -52,6 +52,13 @@ function Surface:grid() end
 ---@return Surface|nil
 function Surface:sprite(n, w, h) end
 
+--- The eight flags of one of this sheet's sprites, or with a mask, sets them
+--- and hands the surface back.
+---@param n integer
+---@param mask? integer
+---@return integer|Surface
+function Surface:flags(n, mask) end
+
 --- Called once before the first frame.
 function _init() end
 
@@ -273,7 +280,9 @@ function sprite(art, cell_w, cell_h) end
 
 --- Reads a PNG and reduces it to the palette. Looks inside the executable first
 --- when the game was fused with `tlua fuse -play`, then beside the program.
---- With a cell size the picture is a sheet of sprites.
+--- With a cell size the picture is a sheet of sprites; without one, a sheet
+--- drawn in an editor says its own cell size and sprite flags, out of the PNG
+--- or a Tiled tileset of the same name beside it.
 ---@param path string
 ---@param cell_w? integer
 ---@param cell_h? integer square if left out
@@ -333,6 +342,20 @@ function target(s) end
 ---@param s? Surface a surface with a grid on it
 ---@return Surface|nil previous
 function usesheet(s) end
+
+--- All eight flags of a sprite as a number, or one of them as a boolean.
+--- Flags mean whatever a game decides; they come with the artwork, out of the
+--- PNG or the Tiled tileset beside it.
+---@param n integer sprite number
+---@param bit? integer 0 to 7
+---@return integer|boolean
+function fget(n, bit) end
+
+--- Sets all eight flags of a sprite, or one of them.
+---@param n integer
+---@param bit_or_mask integer
+---@param on? boolean given, bit_or_mask is the bit to set
+function fset(n, bit_or_mask, on) end
 
 --- Reads a pixel of the current sheet.
 ---@param x integer

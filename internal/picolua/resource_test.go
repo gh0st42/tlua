@@ -27,6 +27,12 @@ func TestWhereAResourceIsLookedFor(t *testing.T) {
 			"assets/sfx/jump.wav sfx/assets/sfx/jump.wav assets/sfx/assets/sfx/jump.wav assets/assets/sfx/jump.wav",
 		},
 		{
+			// Music is looked for where two different tools put it, and among
+			// the sound effects after that.
+			kindMusic, "theme",
+			"theme.ogg theme.wav music/theme.ogg music/theme.wav assets/music/theme.ogg assets/music/theme.wav bgm/theme.ogg bgm/theme.wav assets/bgm/theme.ogg assets/bgm/theme.wav sfx/theme.ogg sfx/theme.wav assets/sfx/theme.ogg assets/sfx/theme.wav assets/theme.ogg assets/theme.wav",
+		},
+		{
 			kindImage, "player",
 			"player.png gfx/player.png assets/gfx/player.png assets/player.png",
 		},

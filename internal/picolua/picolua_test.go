@@ -2,8 +2,10 @@ package picolua
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/png"
@@ -1179,4 +1181,192 @@ func sheetPNG(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+func TestSpriteFlagsComeWithTheArtwork(t *testing.T) {
+	// A sheet drawn in an editor carries its tile size and its flags in the
+	// PNG itself, so loading it is all a program has to do.
+	f := startWith(t, Options{
+		Width: 8, Height: 4,
+		ReadFile: func(name string) ([]byte, error) {
+			if name == "gfx/tiles.png" {
+				return flaggedPNG(t), nil
+			}
+			return nil, errNotThere
+		},
+	}, `
+		tiles = loadpng("tiles")
+		usesheet(tiles)`)
+
+	if got := f.str(`tiles:grid()`); got != "2,2,2" {
+		t.Errorf("the sheet cut itself into %q, want 2,2,2", got)
+	}
+
+	cases := []struct{ expr, want string }{
+		{`fget(1)`, "5"},       // all eight at once
+		{`fget(1, 0)`, "true"}, // and one at a time
+		{`fget(1, 2)`, "true"},
+		{`fget(1, 1)`, "false"},
+		{`fget(0)`, "0"},        // a sprite nobody flagged
+		{`fget(99)`, "0"},       // and one that is not there
+		{`tiles:flags(1)`, "5"}, // the same, for a sheet said out loud
+	}
+	for _, c := range cases {
+		if got := f.str(c.expr); got != c.want {
+			t.Errorf("%s = %q, want %q", c.expr, got, c.want)
+		}
+	}
+}
+
+func TestAProgramCanSetFlagsItself(t *testing.T) {
+	f := start(t, 4, 2, `
+		tiles = sprite([[
+			1122
+			1122
+		]], 2, 2)
+		usesheet(tiles)`)
+
+	f.eval(`fset(0, 3, true)`)
+	if got := f.str(`fget(0), fget(0, 3)`); got != "8,true" {
+		t.Errorf("after setting bit 3: %q", got)
+	}
+	f.eval(`fset(0, 3, false)`)
+	if got := f.str(`fget(0)`); got != "0" {
+		t.Errorf("after clearing it: %q", got)
+	}
+
+	// All eight at once.
+	f.eval(`fset(1, 255)`)
+	if got := f.str(`fget(1), fget(1, 7)`); got != "255,true" {
+		t.Errorf("after setting them all: %q", got)
+	}
+
+	// And on a sheet that is not the current one.
+	f.eval(`tiles:flags(0, 6)`)
+	if got := f.str(`fget(0)`); got != "6" {
+		t.Errorf("the method form set %q", got)
+	}
+}
+
+func TestFlagsCanComeFromATilesetFileInstead(t *testing.T) {
+	// The same information, written where Tiled can see it. A sheet exported
+	// for other tools keeps its flags this way.
+	const tsj = `{"tilewidth":2,"tileheight":2,"tiles":[
+		{"id":0,"properties":[{"name":"flag_1","type":"bool","value":true}]}]}`
+
+	f := startWith(t, Options{
+		Width: 8, Height: 4,
+		ReadFile: func(name string) ([]byte, error) {
+			switch name {
+			case "gfx/tiles.png":
+				return plainPNG(t), nil
+			case "gfx/tiles.tsj":
+				return []byte(tsj), nil
+			}
+			return nil, errNotThere
+		},
+	}, `
+		tiles = loadpng("tiles")
+		usesheet(tiles)`)
+
+	if got := f.str(`tiles:grid()`); got != "2,2,2" {
+		t.Errorf("the tileset's tile size was not taken up: %q", got)
+	}
+	if got := f.str(`fget(0, 1)`); got != "true" {
+		t.Errorf("the flag from the tileset is %q", got)
+	}
+}
+
+func TestWhatTheProgramAsksForWinsOverWhatTheFileSays(t *testing.T) {
+	f := startWith(t, Options{
+		Width: 8, Height: 4,
+		ReadFile: func(name string) ([]byte, error) {
+			if name == "gfx/tiles.png" {
+				return flaggedPNG(t), nil // which says 2x2
+			}
+			return nil, errNotThere
+		},
+	}, `tiles = loadpng("tiles", 4, 2)`)
+
+	if got := f.str(`tiles:grid()`); got != "4,2,1" {
+		t.Errorf("the grid is %q, want the 4x2 the program asked for", got)
+	}
+	// The flags still arrive, since nothing else said otherwise.
+	if got := f.str(`tiles:flags(1)`); got != "5" {
+		t.Errorf("flags are %q", got)
+	}
+}
+
+func TestFlagsNeedASheetToBeOn(t *testing.T) {
+	f := start(t, 2, 1, "")
+	if err := f.L.DoString(`fget(0)`); err == nil {
+		t.Error("there is no current sheet to have flags")
+	}
+}
+
+// flaggedPNG is a four by two picture that says it is a sheet of 2x2 sprites,
+// the second of which carries flags 0 and 2.
+func flaggedPNG(t *testing.T) []byte {
+	t.Helper()
+	return pngWithMeta(t, plainPNG(t), `{"tile_size":2,"flags":{"1":5}}`)
+}
+
+func plainPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 4, 2))
+	r, g, b := pico.Default.RGB(8)
+	img.Set(0, 0, color.RGBA{r, g, b, 255})
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// pngWithMeta puts a text chunk in a PNG, as a sheet editor does.
+func pngWithMeta(t *testing.T, raw []byte, meta string) []byte {
+	t.Helper()
+	body := append([]byte("fz_meta\x00"), meta...)
+	chunk := make([]byte, 12+len(body))
+	binary.BigEndian.PutUint32(chunk, uint32(len(body)))
+	copy(chunk[4:], "tEXt")
+	copy(chunk[8:], body)
+	binary.BigEndian.PutUint32(chunk[8+len(body):], crc32.ChecksumIEEE(chunk[4:8+len(body)]))
+
+	const iend = 12
+	out := append([]byte{}, raw[:len(raw)-iend]...)
+	out = append(out, chunk...)
+	return append(out, raw[len(raw)-iend:]...)
+}
+
+func TestThePictureHasTheLastWordOnItsOwnSprites(t *testing.T) {
+	// Both files can carry flags. For a sprite they both mention, the picture
+	// wins outright — it is where a sheet editor keeps the truth, and the
+	// tileset is what it exports. A sprite only the tileset mentions keeps
+	// what it says there.
+	const tsj = `{"tilewidth":2,"tileheight":2,"tiles":[
+		{"id":0,"properties":[{"name":"flag_4","type":"bool","value":true}]},
+		{"id":1,"properties":[{"name":"flag_4","type":"bool","value":true}]}]}`
+
+	f := startWith(t, Options{
+		Width: 8, Height: 4,
+		ReadFile: func(name string) ([]byte, error) {
+			switch name {
+			case "gfx/tiles.png":
+				return flaggedPNG(t), nil // which says sprite 1 has flags 5
+			case "gfx/tiles.tsj":
+				return []byte(tsj), nil
+			}
+			return nil, errNotThere
+		},
+	}, `
+		tiles = loadpng("tiles")
+		usesheet(tiles)`)
+
+	if got := f.str(`fget(1)`); got != "5" {
+		t.Errorf("sprite 1 has flags %q; the picture says 5", got)
+	}
+	if got := f.str(`fget(0)`); got != "16" {
+		t.Errorf("sprite 0 has flags %q; only the tileset mentions it, and says bit 4", got)
+	}
 }

@@ -271,7 +271,7 @@ func TestEveryDocumentedNameIsThere(t *testing.T) {
 		cls color pset pget line rect rectfill circ circfill oval ovalfill
 		tri trifill print cursor textwidth textheight camera clip pal palt
 		rrect rrectfill fillp screen palette rgb surface sprite loadpng fetch
-		spr sspr target map usesheet sget sset
+		spr sspr target map usesheet sget sset fget fset
 		btn btnp held key keyp mouse mousebtn btnkey typed
 		t time frame fps printh exit window fullscreen vid
 		sfx music volume

@@ -222,10 +222,12 @@ counting. **Sprites are numbered from zero**, left to right and then down.
 | `sspr(sx, sy, sw, sh, dx, dy, …)` | The same, from the current sheet. |
 | `usesheet([s])` | Makes `s` the current sheet; reports the one it replaced. |
 | `sget(x, y)`, `sset(x, y, [c])` | Pixels of the current sheet. |
+| `fget(n, [bit])`, `fset(n, …)` | Sprite flags of the current sheet. |
 | `target([s])` | Sends later drawing to a surface, or back to the screen. |
 | `s:grid()` | The cell size and how many cells, or `0, 0, 0` for a picture. |
 | `s:grid(w, [h])` | Cuts it into cells, and hands the surface back. |
 | `s:sprite(n, [w], [h])` | One sprite as a surface of its own. |
+| `s:flags(n, [mask])` | The eight flags of one of its sprites. |
 | `s:width()`, `s:height()`, `s:size()` | How big it is. |
 | `s:get(x, y)`, `s:set(x, y, [c])` | One pixel, without the camera or the clip. |
 | `s:fill([c])`, `s:clone()` | All of it. |
@@ -236,6 +238,45 @@ pixels, and it does not care whether the surface has a grid.
 
 `s:sprite(n)` is a **copy** of that cell, so drawing on it leaves the sheet
 alone.
+
+### Sprite flags
+
+Every sprite carries eight flags, which mean whatever a game decides they
+mean — solid, water, deadly, a thing to pick up.
+
+| Call | What it does |
+| --- | --- |
+| `fget(n)` | All eight flags of sprite `n`, as a number. |
+| `fget(n, bit)` | One of them, as true or false. `bit` is 0 to 7. |
+| `fset(n, mask)` | Sets all eight. |
+| `fset(n, bit, on)` | Sets or clears one. |
+| `s:flags(n)`, `s:flags(n, mask)` | The same, for a sheet that is not the current one. |
+
+```lua
+local SOLID = 0
+if fget(mget(x, y), SOLID) then ... end
+```
+
+**Flags come with the artwork.** A sheet drawn in an editor keeps them in the
+PNG itself, in a text chunk the picture's own decoder ignores, together with
+the size of its tiles — so `loadpng("tiles")` comes back already cut up and
+already flagged, with nothing said in the program at all:
+
+```lua
+local tiles = loadpng("tiles")   -- grid and flags both come from the file
+usesheet(tiles)
+```
+
+A Tiled tileset beside the picture — `tiles.tsj` next to `tiles.png` — is read
+as well, where the flags are boolean properties called `flag_0` to `flag_7`.
+That is the same information written where other tools can see it. Both are
+read: for a sprite they both mention the picture has the last word, since that
+is where a sheet editor keeps the truth and the tileset is what it exports, and
+a sprite only the tileset knows about keeps what it says. A cell size given to
+`loadpng` wins over both.
+
+This is the shape [fz](https://github.com/gh0st42/fz) writes, whose `fz gfx`
+editor draws a sheet, sets its flags, and exports the tileset.
 
 ### The current sheet
 
