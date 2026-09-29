@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"tlua/internal/version"
 )
 
 var (
@@ -225,5 +227,20 @@ func write(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The version is printed from one place, so that what the interpreter says and
+// what it tells a language server cannot drift apart.
+func TestVersionIsReported(t *testing.T) {
+	got := runCLI(t, t.TempDir(), "", "-v")
+	if got.code != 0 {
+		t.Fatalf("exit %d, stderr %q", got.code, got.stderr)
+	}
+	if !strings.Contains(got.stdout, version.Number) {
+		t.Errorf("tlua -v said %q, want it to carry %s", got.stdout, version.Number)
+	}
+	if !strings.Contains(got.stdout, "Lua 5.1") {
+		t.Errorf("tlua -v said %q", got.stdout)
 	}
 }

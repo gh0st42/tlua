@@ -15,9 +15,11 @@ import (
 	"tlua/internal/fuse"
 	"tlua/internal/interp"
 	"tlua/internal/payload"
+	"tlua/internal/version"
 )
 
-const version = "tlua 0.1.0 (Lua 5.1 via gopher-lua, pure Go)"
+// banner is what -v prints, and what greets an interactive session.
+const banner = "tlua " + version.Number + " (Lua 5.1 via gopher-lua, pure Go)"
 
 const usage = `usage: tlua [options] [script [args]]
        tlua edit [file...]
@@ -164,7 +166,7 @@ func run(c *cli) int {
 		return 0
 	}
 	if c.showVersion {
-		fmt.Println(version)
+		fmt.Println(banner)
 		if opts.Script == "" && len(opts.Actions) == 0 && !opts.Interactive {
 			return 0
 		}
@@ -209,7 +211,7 @@ func run(c *cli) int {
 	// or start a REPL when stdin is a terminal.
 	if opts.Script == "" && len(opts.Actions) == 0 && !c.showVersion {
 		if isTerminal(os.Stdin) {
-			fmt.Println(version)
+			fmt.Println(banner)
 			r.REPL()
 			return 0
 		}

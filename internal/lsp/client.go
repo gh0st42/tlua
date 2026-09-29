@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"tlua/internal/version"
 )
 
 // Client talks to one language server over its standard input and output.
@@ -114,7 +116,7 @@ func (c *Client) initialize(ctx context.Context, root string) error {
 		"processId": os.Getpid(),
 		"clientInfo": map[string]string{
 			"name":    "tlua",
-			"version": "0.1.0",
+			"version": version.Number,
 		},
 		"rootUri": pathToURI(root),
 		"capabilities": map[string]any{

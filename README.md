@@ -472,6 +472,7 @@ bin/               build output (git-ignored)
 | [internal/payload/payload.go](internal/payload/payload.go) | detecting, reading and writing the attached-program format |
 | [internal/payload/archive.go](internal/payload/archive.go) | the read-only file system inside a fused zip |
 | [internal/fuse/fuse.go](internal/fuse/fuse.go) | the `fuse` subcommand that builds standalone executables |
+| [internal/version/version.go](internal/version/version.go) | the version number, in one place |
 | [internal/editor/editor.go](internal/editor/editor.go) | the editor: layout, bars, global keys |
 | [internal/editor/buffer.go](internal/editor/buffer.go) | open files and what the editor does to them |
 | [internal/editor/menu.go](internal/editor/menu.go) | the menu bar and its dropdowns |
