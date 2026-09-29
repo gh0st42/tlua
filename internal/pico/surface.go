@@ -17,6 +17,12 @@ import (
 type Surface struct {
 	W, H int
 	Pix  []uint8 // W*H indices, row major, top row first
+
+	// CellW and CellH are the size of one sprite when the surface is a sheet
+	// cut into a grid of them. Zero means it is a single picture, which is a
+	// different thing to draw: a sheet is drawn a cell at a time, by number,
+	// and a picture is drawn all at once.
+	CellW, CellH int
 }
 
 // NewSurface makes a surface filled with colour 0, which is also the colour
@@ -58,11 +64,63 @@ func (s *Surface) Fill(col uint8) {
 	}
 }
 
-// Clone copies a surface, pixels and all.
+// Clone copies a surface, pixels, grid and all.
 func (s *Surface) Clone() *Surface {
 	out := NewSurface(s.W, s.H)
 	copy(out.Pix, s.Pix)
+	out.CellW, out.CellH = s.CellW, s.CellH
 	return out
+}
+
+/* --- a surface as a sheet of sprites --- */
+
+// SetGrid cuts the surface into cells of a size, making it a sprite sheet.
+// A size of nothing makes it a single picture again.
+func (s *Surface) SetGrid(w, h int) {
+	if w <= 0 || h <= 0 {
+		s.CellW, s.CellH = 0, 0
+		return
+	}
+	s.CellW, s.CellH = w, h
+}
+
+// Gridded reports whether the surface is a sheet rather than a picture.
+func (s *Surface) Gridded() bool { return s.CellW > 0 && s.CellH > 0 }
+
+// Grid reports the size of a cell and how many of them there are.
+func (s *Surface) Grid() (w, h, count int) {
+	if !s.Gridded() {
+		return 0, 0, 0
+	}
+	return s.CellW, s.CellH, s.Across() * (s.H / s.CellH)
+}
+
+// Across reports how many cells fit along the top of the sheet, which is what
+// turns a sprite's number into a place on it.
+//
+// Cells that do not fit whole are not counted: a sheet 20 pixels wide holds two
+// sprites of 8 and the four pixels left over belong to nothing. Counting a part
+// of a cell would give a sprite number that draws a sliver of the sheet, which
+// is never what was meant.
+func (s *Surface) Across() int {
+	if !s.Gridded() {
+		return 0
+	}
+	return s.W / s.CellW
+}
+
+// Cell reports the rectangle sprite n occupies, numbered from zero, left to
+// right and then down. Spanning more than one cell widens the rectangle rather
+// than moving it, so that a big sprite is the cells to the right of and below
+// the one named — which is how these sheets have always been read.
+func (s *Surface) Cell(n, wide, tall int) (x, y, w, h int, ok bool) {
+	_, _, count := s.Grid()
+	if count == 0 || n < 0 || n >= count {
+		return 0, 0, 0, 0, false
+	}
+	across := s.Across()
+	return (n % across) * s.CellW, (n / across) * s.CellH,
+		max(wide, 1) * s.CellW, max(tall, 1) * s.CellH, true
 }
 
 // Resize grows or shrinks a surface in place, keeping the pixels that still
@@ -72,6 +130,7 @@ func (s *Surface) Resize(w, h int) {
 		return
 	}
 	next := NewSurface(w, h)
+	next.CellW, next.CellH = s.CellW, s.CellH
 	for y := 0; y < h && y < s.H; y++ {
 		copy(next.Pix[y*w:y*w+min(w, s.W)], s.Pix[y*s.W:])
 	}

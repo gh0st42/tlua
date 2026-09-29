@@ -340,6 +340,19 @@ func (c *Console) Spr(src *Surface, x, y int, flipX, flipY bool) {
 	c.Blit(src, 0, 0, src.W, src.H, x, y, src.W, src.H, flipX, flipY)
 }
 
+// SprCell draws sprite n of a sheet at its own size, spanning wide by tall
+// cells of it. A number that is not a sprite on that sheet draws nothing.
+func (c *Console) SprCell(sheet *Surface, n, x, y, wide, tall int, flipX, flipY bool) {
+	if sheet == nil {
+		return
+	}
+	sx, sy, w, h, ok := sheet.Cell(n, wide, tall)
+	if !ok {
+		return
+	}
+	c.Blit(sheet, sx, sy, w, h, x, y, w, h, flipX, flipY)
+}
+
 // SSpr draws part of a surface, stretched to fill the destination rectangle.
 func (c *Console) SSpr(src *Surface, sx, sy, sw, sh, dx, dy, dw, dh int, flipX, flipY bool) {
 	c.Blit(src, sx, sy, sw, sh, dx, dy, dw, dh, flipX, flipY)

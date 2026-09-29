@@ -441,48 +441,102 @@ func TestSurfaceMethods(t *testing.T) {
 
 func TestPassingSomethingThatIsNotASurfaceIsAnError(t *testing.T) {
 	f := start(t, 2, 2, "")
-	for _, expr := range []string{`spr(1, 0, 0)`, `spr("x", 0, 0)`, `target(7)`, `map({}, 3)`} {
+	for _, expr := range []string{`spr("x", 0, 0)`, `target(7)`, `map({}, 3)`} {
 		if err := f.L.DoString(expr); err == nil {
 			t.Errorf("%s should be refused", expr)
 		} else if !strings.Contains(err.Error(), "surface") {
 			t.Errorf("%s said %q; it should mention a surface", expr, err)
 		}
 	}
+
+	// A number means a sprite of the current sheet, so asking for one before
+	// there is a sheet says that instead, and says what to do about it.
+	err := f.L.DoString(`spr(1, 0, 0)`)
+	if err == nil {
+		t.Fatal("there is no current sheet to take sprite 1 from")
+	}
+	for _, want := range []string{"current sheet", "sheet()"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error does not mention %q: %v", want, err)
+		}
+	}
 }
 
-func TestMapDrawsTilesWrittenEitherWay(t *testing.T) {
-	// A sheet of four tiles, each two pixels square.
+func TestMapDrawsSpritesByNumber(t *testing.T) {
+	// A sheet of four cells, each two pixels square, with the first left
+	// blank — which is what makes 0 mean empty in a level.
 	src := `
-		sheet = sprite[[
-			1122
-			1122
-			3344
-			3344
-		]]`
+		tiles = sprite([[
+			..11
+			..11
+			2233
+			2233
+		]], 2, 2)`
 
 	f := start(t, 8, 4, src+`
-		map({"12", "34"}, sheet, 0, 0, 2, 2)`)
+		map({"01", "23"}, tiles, 0, 0)`)
 	f.want(`
-		1122....
-		1122....
-		3344....
-		3344....`)
+		..11....
+		..11....
+		2233....
+		2233....`)
 
+	// The same written as numbers, and sprite 0 left out of it.
 	f = start(t, 8, 4, src+`
-		map({{1, 0}, {0, 4}}, sheet, 0, 0, 2, 2)`)
+		map({{1, 0}, {0, 3}}, tiles, 0, 0)`)
 	f.want(`
 		11......
 		11......
-		..44....
-		..44....`)
+		..33....
+		..33....`)
+}
+
+func TestMapTakesItsTileSizeFromTheSheet(t *testing.T) {
+	f := start(t, 8, 4, `
+		local sheet = sprite([[
+			..11
+			..11
+			2233
+			2233
+		]], 2, 2)
+		map({"1"}, sheet)`)
+	f.want(`
+		11......
+		11......
+		........
+		........`)
+}
+
+func TestMapLeavesSpriteZeroAloneUnlessAsked(t *testing.T) {
+	src := `
+		tiles = sprite([[
+			7711
+			7711
+		]], 2, 2)`
+
+	// Sprite 0 is there on the sheet, and still not drawn.
+	f := start(t, 4, 2, src+`
+		cls(3)
+		map({"00"}, tiles)`)
+	f.want(`
+		3333
+		3333`)
+
+	// Unless the map is told to draw it.
+	f = start(t, 4, 2, src+`
+		cls(3)
+		map({"00"}, tiles, 0, 0, 2, 2, true)`)
+	f.want(`
+		7777
+		7777`)
 }
 
 func TestMapCanBeOffsetAndClipped(t *testing.T) {
 	f := start(t, 4, 2, `
-		local sheet = sprite[[
-			11
-			11
-		]]
+		local sheet = sprite([[
+			..11
+			..11
+		]], 2, 2)
 		map({"1"}, sheet, 2, 0, 2, 2)`)
 	f.want(`
 		..11
@@ -911,4 +965,218 @@ func TestAProgramWithNoSoundBehavesTheSame(t *testing.T) {
 	if got := f.str(`music("theme")`); got == "" {
 		t.Error("music gave nothing back")
 	}
+}
+
+// sheetSrc is four cells of two pixels square, the first left blank, which is
+// the shape a level expects of a sheet.
+const sheetSrc = `
+	tiles = sprite([[
+		..11
+		..11
+		2233
+		2233
+	]], 2, 2)`
+
+func TestSprDrawsASpriteOfASheetByNumber(t *testing.T) {
+	f := start(t, 8, 2, sheetSrc+`
+		spr(tiles, 1, 0, 0)
+		spr(tiles, 2, 2, 0)
+		spr(tiles, 3, 4, 0)
+		spr(tiles, 0, 6, 0)`)
+	f.want(`
+		112233..
+		112233..`)
+}
+
+func TestSprDrawsAPictureAtAPlaceAsBefore(t *testing.T) {
+	// A surface that was never cut into sprites is a picture, and is drawn
+	// whole at the place it is given.
+	f := start(t, 6, 2, `
+		local logo = sprite[[
+			1212
+			1212
+		]]
+		spr(logo, 1, 0)`)
+	f.want(`
+		.1212.
+		.1212.`)
+}
+
+func TestASpriteCanSpanSeveralCells(t *testing.T) {
+	f := start(t, 4, 4, sheetSrc+`
+		spr(tiles, 0, 0, 0, 2, 2)`)
+	f.want(`
+		..11
+		..11
+		2233
+		2233`)
+}
+
+func TestASpriteThatIsNotOnTheSheetDrawsNothing(t *testing.T) {
+	f := start(t, 4, 2, sheetSrc+`
+		cls(5)
+		spr(tiles, 9, 0, 0)
+		spr(tiles, -1, 2, 0)`)
+	f.want(`
+		5555
+		5555`)
+}
+
+func TestTheCurrentSheetIsPicotronsOwnCall(t *testing.T) {
+	f := start(t, 8, 2, sheetSrc+`
+		usesheet(tiles)
+		spr(1, 0, 0)     -- Picotron's own spelling
+		spr(3, 2, 0)`)
+	f.want(`
+		1133....
+		1133....`)
+
+	// It says which sheet that is, and hands back the one it replaced.
+	if got := f.str(`usesheet() == tiles`); got != "true" {
+		t.Errorf("usesheet() reported %q", got)
+	}
+}
+
+func TestOnlyASheetCanBeTheCurrentOne(t *testing.T) {
+	f := start(t, 4, 2, `picture = sprite[[11|11]]`)
+	err := f.L.DoString(`usesheet(picture)`)
+	if err == nil {
+		t.Fatal("a picture is not a sheet")
+	}
+	if !strings.Contains(err.Error(), "grid") {
+		t.Errorf("the error should say what is missing: %v", err)
+	}
+}
+
+func TestSsprCanUseTheCurrentSheetToo(t *testing.T) {
+	f := start(t, 4, 2, sheetSrc+`
+		usesheet(tiles)
+		sspr(2, 0, 2, 2, 0, 0)`)
+	f.want(`
+		11..
+		11..`)
+
+	// And says so when there is none.
+	f = start(t, 4, 2, "")
+	if err := f.L.DoString(`sspr(0, 0, 2, 2, 0, 0)`); err == nil {
+		t.Error("there is no current sheet")
+	}
+}
+
+func TestSgetAndSsetReadTheCurrentSheet(t *testing.T) {
+	f := start(t, 4, 2, sheetSrc+`
+		usesheet(tiles)
+		was = sget(2, 0)
+		sset(0, 0, 9)
+		now = sget(0, 0)`)
+	if got := f.str(`was, now`); got != "1,9" {
+		t.Errorf("sget/sset gave %q, want 1,9", got)
+	}
+
+	// Writing to the sheet changes what is drawn from it.
+	f.eval(`spr(0, 0, 0)`)
+	if got := f.Screen().Get(0, 0); got != 9 {
+		t.Errorf("the pixel drawn is %d, want the 9 that was written", got)
+	}
+}
+
+func TestASurfaceSaysHowItIsCutUp(t *testing.T) {
+	f := start(t, 4, 2, sheetSrc+`
+		picture = sprite[[11|11]]`)
+
+	if got := f.str(`tiles:grid()`); got != "2,2,4" {
+		t.Errorf("the sheet's grid is %q, want 2,2,4", got)
+	}
+	if got := f.str(`picture:grid()`); got != "0,0,0" {
+		t.Errorf("a picture's grid is %q", got)
+	}
+
+	// A grid can be put on afterwards, and the call hands the surface back.
+	if got := f.str(`picture:grid(1, 1) == picture`); got != "true" {
+		t.Errorf("grid(w, h) gave back %q", got)
+	}
+	if got := f.str(`picture:grid()`); got != "1,1,4" {
+		t.Errorf("after cutting, the grid is %q", got)
+	}
+	// One number means square cells.
+	f.eval(`picture:grid(2)`)
+	if got := f.str(`picture:grid()`); got != "2,2,1" {
+		t.Errorf("a square grid is %q", got)
+	}
+}
+
+func TestASpriteCanBeTakenOffTheSheet(t *testing.T) {
+	f := start(t, 4, 2, sheetSrc+`
+		one = tiles:sprite(1)
+		big = tiles:sprite(0, 2, 2)
+		none = tiles:sprite(9)`)
+
+	if got := f.str(`one:size()`); got != "2,2" {
+		t.Errorf("a sprite taken off the sheet is %q", got)
+	}
+	if got := f.str(`one:get(0, 0)`); got != "1" {
+		t.Errorf("its first pixel is %q", got)
+	}
+	if got := f.str(`big:size()`); got != "4,4" {
+		t.Errorf("a sprite of four cells is %q", got)
+	}
+	if got := f.str(`none == nil`); got != "true" {
+		t.Errorf("a sprite that is not there gave %q", got)
+	}
+
+	// It is a copy: drawing on it leaves the sheet as it was.
+	f.eval(`one:set(0, 0, 8)`)
+	if got := f.str(`tiles:sprite(1):get(0, 0)`); got != "1" {
+		t.Errorf("the sheet changed with the copy: %q", got)
+	}
+}
+
+func TestLoadingAPngAsASheet(t *testing.T) {
+	f, _ := soundFixture(t, nil, "")
+	_ = f
+
+	g := startWith(t, Options{
+		Width: 8, Height: 4,
+		ReadFile: func(name string) ([]byte, error) {
+			if name == "gfx/tiles.png" {
+				return sheetPNG(t), nil
+			}
+			return nil, errNotThere
+		},
+	}, `
+		tiles = loadpng("tiles", 2, 2)
+		plain = loadpng("tiles")`)
+
+	if got := g.str(`tiles:grid()`); got != "2,2,2" {
+		t.Errorf("the sheet's grid is %q, want 2,2,2", got)
+	}
+	if got := g.str(`plain:grid()`); got != "0,0,0" {
+		t.Errorf("without a size it should be a picture, got %q", got)
+	}
+
+	g.eval(`spr(tiles, 1, 0, 0)`)
+	if got := g.Screen().Get(0, 0); got != 12 {
+		t.Errorf("sprite 1 drew colour %d, want the second cell's 12", got)
+	}
+}
+
+// sheetPNG is two cells of two pixels square: one of colour 8, one of 12.
+func sheetPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 4, 2))
+	for x := 0; x < 4; x++ {
+		col := uint8(8)
+		if x >= 2 {
+			col = 12
+		}
+		r, g, b := pico.Default.RGB(col)
+		for y := 0; y < 2; y++ {
+			img.Set(x, y, color.RGBA{r, g, b, 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
 }

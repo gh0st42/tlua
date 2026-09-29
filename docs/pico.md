@@ -190,20 +190,74 @@ text. `fillp()` turns it off.
 
 ## Sprites and surfaces
 
-A surface is a rectangle of palette indices. Sprites, sheets and anywhere else
-a program draws are all the same thing.
+A surface is a rectangle of palette indices. Sprites, sheets and anywhere else a
+program draws are all the same thing.
+
+A surface with a **grid** on it is a sprite sheet: it is cut into cells of a
+size, and drawn a cell at a time by number. One without a grid is a picture, and
+is drawn whole. The two are told apart by the surface itself, so there is no
+mistaking which a call means:
+
+```lua
+local tiles = loadpng("tiles", 16, 16)   -- a sheet of 16x16 cells
+local logo  = loadpng("logo")            -- a picture
+
+spr(tiles, 3, 100, 50)      -- sprite 3, at 100,50
+spr(logo, 10, 10)           -- the whole picture, at 10,10
+```
+
+Cells can be any size — 8x8, 16x16, whatever the artwork was drawn at — and the
+same pixels can be read at more than one size, because a grid is only a way of
+counting. **Sprites are numbered from zero**, left to right and then down.
 
 | Call | What it does |
 | --- | --- |
-| `sprite(art)` | Reads a sprite written as text. |
-| `surface(w, h)` | A blank one, every pixel transparent. |
-| `loadpng(path)` | Reads a PNG and reduces it to the palette. |
-| `spr(s, x, y, [flip_x], [flip_y])` | Draws it at its own size. |
-| `sspr(s, sx, sy, sw, sh, dx, dy, [dw], [dh], [flip_x], [flip_y])` | Draws part of it, stretched. |
-| `target([s])` | Sends later drawing to a surface, or back to the screen. Reports what it replaced. |
+| `sprite(art, [cell_w], [cell_h])` | Reads a sprite written as text. |
+| `surface(w, h, [cell_w], [cell_h])` | A blank one, every pixel transparent. |
+| `loadpng(name, [cell_w], [cell_h])` | Reads a PNG and reduces it to the palette. |
+| `spr(sheet, n, x, y, [w], [h], [flip_x], [flip_y])` | Sprite `n` of a sheet, spanning `w` by `h` cells. |
+| `spr(picture, x, y, [flip_x], [flip_y])` | A picture, whole, at a place. |
+| `spr(n, x, y, [w], [h], [flip_x], [flip_y])` | Sprite `n` of the current sheet. |
+| `sspr(surface, sx, sy, sw, sh, dx, dy, [dw], [dh], [flip_x], [flip_y])` | A rectangle of **pixels**, stretched. |
+| `sspr(sx, sy, sw, sh, dx, dy, …)` | The same, from the current sheet. |
+| `usesheet([s])` | Makes `s` the current sheet; reports the one it replaced. |
+| `sget(x, y)`, `sset(x, y, [c])` | Pixels of the current sheet. |
+| `target([s])` | Sends later drawing to a surface, or back to the screen. |
+| `s:grid()` | The cell size and how many cells, or `0, 0, 0` for a picture. |
+| `s:grid(w, [h])` | Cuts it into cells, and hands the surface back. |
+| `s:sprite(n, [w], [h])` | One sprite as a surface of its own. |
 | `s:width()`, `s:height()`, `s:size()` | How big it is. |
 | `s:get(x, y)`, `s:set(x, y, [c])` | One pixel, without the camera or the clip. |
 | `s:fill([c])`, `s:clone()` | All of it. |
+
+`w` and `h` in `spr` are counted in **cells**, not pixels: `spr(sheet, 3, x, y, 2, 2)`
+draws the four cells whose top left is sprite 3. `sspr` is the one that works in
+pixels, and it does not care whether the surface has a grid.
+
+`s:sprite(n)` is a **copy** of that cell, so drawing on it leaves the sheet
+alone.
+
+### The current sheet
+
+`usesheet()` puts one sheet in hand, and then `spr(n, x, y)` is Picotron's own
+call, with no sheet to name:
+
+```lua
+usesheet(loadpng("tiles", 8, 8))
+spr(3, 100, 50)
+sspr(0, 0, 16, 16, 40, 40)
+sset(4, 9, 12)            -- and the sheet's own pixels
+```
+
+A number as the first argument means the current sheet; a surface means that
+surface. There is one current sheet, as there is on Picotron, and asking for a
+sprite before there is one says so.
+
+The call is `usesheet` rather than `sheet` because `sheet` is what anyone would
+call the variable holding one, and a program that did would lose the call at the
+moment it needed it.
+
+### Art written out as text
 
 Art is one character a pixel: `0`-`9` and `a`-`f` for colours 0 to 15, `.` or a
 space for the transparent parts. The indentation the lines share is ignored, so
@@ -225,99 +279,25 @@ local coin = sprite[[
 Colour 0 is transparent to begin with; `palt` changes that. Drawing is always
 nearest-neighbour, so a sprite scaled up stays square-edged.
 
-An animation is frames side by side in one surface, drawn with `sspr`; see
-`examples/pico/sprites.lua`.
+An animation is frames side by side in one sheet, drawn either as sprite numbers
+or with `sspr`; see `examples/pico/sprites.lua` and `examples/pico/sheets.lua`.
 
 ### Maps
 
 ```lua
-map(cells, sheet, [x], [y], [tile_w], [tile_h])
+map(cells, sheet, [x], [y], [tile_w], [tile_h], [draw_zero])
 ```
 
-`cells` is a list of rows, each one a table of tile numbers or a string of hex
-digits. 0 is nothing at all, and 1 is the first tile of the sheet, counting
-left to right and then down. Tiles are 8 by 8 unless told otherwise.
+`cells` is a list of rows, each one a table of sprite numbers or a string of hex
+digits. Tiles are the size of the sheet's own cells unless told otherwise.
+
+**Sprite 0 is not drawn**, unless the last argument asks for it. That is what
+lets a `0` in a level mean open sky: leave the first cell of the sheet blank and
+nothing else has to be said. The numbers are ordinary sprite numbers otherwise,
+counted from zero as everywhere else.
 
 `examples/pico/platformer.lua` writes its level out as text, turns it into
 numbers once, and then uses that same grid both to draw with and to walk on.
-
-## Files
-
-A game is not only Lua: there is artwork, a sound or two, and usually a level
-or a table of numbers kept beside it.
-
-| Call | What it does |
-| --- | --- |
-| `loadpng(name)` | Reads a PNG and reduces it to the palette. |
-| `fetch(name)` | Reads a file and gives it back as a string. |
-| `sfx(name)`, `music(name)` | Below. |
-
-**Ask for what you want, not where it is.** A name with no extension on it is
-looked for with each extension the kind of resource uses, in each of the places
-a game keeps that kind of thing:
-
-| Asking for | Looked for as |
-| --- | --- |
-| `sfx("jump")` | `jump.wav`, `jump.ogg`, `sfx/jump.wav`, `sfx/jump.ogg`, `assets/sfx/jump.wav`, … |
-| `sfx("jump.wav")` | `jump.wav`, `sfx/jump.wav`, `assets/sfx/jump.wav`, `assets/jump.wav` |
-| `sfx("assets/sfx/jump.wav")` | exactly that, first |
-| `loadpng("player")` | `player.png`, `gfx/player.png`, `assets/gfx/player.png`, … |
-| `music("theme")` | `theme.ogg`, `theme.wav`, `music/theme.ogg`, `assets/music/…`, then the `sfx` folders |
-| `fetch("level1")` | `level1.txt`, `data/level1.txt`, `maps/level1.txt`, `assets/maps/…`, … |
-
-So a game can keep everything loose beside its main.lua, or in `gfx/`, `sfx/`,
-`music/`, `maps/`, or under `assets/`, and none of that has to be written down
-in the program. An absolute path is taken literally, and the answer is
-remembered, so asking again costs one read rather than a search.
-
-Underneath, every one of those looks in two places in turn: **inside the
-executable**, if the program was fused with `tlua fuse -play`, and then
-**beside the program's own main.lua**. A game started from somewhere else still
-finds its own artwork, and the same `loadpng("art.png")` works whether the game
-is a directory or a single file.
-
-`require` reads the same way, out of the attached archive before the disk, so a
-game split across modules ships as one file too. Lua's own `io` is untouched
-and always means the disk — which is what a program wants for a save file, and
-not what it wants for what it shipped with.
-
-When nothing is found, the error says every place it looked, because a search
-that fails silently is worse than no search at all:
-
-```
-no sound called "jump": tried jump.wav, jump.ogg, sfx/jump.wav, ...
-```
-
-## Sound
-
-| Call | What it does |
-| --- | --- |
-| `sfx(name, [channel], [volume])` | Plays a sound, and reports the channel it went to. |
-| `sfx(-1)`, `sfx(false)` | Stops everything; `sfx(-1, channel)` stops one. |
-| `music(name, [fade_ms], [volume])` | Starts the music, which loops. |
-| `music(-1, [fade_ms])` | Stops it, fading out over that many milliseconds. |
-| `music()` | What is playing, or nothing. |
-| `volume([v])` | How loud it all is, from 0 to 1; reports what it was. |
-
-WAV and Ogg Vorbis, whatever their sample rate — both are resampled on the way
-in and each is decoded once however often it is played.
-
-There are eight channels for effects. Without a channel the sound goes to one
-that has finished; with one it takes that channel, stopping whatever was on it.
-The music is separate and does not use them up.
-
-```lua
-if btnp("x") then sfx("jump") end       -- sfx/jump.wav, wherever it is
-if hit then sfx("hurt", -1, 0.4) end    -- quieter, on any free channel
-music("theme", 1000)                    -- fading in over a second
-```
-
-A sound that cannot be found comes back as nothing with a message, rather than
-stopping the game: a missing noise is not worth dying over.
-
-Sounds are files, not a tracker. Picotron's sfx and music editors have no
-counterpart here, and nothing generates a waveform: what plays is what was
-recorded somewhere else.
 
 ## Input## Input
 
@@ -468,8 +448,10 @@ gives the garbage collector to do is its own.
   rather than packing two colours into one number, because 64 colours do not
   fit in a nibble each.
 - Triangles, `held()`, `typed()`, `textwidth()`, `clamp()`, `loadpng()`,
-  `fetch()`, `volume()`, the whole of `palette()`, and looking a resource up by
-  name are additions.
+  `fetch()`, `volume()`, `usesheet()`, the whole of `palette()`, and looking a
+  resource up by name are additions.
+- A sheet's cells are a uniform grid. Picotron's sprites can each have their own
+  size, which is a property of its `.gfx` files rather than of a PNG.
 
 ## Shipping a game
 

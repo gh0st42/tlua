@@ -42,6 +42,49 @@ func (r *Runtime) installSurfaceType() {
 			L.Push(r.newSurface(checkSurface(L, 1).Clone()))
 			return 1
 		},
+
+		// grid() says how the surface is cut into sprites: the size of a cell
+		// and how many there are, or nothing at all for a plain picture.
+		// grid(w, h) cuts it, and gives the surface back so that the two can
+		// be said in one breath.
+		"grid": func(L *lua.LState) int {
+			s := checkSurface(L, 1)
+			if isNone(L, 2) {
+				w, h, count := s.Grid()
+				L.Push(lua.LNumber(w))
+				L.Push(lua.LNumber(h))
+				L.Push(lua.LNumber(count))
+				return 3
+			}
+			s.SetGrid(coord(L, 2), optCoord(L, 3, coord(L, 2)))
+			L.Push(L.Get(1))
+			return 1
+		},
+
+		// sprite(n) is one cell of a sheet as a surface of its own.
+		//
+		// It is a copy, which is the simple thing: changing it does not change
+		// the sheet, and it can be drawn on. A window onto the sheet's own
+		// pixels would save the copying and let target() draw into a cell, but
+		// it would mean teaching every drawing loop about a row length that is
+		// not the surface's width. If that is ever wanted, this is where it
+		// goes.
+		"sprite": func(L *lua.LState) int {
+			s := checkSurface(L, 1)
+			x, y, w, h, ok := s.Cell(L.CheckInt(2), optCoord(L, 3, 1), optCoord(L, 4, 1))
+			if !ok {
+				L.Push(lua.LNil)
+				return 1
+			}
+			out := pico.NewSurface(w, h)
+			for row := 0; row < h; row++ {
+				for col := 0; col < w; col++ {
+					out.Set(col, row, s.Get(x+col, y+row))
+				}
+			}
+			L.Push(r.newSurface(out))
+			return 1
+		},
 	}))
 
 	r.L.SetField(mt, "__tostring", r.L.NewFunction(func(L *lua.LState) int {
@@ -81,7 +124,9 @@ func (r *Runtime) installSurfaces() {
 			if w < 0 || h < 0 || w*h > maxSurfacePixels {
 				L.RaiseError("surface: %dx%d is not a size a surface can be", w, h)
 			}
-			L.Push(r.newSurface(pico.NewSurface(w, h)))
+			s := pico.NewSurface(w, h)
+			setGrid(L, s, 3)
+			L.Push(r.newSurface(s))
 			return 1
 		},
 
@@ -92,6 +137,7 @@ func (r *Runtime) installSurfaces() {
 			if err != nil {
 				L.RaiseError("%s", err.Error())
 			}
+			setGrid(L, s, 2)
 			L.Push(r.newSurface(s))
 			return 1
 		},
@@ -106,6 +152,7 @@ func (r *Runtime) installSurfaces() {
 				var s *pico.Surface
 				s, err = pico.DecodePNG(data, r.Vid.Palette())
 				if err == nil {
+					setGrid(L, s, 2)
 					L.Push(r.newSurface(s))
 					return 1
 				}
@@ -131,22 +178,75 @@ func (r *Runtime) installSurfaces() {
 			return 1
 		},
 
+		// spr draws a sprite, in whichever of the three ways it was asked.
+		//
+		//	spr(n, x, y, [w], [h], [flip_x], [flip_y])         the current sheet
+		//	spr(sheet, n, x, y, [w], [h], [flip_x], [flip_y])  a sheet by name
+		//	spr(picture, x, y, [flip_x], [flip_y])             a whole picture
+		//
+		// The first is Picotron's own call. The second is the same thing with
+		// the sheet said out loud, because there is more than one here. The
+		// third is what a surface that was never cut into sprites means, and
+		// there is no mistaking which is which: a sheet takes a sprite number
+		// and a picture takes a place.
 		"spr": func(L *lua.LState) int {
-			s := checkSurface(L, 1)
-			r.Vid.Spr(s, coord(L, 2), coord(L, 3), L.OptBool(4, false), L.OptBool(5, false))
+			sheet, at := r.spriteSheet(L, "spr")
+			if sheet == nil {
+				s := checkSurface(L, 1)
+				r.Vid.Spr(s, coord(L, 2), coord(L, 3), L.OptBool(4, false), L.OptBool(5, false))
+				return 0
+			}
+			n := L.CheckInt(at)
+			r.Vid.SprCell(sheet, n,
+				coord(L, at+1), coord(L, at+2),
+				optCoord(L, at+3, 1), optCoord(L, at+4, 1),
+				L.OptBool(at+5, false), L.OptBool(at+6, false))
 			return 0
 		},
 
-		// sspr(sheet, sx, sy, sw, sh, dx, dy, [dw, dh], [flip_x], [flip_y])
-		// takes a rectangle of a sheet and stretches it to fit.
+		// sspr takes a rectangle of pixels — not of cells — and stretches it
+		// to fit, either from a surface said out loud or from the current
+		// sheet:
+		//
+		//	sspr(sx, sy, sw, sh, dx, dy, [dw, dh], [flip_x], [flip_y])
+		//	sspr(sheet, sx, sy, sw, sh, dx, dy, [dw, dh], [flip_x], [flip_y])
 		"sspr": func(L *lua.LState) int {
-			s := checkSurface(L, 1)
-			sx, sy := coord(L, 2), coord(L, 3)
-			sw, sh := coord(L, 4), coord(L, 5)
-			dx, dy := coord(L, 6), coord(L, 7)
-			r.Vid.SSpr(s, sx, sy, sw, sh, dx, dy,
-				optCoord(L, 8, sw), optCoord(L, 9, sh),
-				L.OptBool(10, false), L.OptBool(11, false))
+			if _, ok := L.Get(1).(*lua.LUserData); ok {
+				return r.stretch(L, checkSurface(L, 1), 2)
+			}
+			return r.stretch(L, r.currentSheet(L, "sspr"), 1)
+		},
+
+		// usesheet(s) makes a sheet the one that spr(n, ...) and sget() mean,
+		// the way Picotron has one spritesheet in hand at a time. It reports
+		// the sheet it replaced, and usesheet() on its own asks without
+		// changing anything.
+		//
+		// The name is not "sheet" because that is what anyone would call the
+		// variable holding one, and a program that did would lose the call it
+		// needed at the moment it needed it.
+		"usesheet": func(L *lua.LState) int {
+			was := r.currentValue
+			if !isNone(L, 1) {
+				s := checkSurface(L, 1)
+				if !s.Gridded() {
+					L.ArgError(1, "this surface is a picture, not a sheet: give it a grid first")
+				}
+				r.current, r.currentValue = s, L.Get(1)
+			}
+			L.Push(was)
+			return 1
+		},
+
+		// sget and sset read and write the pixels of the current sheet, which
+		// is where a program keeps the artwork it is working on.
+		"sget": func(L *lua.LState) int {
+			L.Push(lua.LNumber(r.currentSheet(L, "sget").Get(coord(L, 1), coord(L, 2))))
+			return 1
+		},
+
+		"sset": func(L *lua.LState) int {
+			r.currentSheet(L, "sset").Set(coord(L, 1), coord(L, 2), r.optColor(L, 3, r.Vid.Pen()))
 			return 0
 		},
 
@@ -166,28 +266,41 @@ func (r *Runtime) installSurfaces() {
 			return 1
 		},
 
-		// map(cells, sheet, x, y, [tile_w, tile_h]) draws a grid of tiles cut
-		// from a sheet. A row of cells is either a table of tile numbers or a
-		// string of hex digits, and 0 means nothing at all, so a level can be
-		// written out in the program as readably as a sprite can.
+		// map(cells, sheet, [x], [y], [tile_w], [tile_h], [draw_zero]) draws a
+		// grid of sprites. A row of cells is either a table of sprite numbers
+		// or a string of hex digits, so a level can be written out in the
+		// program as readably as a sprite can.
+		//
+		// The numbers are sprite numbers, counted from zero as everywhere
+		// else. Sprite 0 is left undrawn unless the last argument asks for it,
+		// which is what lets a dot in a level mean empty sky: leave the first
+		// cell of the sheet blank and nothing else has to be said.
+		//
+		// Tiles are the size of the sheet's own cells unless told otherwise.
 		"map": func(L *lua.LState) int {
 			cells := L.CheckTable(1)
 			sheet := checkSurface(L, 2)
 			dx, dy := optCoord(L, 3, 0), optCoord(L, 4, 0)
-			tw, th := optCoord(L, 5, 8), optCoord(L, 6, 8)
+
+			tw, th, _ := sheet.Grid()
+			if tw == 0 {
+				tw, th = 8, 8
+			}
+			tw, th = optCoord(L, 5, tw), optCoord(L, 6, th)
 			if tw <= 0 || th <= 0 {
 				L.ArgError(5, "a tile cannot be smaller than a pixel")
 			}
+			drawZero := L.OptBool(7, false)
 			across := max(sheet.W/tw, 1)
 
 			for row := 1; row <= cells.Len(); row++ {
 				y := dy + (row-1)*th
 				forEachTile(L, cells.RawGetInt(row), func(col, tile int) {
-					if tile <= 0 {
+					if tile < 0 || (tile == 0 && !drawZero) {
 						return
 					}
-					sx := ((tile - 1) % across) * tw
-					sy := ((tile - 1) / across) * th
+					sx := (tile % across) * tw
+					sy := (tile / across) * th
 					r.Vid.SSpr(sheet, sx, sy, tw, th, dx+col*tw, y, tw, th, false, false)
 				})
 			}
@@ -235,4 +348,53 @@ func hexDigit(r rune) int {
 		return int(r-'A') + 10
 	}
 	return 0
+}
+
+// stretch is the body of sspr, once it is known which surface is meant and
+// where its own arguments start.
+func (r *Runtime) stretch(L *lua.LState, s *pico.Surface, at int) int {
+	sx, sy := coord(L, at), coord(L, at+1)
+	sw, sh := coord(L, at+2), coord(L, at+3)
+	dx, dy := coord(L, at+4), coord(L, at+5)
+	r.Vid.SSpr(s, sx, sy, sw, sh, dx, dy,
+		optCoord(L, at+6, sw), optCoord(L, at+7, sh),
+		L.OptBool(at+8, false), L.OptBool(at+9, false))
+	return 0
+}
+
+// spriteSheet works out which of spr's three forms was used: it reports the
+// sheet a sprite number is to be read from and where that number sits in the
+// arguments, or nothing at all when a whole picture was handed over.
+func (r *Runtime) spriteSheet(L *lua.LState, called string) (*pico.Surface, int) {
+	switch L.Get(1).(type) {
+	case lua.LNumber:
+		return r.currentSheet(L, called), 1
+	case *lua.LUserData:
+		if s := checkSurface(L, 1); s.Gridded() {
+			return s, 2
+		}
+		return nil, 0
+	}
+	L.ArgError(1, "a sprite number or a surface expected")
+	return nil, 0
+}
+
+// currentSheet reports the sheet a program said to work on, complaining in a
+// way that says what to do about it when there is none.
+func (r *Runtime) currentSheet(L *lua.LState, called string) *pico.Surface {
+	if r.current == nil {
+		L.RaiseError("%s: there is no current sheet; hand one to sheet() first, "+
+			"or name the one you mean", called)
+	}
+	return r.current
+}
+
+// setGrid reads an optional cell size from a call that makes a surface, so
+// that a sheet can be cut as it is loaded.
+func setGrid(L *lua.LState, s *pico.Surface, at int) {
+	if isNone(L, at) {
+		return
+	}
+	w := coord(L, at)
+	s.SetGrid(w, optCoord(L, at+1, w))
 }

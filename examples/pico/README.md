@@ -23,6 +23,7 @@ tlua fuse -play -o snake examples/pico/snake.lua   # one executable, no tlua
 | [palette.lua](palette.lua) | Whichever palette is loaded, with the numbers; switches to the 256 VGA colours, and fades by changing them. |
 | [shapes.lua](shapes.lua) | Every drawing call, rounded rectangles included, and what the dither patterns of `fillp` do. |
 | [sprites.lua](sprites.lua) | Sprites written as text: drawing, flipping, stretching, recolouring, transparency. |
+| [sheets.lua](sheets.lua) | Sprite sheets of any cell size, drawn by number, and the current sheet. |
 | [bounce.lua](bounce.lua) | A list of things that move: `add`, `all`, and the shape of most games here. |
 | [input.lua](input.lua) | Buttons, keys, the mouse and the wheel, all shown as they are pressed. |
 | [starfield.lua](starfield.lua) | Three hundred stars, one `pset` each, and perspective by division. |

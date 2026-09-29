@@ -84,8 +84,18 @@ tlua play -scale 3 game.lua     # three screen pixels to a console pixel
 tlua play -fullscreen game.lua
 ```
 
-Sprites are written out as text in the program itself, so a game is one file
-with nothing beside it:
+A sheet of sprites is a surface with a cell size on it — 8x8, 16x16, whatever
+the artwork was drawn at — and its sprites are drawn by number:
+
+```lua
+local tiles = loadpng("tiles", 16, 16)
+spr(tiles, 3, 100, 50)        -- sprite 3
+usesheet(tiles)
+spr(3, 100, 50)               -- the same, Picotron's own spelling
+```
+
+Sprites can also be written out as text in the program itself, so a game is one
+file with nothing beside it:
 
 ```lua
 local coin = sprite[[

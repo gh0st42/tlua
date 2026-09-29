@@ -39,6 +39,19 @@ function Surface:fill(colour) end
 ---@return Surface
 function Surface:clone() end
 
+--- How the surface is cut into sprites: the size of a cell and how many there
+--- are, or 0, 0, 0 for a picture that was never cut up.
+---@return integer cell_w, integer cell_h, integer count
+function Surface:grid() end
+
+--- One sprite of the sheet as a surface of its own — a copy, so drawing on it
+--- leaves the sheet alone. Nothing, for a number that is not a sprite on it.
+---@param n integer counted from zero
+---@param w? integer cells wide, 1 by default
+---@param h? integer cells tall, 1 by default
+---@return Surface|nil
+function Surface:sprite(n, w, h) end
+
 --- Called once before the first frame.
 function _init() end
 
@@ -241,23 +254,31 @@ function rgb(colour) end
 ---@return integer width, integer height
 function vid(mode) end
 
---- A new blank surface, every pixel transparent.
+--- A new blank surface, every pixel transparent. With a cell size it is a sheet.
 ---@param w integer
 ---@param h integer
+---@param cell_w? integer
+---@param cell_h? integer square if left out
 ---@return Surface
-function surface(w, h) end
+function surface(w, h, cell_w, cell_h) end
 
 --- Reads a sprite written out as text: a hex digit per pixel, '.' or a space for
---- the transparent parts, one row per line.
+--- the transparent parts, one row per line. With a cell size it is a sheet of
+--- sprites rather than one picture.
 ---@param art string
+---@param cell_w? integer
+---@param cell_h? integer square if left out
 ---@return Surface
-function sprite(art) end
+function sprite(art, cell_w, cell_h) end
 
 --- Reads a PNG and reduces it to the palette. Looks inside the executable first
 --- when the game was fused with `tlua fuse -play`, then beside the program.
+--- With a cell size the picture is a sheet of sprites.
 ---@param path string
+---@param cell_w? integer
+---@param cell_h? integer square if left out
 ---@return Surface|nil surface, string? err
-function loadpng(path) end
+function loadpng(path, cell_w, cell_h) end
 
 --- Reads a file and gives it back as a string: a level, a table of numbers,
 --- whatever a game keeps beside itself. Reads the same two places loadpng does.
@@ -265,15 +286,25 @@ function loadpng(path) end
 ---@return string|nil contents, string? err
 function fetch(path) end
 
---- Draws a surface at its own size.
----@param s Surface
----@param x number
----@param y number
+--- Draws a sprite, in whichever of three ways it is asked:
+---
+---   spr(n, x, y, [w], [h], [flip_x], [flip_y])         from the current sheet
+---   spr(sheet, n, x, y, [w], [h], [flip_x], [flip_y])  from a sheet by name
+---   spr(picture, x, y, [flip_x], [flip_y])             a whole picture
+---
+--- Sprites are counted from zero, and w and h are counted in cells.
+---@param sheet Surface|integer a sheet, a picture, or a sprite number
+---@param n integer|number a sprite number, or x for a picture
+---@param x number|integer
+---@param y? number
+---@param w? integer cells wide
+---@param h? integer cells tall
 ---@param flip_x? boolean
 ---@param flip_y? boolean
-function spr(s, x, y, flip_x, flip_y) end
+function spr(sheet, n, x, y, w, h, flip_x, flip_y) end
 
---- Draws part of a surface, stretched to fill the destination.
+--- Draws a rectangle of pixels — not of cells — stretched to fill the
+--- destination. Without a surface in front, it comes from the current sheet.
 ---@param s Surface
 ---@param sx number
 ---@param sy number
@@ -293,15 +324,42 @@ function sspr(s, sx, sy, sw, sh, dx, dy, dw, dh, flip_x, flip_y) end
 ---@return Surface|nil previous
 function target(s) end
 
---- Draws a grid of tiles cut from a sheet. A row of cells is a table of tile
---- numbers or a string of hex digits, where 0 is nothing at all.
+--- Makes a sheet the one that spr(n, ...), sspr(...) and sget() mean, the way
+--- Picotron has one spritesheet in hand. Reports the one it replaced; with no
+--- argument it asks without changing anything.
+---
+--- It is not called "sheet" because that is what the variable holding one is
+--- usually called.
+---@param s? Surface a surface with a grid on it
+---@return Surface|nil previous
+function usesheet(s) end
+
+--- Reads a pixel of the current sheet.
+---@param x integer
+---@param y integer
+---@return integer colour
+function sget(x, y) end
+
+--- Writes a pixel of the current sheet.
+---@param x integer
+---@param y integer
+---@param colour? integer defaults to the pen colour
+function sset(x, y, colour) end
+
+--- Draws a grid of sprites. A row of cells is a table of sprite numbers or a
+--- string of hex digits.
+---
+--- Sprite 0 is not drawn unless draw_zero says so, which is what lets a 0 in a
+--- level mean open sky. Tiles are the size of the sheet's own cells unless told
+--- otherwise.
 ---@param cells table
 ---@param sheet Surface
 ---@param x? number
 ---@param y? number
----@param tile_w? integer defaults to 8
----@param tile_h? integer defaults to 8
-function map(cells, sheet, x, y, tile_w, tile_h) end
+---@param tile_w? integer defaults to the sheet's cell width
+---@param tile_h? integer defaults to the sheet's cell height
+---@param draw_zero? boolean draw sprite 0 as well
+function map(cells, sheet, x, y, tile_w, tile_h, draw_zero) end
 
 --- Whether a button is held. 0 to 5 are left, right, up, down, O and X, which
 --- can also be named. With no arguments, whether anything at all is held.

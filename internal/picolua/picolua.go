@@ -114,6 +114,12 @@ type Runtime struct {
 	// that target() can hand back what it replaced.
 	currentTarget lua.LValue
 
+	// current is the sheet spr(n, ...) and sget() mean, as Picotron has one
+	// spritesheet in hand; currentValue is the same thing as Lua sees it, for
+	// handing back.
+	current      *pico.Surface
+	currentValue lua.LValue
+
 	surfaceMeta *lua.LTable
 }
 
@@ -145,6 +151,7 @@ func New(L *lua.LState, opts Options) *Runtime {
 		rng:           rand.New(rand.NewSource(seed)),
 		window:        Window{Title: opts.Title},
 		currentTarget: lua.LNil,
+		currentValue:  lua.LNil,
 	}
 	r.clock = opts.Clock
 	if r.clock == nil {

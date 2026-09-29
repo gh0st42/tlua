@@ -246,3 +246,146 @@ func TestFromImageReducesToThePalette(t *testing.T) {
 		t.Errorf("transparent pixel became %d, want 0", got)
 	}
 }
+
+func TestASheetIsCutIntoCells(t *testing.T) {
+	// Twenty across by sixteen down, in cells of eight: two cells across and
+	// two down, with four pixels along the right edge belonging to nothing.
+	s := NewSurface(20, 16)
+	if s.Gridded() {
+		t.Error("a surface starts out as a picture, not a sheet")
+	}
+	s.SetGrid(8, 8)
+
+	w, h, count := s.Grid()
+	if w != 8 || h != 8 || count != 4 {
+		t.Errorf("grid is %dx%d with %d cells, want 8x8 with 4", w, h, count)
+	}
+	if got := s.Across(); got != 2 {
+		t.Errorf("%d cells fit across, want 2", got)
+	}
+
+	cases := []struct {
+		n, wide, tall int
+		x, y, cw, ch  int
+	}{
+		{0, 1, 1, 0, 0, 8, 8},
+		{1, 1, 1, 8, 0, 8, 8},
+		{2, 1, 1, 0, 8, 8, 8},
+		{3, 1, 1, 8, 8, 8, 8},
+		{0, 2, 2, 0, 0, 16, 16}, // spanning widens the rectangle
+		{1, 2, 1, 8, 0, 16, 8},  // and may run off the sheet, which is empty
+	}
+	for _, c := range cases {
+		x, y, cw, ch, ok := s.Cell(c.n, c.wide, c.tall)
+		if !ok {
+			t.Errorf("sprite %d is not on the sheet", c.n)
+			continue
+		}
+		if x != c.x || y != c.y || cw != c.cw || ch != c.ch {
+			t.Errorf("sprite %d (%dx%d cells) is %d,%d %dx%d; want %d,%d %dx%d",
+				c.n, c.wide, c.tall, x, y, cw, ch, c.x, c.y, c.cw, c.ch)
+		}
+	}
+
+	for _, n := range []int{-1, 4, 99} {
+		if _, _, _, _, ok := s.Cell(n, 1, 1); ok {
+			t.Errorf("sprite %d should not be on a sheet of four", n)
+		}
+	}
+}
+
+func TestASheetWithoutAGridHasNoSprites(t *testing.T) {
+	s := NewSurface(16, 16)
+	if _, _, count := s.Grid(); count != 0 {
+		t.Errorf("a picture holds %d sprites", count)
+	}
+	if _, _, _, _, ok := s.Cell(0, 1, 1); ok {
+		t.Error("a picture has no sprite 0")
+	}
+
+	s.SetGrid(8, 8)
+	s.SetGrid(0, 0) // and can be made a picture again
+	if s.Gridded() {
+		t.Error("the grid was not taken off")
+	}
+}
+
+func TestACellOfNoSizeIsRefused(t *testing.T) {
+	s := NewSurface(16, 16)
+	s.SetGrid(-4, 8)
+	if s.Gridded() {
+		t.Error("a cell cannot be smaller than a pixel")
+	}
+}
+
+func TestTheGridSurvivesCopyingAndResizing(t *testing.T) {
+	s := NewSurface(16, 16)
+	s.SetGrid(8, 8)
+
+	if w, h, _ := s.Clone().Grid(); w != 8 || h != 8 {
+		t.Errorf("a copy has a grid of %dx%d", w, h)
+	}
+
+	s.Resize(32, 16)
+	w, h, count := s.Grid()
+	if w != 8 || h != 8 || count != 8 {
+		t.Errorf("after resizing, the grid is %dx%d with %d cells, want 8x8 with 8", w, h, count)
+	}
+}
+
+func TestDrawingOneSpriteOfASheet(t *testing.T) {
+	sheet, err := ParseSprite(`
+		1122
+		1122
+		3344
+		3344`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sheet.SetGrid(2, 2)
+
+	c := New(4, 2)
+	c.SprCell(sheet, 0, 0, 0, 1, 1, false, false) // the first cell
+	c.SprCell(sheet, 3, 2, 0, 1, 1, false, false) // and the last
+	wantScreen(t, c, `
+		1144
+		1144`)
+
+	// A sprite that is not there draws nothing, rather than a sliver of
+	// whatever is next to it.
+	c.Cls(0)
+	c.SprCell(sheet, 9, 0, 0, 1, 1, false, false)
+	c.SprCell(nil, 0, 0, 0, 1, 1, false, false)
+	wantScreen(t, c, `
+		....
+		....`)
+}
+
+func TestDrawingASpriteThatSpansCells(t *testing.T) {
+	sheet, err := ParseSprite(`
+		1122
+		1122
+		3344
+		3344`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sheet.SetGrid(2, 2)
+
+	c := New(4, 4)
+	c.SprCell(sheet, 0, 0, 0, 2, 2, false, false) // all four cells at once
+	wantScreen(t, c, `
+		1122
+		1122
+		3344
+		3344`)
+
+	// Flipping a span turns the whole block over, not each cell.
+	c.Cls(0)
+	c.SprCell(sheet, 0, 0, 0, 2, 2, true, false)
+	wantScreen(t, c, `
+		2211
+		2211
+		4433
+		4433`)
+}

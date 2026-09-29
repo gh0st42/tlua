@@ -7,22 +7,24 @@
 local w, h = screen()
 local tile = 8
 
--- Four tiles side by side in one sheet: earth, grass, stone, coin. map() cuts
--- them out by number, counting from 1 in reading order.
-local tiles = sprite[[
-	444444443333333366666666........
-	445444443333333365555556..9999..
-	444444444434443465555556.9aaaa9.
-	444445444444444465555556.9a99a9.
-	444444444454444465555556.9a99a9.
-	454444444444444465555556.9aaaa9.
-	444444444444454465555556..9999..
-	444444544444444466666666........
-]]
+-- Five cells of eight pixels: nothing, earth, grass, stone, coin. The first
+-- is left blank on purpose, because map() does not draw sprite 0 — which is
+-- what lets a dot in the level below mean open sky.
+local tiles = sprite([[
+	........444444443333333366666666........
+	........445444443333333365555556..9999..
+	........444444444434443465555556.9aaaa9.
+	........444445444444444465555556.9a99a9.
+	........444444444454444465555556.9a99a9.
+	........454444444444444465555556.9aaaa9.
+	........444444444444454465555556..9999..
+	........444444544444444466666666........
+]], 8, 8)
 
 local EARTH, GRASS, STONE, COIN = 1, 2, 3, 4
 
--- The level as it starts: 1 earth, 2 grass, 3 stone, 4 coin, a dot for air.
+-- The level as it starts, written as sprite numbers: 1 earth, 2 grass, 3 stone,
+-- 4 coin, and a dot for the blank sprite 0, which is air.
 local layout = {
 	"................................................................................",
 	"................................................................................",
@@ -197,7 +199,7 @@ function _draw()
 		ovalfill(x + 55, 196, x + 175, 268, 27) -- nearer ones, brighter
 	end
 
-	map(cells, tiles, 0, 0, tile, tile)
+	map(cells, tiles) -- the tile size comes from the sheet
 
 	-- The player is a box with a face on it, which is all a placeholder needs.
 	rectfill(p.x, p.y, p.x + p.w - 1, p.y + p.h - 1, 14)
