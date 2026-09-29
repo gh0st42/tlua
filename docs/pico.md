@@ -251,6 +251,7 @@ numbers once, and then uses that same grid both to draw with and to walk on.
 | `key([name])`, `keyp(name)` | The keyboard directly, by name. |
 | `mouse()` | x, y, buttons, wheel. |
 | `mousebtn([button], [pressed])` | 1 left, 2 right, 3 middle. |
+| `btnkey(button, [player])` | What the key that works a button is called on this keyboard. |
 | `typed()` | What was typed this tick. |
 
 Buttons are 0 to 5: left, right, up, down, O and X, and each can be named
@@ -262,6 +263,20 @@ second after that, which is what a menu written against `btnp` expects.
 The keyboard is two pads: player one has the arrow keys with Z, X, C and V;
 player two has E, S, D, F with shift, A, Q and tab. Pads plugged in are players
 one to four.
+
+**Those are places on the keyboard, not what is printed on the keys.** A German
+keyboard has Y where an American one has Z, so the key under a left hand says
+something different — and both of those places work the O button for that
+reason. A program telling somebody which key to press should ask rather than
+guess:
+
+```lua
+print("press " .. btnkey("o") .. " to jump")
+```
+
+`btnkey` gives the label from the keyboard actually in use: `Z` on one, `Y` on
+another. Before the window opens, and where the system will not say, it gives
+the name of the place instead.
 
 Key names are the plain ones — `"left"`, `"space"`, `"escape"`, `"enter"`,
 `"tab"`, `"f1"`, a single letter or digit — and `"shift"`, `"ctrl"`, `"alt"`

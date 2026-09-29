@@ -17,6 +17,55 @@ const (
 	MouseMiddle
 )
 
+// ButtonKeys is the keyboard as two game pads, laid out the way PICO-8 lays it
+// out: player one on the arrow keys with Z and X beside them, player two on
+// ESDF with the keys around it. Players three and four are pads only.
+//
+// The names are the keys' places on the keyboard, not what is printed on them.
+// The two are the same on a US keyboard and often are not elsewhere: on a
+// German one the key in the Z place is labelled Y. Both of those are bound to
+// the O button for that reason, so the pair of keys under a left hand works
+// whichever way round they are printed. BtnKeyLabels says what a key is called
+// on the keyboard actually in front of the person.
+var ButtonKeys = [Players][Buttons][]string{
+	0: {
+		BtnLeft:  {"arrowleft"},
+		BtnRight: {"arrowright"},
+		BtnUp:    {"arrowup"},
+		BtnDown:  {"arrowdown"},
+		BtnO:     {"z", "y", "c", "n"},
+		BtnX:     {"x", "v", "m"},
+	},
+	1: {
+		BtnLeft:  {"s"},
+		BtnRight: {"f"},
+		BtnUp:    {"e"},
+		BtnDown:  {"d"},
+		BtnO:     {"shiftleft", "a"},
+		BtnX:     {"tab", "q"},
+	},
+}
+
+// ButtonsHeld works out which console buttons a set of held keys amounts to.
+// The host reports the keys; which of them are buttons is the console's own
+// business, and this is where that is decided.
+func ButtonsHeld(keys []string) [Players][Buttons]bool {
+	var out [Players][Buttons]bool
+	for _, name := range keys {
+		name = strings.ToLower(name)
+		for player := range ButtonKeys {
+			for button, bound := range ButtonKeys[player] {
+				for _, k := range bound {
+					if k == name {
+						out[player][button] = true
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
 // Frame is the raw input state for one tick, as the host reads it off the
 // keyboard, the mouse and any pads.
 type Frame struct {

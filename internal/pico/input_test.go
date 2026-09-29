@@ -184,3 +184,57 @@ func TestTextIsWhatWasTypedThisTick(t *testing.T) {
 		t.Errorf("text should not carry over, got %q", got)
 	}
 }
+
+func TestKeysAddUpToButtons(t *testing.T) {
+	cases := []struct {
+		keys           []string
+		player, button int
+	}{
+		{[]string{"arrowleft"}, 0, BtnLeft},
+		{[]string{"z"}, 0, BtnO},
+		{[]string{"c"}, 0, BtnO},
+		{[]string{"x"}, 0, BtnX},
+		{[]string{"Z"}, 0, BtnO}, // however it is spelled
+		{[]string{"s"}, 1, BtnLeft},
+		{[]string{"tab"}, 1, BtnX},
+	}
+	for _, c := range cases {
+		got := ButtonsHeld(c.keys)
+		if !got[c.player][c.button] {
+			t.Errorf("%v did not press player %d's button %d", c.keys, c.player, c.button)
+		}
+		// And nothing else.
+		for p := range got {
+			for b := range got[p] {
+				if got[p][b] && !(p == c.player && b == c.button) {
+					t.Errorf("%v also pressed player %d's button %d", c.keys, p, b)
+				}
+			}
+		}
+	}
+
+	if got := ButtonsHeld([]string{"j", "escape"}); got != ([Players][Buttons]bool{}) {
+		t.Error("keys that are not buttons should press nothing")
+	}
+}
+
+func TestBothKeysOfThePairWorkTheOButton(t *testing.T) {
+	// The two keys beside each other under a left hand are Z and Y, printed
+	// one way round on a US keyboard and the other way round on a German one.
+	// Whichever it says, the key in that place has to jump.
+	for _, key := range []string{"z", "y"} {
+		if !ButtonsHeld([]string{key})[0][BtnO] {
+			t.Errorf("%q should work the O button", key)
+		}
+	}
+}
+
+func TestEveryButtonHasAKeyToPressIt(t *testing.T) {
+	for player := 0; player < 2; player++ {
+		for button := 0; button < Buttons; button++ {
+			if len(ButtonKeys[player][button]) == 0 {
+				t.Errorf("player %d's button %d has no key", player, button)
+			}
+		}
+	}
+}

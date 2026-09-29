@@ -99,10 +99,33 @@ func (r *Runtime) installInput() {
 			return 1
 		},
 
+		// btnkey(button, [player]) is the key that works a button, named as it
+		// is printed on the keyboard being used. A program telling somebody
+		// which key to press has to ask, because the console binds keys by
+		// where they are rather than by what they say, and the two differ on
+		// most keyboards that are not American.
+		"btnkey": func(L *lua.LState) int {
+			L.Push(lua.LString(r.label(L.OptInt(2, 0), button(L, 1))))
+			return 1
+		},
+
 		// typed() is what was typed this tick, for a program asking for a name.
 		"typed": func(L *lua.LState) int {
 			L.Push(lua.LString(r.In.Text()))
 			return 1
 		},
 	})
+}
+
+// defaultButtonLabel names a button's key by its place, for a runtime with no
+// window behind it to ask about the keyboard.
+func defaultButtonLabel(player, btn int) string {
+	if player < 0 || player >= pico.Players || btn < 0 || btn >= pico.Buttons {
+		return ""
+	}
+	keys := pico.ButtonKeys[player][btn]
+	if len(keys) == 0 {
+		return ""
+	}
+	return strings.ToUpper(keys[0])
 }

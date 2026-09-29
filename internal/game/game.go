@@ -197,9 +197,10 @@ func load(opts Options) (*session, error) {
 
 	s := &session{opts: opts, interp: in, script: script}
 	s.rt = picolua.New(in.L, picolua.Options{
-		Title: title,
-		Out:   os.Stdout,
-		FPS:   ebiten.ActualFPS,
+		Title:       title,
+		Out:         os.Stdout,
+		FPS:         ebiten.ActualFPS,
+		ButtonLabel: buttonLabel,
 	})
 	return s, nil
 }

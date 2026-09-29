@@ -40,6 +40,11 @@ The keyboard is two pads. Player one has the arrow keys with Z, X, C and V
 beside them; player two has E, S, D and F with shift, A, Q and tab. Any game
 pads plugged in are players one to four.
 
+Those are places rather than printed letters: on a German keyboard the key in
+the Z place says Y, and both of those places work the O button because of it.
+The examples say which key to press by asking `btnkey()`, so what they print is
+what is on the keyboard in front of you.
+
 `alt-enter` or `F11` fills the screen, `ctrl-D` shows the frame rate, `ctrl-Q`
 quits, and `ctrl-C` in the terminal closes the window too. Those keys belong to
 the window, so a program never sees them.

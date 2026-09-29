@@ -71,7 +71,8 @@ function _draw()
 		end
 	end
 
-	local label = name .. ": " .. size .. " colours   X changes it   hold O to fade"
+	local label = name .. ": " .. size .. " colours   " ..
+		btnkey("x") .. " changes it   hold " .. btnkey("o") .. " to fade"
 	print(label, 3, h - 8, 0)
 	print(label, 2, h - 9, 7)
 end

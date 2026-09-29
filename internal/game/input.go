@@ -9,26 +9,44 @@ import (
 	"tlua/internal/pico"
 )
 
-// buttonKeys is the keyboard as two game pads, the way PICO-8 lays it out:
-// player one on the arrow keys with Z and X beside them, player two on ESDF
-// with the keys around it. Players three and four are pads only.
-var buttonKeys = [pico.Players][pico.Buttons][]ebiten.Key{
-	0: {
-		pico.BtnLeft:  {ebiten.KeyArrowLeft},
-		pico.BtnRight: {ebiten.KeyArrowRight},
-		pico.BtnUp:    {ebiten.KeyArrowUp},
-		pico.BtnDown:  {ebiten.KeyArrowDown},
-		pico.BtnO:     {ebiten.KeyZ, ebiten.KeyC, ebiten.KeyN},
-		pico.BtnX:     {ebiten.KeyX, ebiten.KeyV, ebiten.KeyM},
-	},
-	1: {
-		pico.BtnLeft:  {ebiten.KeyS},
-		pico.BtnRight: {ebiten.KeyF},
-		pico.BtnUp:    {ebiten.KeyE},
-		pico.BtnDown:  {ebiten.KeyD},
-		pico.BtnO:     {ebiten.KeyShiftLeft, ebiten.KeyA},
-		pico.BtnX:     {ebiten.KeyTab, ebiten.KeyQ},
-	},
+// keysByName is every key the window library knows, under the name the console
+// calls it by. It is what turns the console's own list of button keys into
+// something that can be asked about, and what lets a key be named as it is
+// printed rather than as it is placed.
+var keysByName = func() map[string]ebiten.Key {
+	out := make(map[string]ebiten.Key, ebiten.KeyMax+1)
+	for k := ebiten.Key(0); k <= ebiten.KeyMax; k++ {
+		out[keyName(k)] = k
+	}
+	return out
+}()
+
+// buttonLabel reports what to call the key that works a console button, as it
+// is printed on the keyboard in front of the person.
+//
+// The console binds keys by place, not by name: a program that says "press Z"
+// is wrong on a German keyboard, where the key in that place says Y. The window
+// library knows the layout, so the label comes from there, and falls back to
+// the place's own name where it does not know.
+func buttonLabel(player, button int) string {
+	if player < 0 || player >= pico.Players || button < 0 || button >= pico.Buttons {
+		return ""
+	}
+	for _, name := range pico.ButtonKeys[player][button] {
+		key, ok := keysByName[name]
+		if !ok {
+			continue
+		}
+		if label := strings.TrimSpace(ebiten.KeyName(key)); label != "" {
+			return strings.ToUpper(label)
+		}
+	}
+	// Before the window opens, and on a platform that will not say, the place
+	// is the best that can be done.
+	if keys := pico.ButtonKeys[player][button]; len(keys) > 0 {
+		return strings.ToUpper(keys[0])
+	}
+	return ""
 }
 
 // padButtons is a standard pad's face and direction buttons, in the console's
@@ -83,7 +101,8 @@ func (rd *reader) poll() {
 func (rd *reader) frame(v view, used []ebiten.Key) pico.Frame {
 	var f pico.Frame
 
-	// Keys, both as names for key() and as buttons for btn().
+	// Keys, both as names for key() and as buttons for btn(). Which of them
+	// amount to which buttons is the console's business, not the window's.
 	rd.keys = inpututil.AppendPressedKeys(rd.keys[:0])
 	rd.names = rd.names[:0]
 	for _, k := range rd.keys {
@@ -93,17 +112,7 @@ func (rd *reader) frame(v view, used []ebiten.Key) pico.Frame {
 		rd.names = append(rd.names, keyName(k))
 	}
 	f.Keys = rd.names
-
-	for player := range buttonKeys {
-		for button, keys := range buttonKeys[player] {
-			for _, k := range keys {
-				if ebiten.IsKeyPressed(k) && !consumed(used, k) {
-					f.Buttons[player][button] = true
-					break
-				}
-			}
-		}
-	}
+	f.Buttons = pico.ButtonsHeld(rd.names)
 
 	rd.pads = ebiten.AppendGamepadIDs(rd.pads[:0])
 	for player, id := range rd.pads {

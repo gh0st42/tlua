@@ -90,3 +90,107 @@ func blank(s *pico.Surface) bool {
 	}
 	return true
 }
+
+// playerColor is what the platformer draws its player in, which is how a test
+// can watch it without reaching inside the program.
+const playerColor = 14
+
+// playerTop reports the topmost row the player is drawn on, or -1.
+func playerTop(s *pico.Surface) int {
+	for y := 0; y < s.H; y++ {
+		for x := 0; x < s.W; x++ {
+			if s.Get(x, y) == playerColor {
+				return y
+			}
+		}
+	}
+	return -1
+}
+
+// TestTheJumpButtonIsNotMissedNearTheGround plays the platformer for a few
+// seconds and presses jump while still falling.
+//
+// A jump that is only taken on the tick the button goes down, and only while
+// already standing, throws that press away — which is what "the jump does not
+// always work" is: the button was pressed a few hundredths of a second early.
+// The example remembers a press for a few frames for that reason, and this is
+// the test of it.
+func TestTheJumpButtonIsNotMissedNearTheGround(t *testing.T) {
+	s, err := load(Options{Script: filepath.Join(examplesDir, "platformer.lua")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+	if err := s.runMain(); err != nil {
+		t.Fatal(err)
+	}
+
+	var jump pico.Frame
+	jump.Buttons[0][pico.BtnO] = true
+
+	step := func(f pico.Frame) int {
+		if err := s.rt.Tick(f); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.rt.Draw(); err != nil {
+			t.Fatal(err)
+		}
+		return playerTop(s.rt.Screen())
+	}
+
+	// Let it fall to the ground and settle.
+	ground := 0
+	for i := 0; i < 120; i++ {
+		ground = step(pico.Frame{})
+	}
+	if ground <= 0 {
+		t.Fatalf("the player is not on screen (top row %d)", ground)
+	}
+
+	// One press, one jump.
+	top := step(jump)
+	for i := 0; i < 6; i++ {
+		top = step(pico.Frame{})
+	}
+	if top >= ground {
+		t.Fatalf("pressing jump while standing did nothing: %d, still at %d", top, ground)
+	}
+
+	// Come back down, and press again while still in the air, close enough to
+	// the ground that a press taken only on its own tick would be lost.
+	pressed := false
+	for i := 0; i < 120 && !pressed; i++ {
+		was := top
+		top = step(pico.Frame{})
+		falling := top > was
+		if falling && top < ground && ground-top <= 12 {
+			top = step(jump)
+			pressed = true
+		}
+	}
+	if !pressed {
+		t.Fatal("never found a moment just above the ground to press in")
+	}
+
+	// Landing, and then off again. What matters is the height reached after
+	// touching down: measuring from the press itself would only measure the
+	// fall it was made during, which proves nothing.
+	landed, highest := -1, ground
+	for i := 0; i < 40; i++ {
+		top = step(pico.Frame{})
+		if landed < 0 {
+			if top >= ground {
+				landed = i
+			}
+			continue
+		}
+		highest = min(highest, top)
+	}
+	if landed < 0 {
+		t.Fatal("the player never came back down")
+	}
+	if highest >= ground-2 {
+		t.Errorf("the press made just before landing was lost: after landing it got no higher than %d, standing is %d",
+			highest, ground)
+	}
+}

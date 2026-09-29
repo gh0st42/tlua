@@ -46,5 +46,5 @@ function _draw()
 	line(cx, cy, cx + cos(spin) * rad, cy + sin(spin) * rad, 0)
 
 	print("vid(" .. mode .. ")   " .. w .. "x" .. h, 8, 8, 7)
-	print("X: next mode", 8, h - 12, 6)
+	print(btnkey("x") .. ": next mode", 8, h - 12, 6)
 end

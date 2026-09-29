@@ -1,8 +1,12 @@
 package picolua
 
 import (
+	"fmt"
+	"io"
 	"strings"
 	"testing"
+
+	lua "github.com/yuin/gopher-lua"
 
 	"tlua/internal/pico"
 )
@@ -268,7 +272,7 @@ func TestEveryDocumentedNameIsThere(t *testing.T) {
 		tri trifill print cursor textwidth textheight camera clip pal palt
 		rrect rrectfill fillp screen palette rgb surface sprite loadpng
 		spr sspr target map
-		btn btnp held key keyp mouse mousebtn typed
+		btn btnp held key keyp mouse mousebtn btnkey typed
 		t time frame fps printh exit window fullscreen vid
 		flr ceil abs sqrt sgn sin cos atan2 min max mid clamp rnd srand
 		add del deli all foreach count sub split tostr tonum chr ord`)
@@ -278,5 +282,43 @@ func TestEveryDocumentedNameIsThere(t *testing.T) {
 		if got := f.str(`type(` + name + `)`); got != "function" {
 			t.Errorf("%s is %s, want a function", name, got)
 		}
+	}
+}
+
+func TestAButtonCanSayWhichKeyWorksIt(t *testing.T) {
+	// Without a window there is no keyboard layout to ask about, so the answer
+	// is the place the key sits. What matters is that a program always gets
+	// something to print rather than an empty string.
+	f := start(t, 2, 1, "")
+	cases := []struct{ expr, want string }{
+		{`btnkey("o")`, "Z"},
+		{`btnkey("x")`, "X"},
+		{`btnkey("left")`, "ARROWLEFT"},
+		{`btnkey("o", 1)`, "SHIFTLEFT"},
+		{`btnkey(4)`, "Z"},
+	}
+	for _, c := range cases {
+		if got := f.str(c.expr); got != c.want {
+			t.Errorf("%s = %q, want %q", c.expr, got, c.want)
+		}
+	}
+}
+
+func TestTheHostCanNameTheKeysItself(t *testing.T) {
+	// Which is what happens with a window open: the label comes from the
+	// keyboard layout rather than from the place.
+	L := lua.NewState()
+	defer L.Close()
+	New(L, Options{
+		Width: 2, Height: 1, Out: io.Discard,
+		ButtonLabel: func(player, button int) string {
+			return fmt.Sprintf("p%d/b%d", player, button)
+		},
+	})
+	if err := L.DoString(`answer = btnkey("o", 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if got := lua.LVAsString(L.GetGlobal("answer")); got != "p1/b4" {
+		t.Errorf("btnkey asked for %q", got)
 	}
 }

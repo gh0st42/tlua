@@ -68,6 +68,6 @@ function _draw()
 
 	fillp()
 	print("fillp " .. tostr(pattern, true) .. ": " .. name, 8, h - 32, 7)
-	print("press X for the next pattern", 8, h - 22, 12)
+	print("press " .. btnkey("x") .. " for the next pattern", 8, h - 22, 12)
 	print("on the right the pattern punches holes instead", 8, h - 12, 13)
 end

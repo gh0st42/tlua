@@ -338,6 +338,14 @@ function mouse() end
 ---@return boolean
 function mousebtn(button, pressed) end
 
+--- What the key that works a button is called on the keyboard in use: "Z" on an
+--- American one, "Y" on a German one, since the console binds where a key is
+--- rather than what it says. Use it rather than naming a letter outright.
+---@param button integer|string
+---@param player? integer
+---@return string
+function btnkey(button, player) end
+
 --- What was typed this tick.
 ---@return string
 function typed() end

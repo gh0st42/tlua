@@ -44,5 +44,7 @@ function _draw()
 		circfill(b.x, b.y, b.r, b.col)
 		circ(b.x, b.y, b.r, 7) -- a highlight, to show the outline is a circle too
 	end
-	print(#balls .. " balls   X adds one, O clears", 4, 4, 7)
+	-- btnkey() names the key as this keyboard prints it, which is not always
+	-- the letter the console binds: the place of a key and its label differ.
+	print(#balls .. " balls   " .. btnkey("x") .. " adds one, " .. btnkey("o") .. " clears", 4, 4, 7)
 end

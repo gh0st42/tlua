@@ -144,12 +144,12 @@ function _draw()
 		rect(0, top, w - 1, top + 34, 5)
 		centred("snake", top + 4, 10)
 		centred("arrow keys to turn", top + 15, 7)
-		centred("press X to start", top + 25, 12)
+		centred("press " .. btnkey("x") .. " to start", top + 25, 12)
 	elseif state == "over" then
 		local top = h / 3 - 12
 		rectfill(0, top, w, top + 24, 0)
 		rect(0, top, w - 1, top + 24, 5)
 		centred("caught yourself out", top + 5, 8)
-		centred("X to go again", top + 15, 12)
+		centred(btnkey("x") .. " to go again", top + 15, 12)
 	end
 end

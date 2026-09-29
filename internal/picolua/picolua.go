@@ -52,6 +52,11 @@ type Options struct {
 	// FPS reports the frame rate for fps(); zero when the host has no idea.
 	FPS func() float64
 
+	// ButtonLabel reports what the key that works a console button is called
+	// on the keyboard in front of the person, which is not the same as where
+	// that key sits. Without one, btnkey() falls back to the place's own name.
+	ButtonLabel func(player, button int) string
+
 	// Seed starts the random number generator. Zero picks one, the way a
 	// console with no clock would have to.
 	Seed int64
@@ -73,6 +78,7 @@ type Runtime struct {
 	out   io.Writer
 	clock func() float64
 	fps   func() float64
+	label func(player, button int) string
 	rng   *rand.Rand
 
 	window        Window
@@ -126,6 +132,10 @@ func New(L *lua.LState, opts Options) *Runtime {
 	}
 	if r.fps == nil {
 		r.fps = func() float64 { return 0 }
+	}
+	r.label = opts.ButtonLabel
+	if r.label == nil {
+		r.label = defaultButtonLabel
 	}
 
 	r.installSurfaceType()

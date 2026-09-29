@@ -93,6 +93,12 @@ local function at(x, y)
 	return flr(x / tile), flr(y / tile) + 1
 end
 
+-- How long a jump is remembered for, and how long after walking off a ledge it
+-- still counts. Without the first, a press a moment before landing is thrown
+-- away; without the second, a press a moment after stepping off is. Both feel
+-- like the button not working, and both are measured in frames.
+local jumpBuffer, coyoteTime = 8, 6
+
 function _init()
 	cells, coins, collected = {}, 0, 0
 	for row = 1, rows do
@@ -106,7 +112,11 @@ function _init()
 		end
 		add(cells, line)
 	end
-	player = { x = 24, y = 80, dx = 0, dy = 0, w = 6, h = 10, facing = 1, grounded = false }
+	player = {
+		x = 24, y = 80, dx = 0, dy = 0, w = 6, h = 10,
+		facing = 1, grounded = false,
+		buffered = 0, coyote = 0,
+	}
 end
 
 function _update()
@@ -118,7 +128,19 @@ function _update()
 	if speed ~= 0 then p.facing = sgn(speed) end
 
 	p.dy = min(p.dy + 0.3, 6) -- gravity, up to a terminal speed
-	if p.grounded and btnp("o") then p.dy = -4.6 end
+
+	-- held() counts the ticks a button has been down, so held() == 1 is the
+	-- press itself and nothing else: btnp() would also fire again while the
+	-- button is held, which is a repeat rather than a jump.
+	if held("o") == 1 then p.buffered = jumpBuffer end
+	if p.grounded then p.coyote = coyoteTime end
+
+	if p.buffered > 0 and p.coyote > 0 then
+		p.dy = -4.6
+		p.buffered, p.coyote = 0, 0 -- so that one press is one jump
+	end
+	p.buffered = max(p.buffered - 1, 0)
+	p.coyote = max(p.coyote - 1, 0)
 
 	-- One axis at a time, so that hitting a wall and landing on a floor are
 	-- told apart rather than cancelling each other out.
@@ -186,5 +208,7 @@ function _draw()
 
 	camera()
 	print("coins " .. collected .. "/" .. coins, 6, 6, 7)
-	print("arrows to move, O to jump", 6, h - 10, 7)
+	-- btnkey() names the key as this keyboard prints it: the console binds the
+	-- place rather than the letter, and they are not the same everywhere.
+	print("arrows to move, " .. btnkey("o") .. " to jump", 6, h - 10, 7)
 end

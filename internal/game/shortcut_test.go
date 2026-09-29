@@ -133,16 +133,42 @@ func TestAKeyAShortcutTookIsKeptFromTheProgram(t *testing.T) {
 }
 
 func TestDIsASecondPlayersDownKey(t *testing.T) {
-	// Which is the whole reason ctrl-D has to take it: without that, showing
-	// the frame rate would also walk player two into a pit.
-	var found bool
-	for _, k := range buttonKeys[1][3] { // BtnDown
-		if k == ebiten.KeyD {
-			found = true
+	// Which is the whole reason ctrl-D has to take the key: without that,
+	// showing the frame rate would also walk player two into a pit.
+	if !pico.ButtonsHeld([]string{"d"})[1][pico.BtnDown] {
+		t.Skip("D is no longer a direction; the suppression matters less")
+	}
+}
+
+func TestAButtonIsNamedAsTheKeyboardPrintsIt(t *testing.T) {
+	// Before a window is open there is no layout to ask about, so the answer is
+	// the key's place. What matters here is that it is a name and not empty:
+	// the layout-dependent half cannot be tested without a window.
+	if got := buttonLabel(0, pico.BtnO); got == "" {
+		t.Error("the O button has no name")
+	}
+	if got := buttonLabel(0, pico.BtnLeft); got == "" {
+		t.Error("left has no name")
+	}
+	for _, c := range [][2]int{{-1, 0}, {pico.Players, 0}, {0, -1}, {0, pico.Buttons}} {
+		if got := buttonLabel(c[0], c[1]); got != "" {
+			t.Errorf("player %d button %d is called %q", c[0], c[1], got)
 		}
 	}
-	if !found {
-		t.Skip("D is no longer a direction; the suppression matters less")
+}
+
+func TestEveryKeyTheConsoleBindsIsOneTheWindowKnows(t *testing.T) {
+	// The console names keys by their place; if one of those names is not a
+	// key the window library has, that button would quietly never work.
+	for player := range pico.ButtonKeys {
+		for button, keys := range pico.ButtonKeys[player] {
+			for _, name := range keys {
+				if _, ok := keysByName[name]; !ok {
+					t.Errorf("player %d button %d is bound to %q, which is not a key",
+						player, button, name)
+				}
+			}
+		}
 	}
 }
 

@@ -66,6 +66,10 @@ function _draw()
 	line(mx - 4, my, mx + 4, my, 7)
 	line(mx, my - 4, mx, my + 4, 7)
 
+	-- The console binds keys by where they are, so what they are printed with
+	-- depends on the keyboard; btnkey() asks.
+	print("player 1 is the arrows with " .. btnkey("o", 0) .. " and " .. btnkey("x", 0) ..
+		"   player 2 is ESDF with " .. btnkey("o", 1) .. " and " .. btnkey("x", 1), 8, h - 22, 13)
 	print("held X for " .. held("x") .. " ticks", 8, h - 12, 12)
 	print(flr(fps()) .. " fps", w - 40, h - 12, 12)
 end
