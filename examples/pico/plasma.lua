@@ -10,6 +10,12 @@
 vid(4)
 local w, h = screen()
 
+-- Holding the console's own calls in locals is worth about a tenth of the
+-- frame here: a global is a lookup in a table by name, and this loop makes six
+-- of them per pixel. It is the first thing to try when a per-pixel loop is too
+-- slow, and it is only worth doing in a loop like this one.
+local sin, pset, flr, mid = sin, pset, flr, mid
+
 -- Which colours to run through, darkest to brightest. The ramps at 40 and up
 -- are laid out for exactly this.
 local ramp = { 40, 41, 42, 43, 44, 45, 51, 50, 49, 48, 47, 46 }

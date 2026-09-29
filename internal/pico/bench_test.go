@@ -54,3 +54,58 @@ func BenchmarkPsetScreen(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkSprites is what a game full of sprites costs: five hundred of them
+// at their own size, which is how spr() is nearly always called.
+func BenchmarkSprites(b *testing.B) {
+	c := New(ScreenWidth, ScreenHeight)
+	s := NewSurface(16, 16)
+	for i := range s.Pix {
+		s.Pix[i] = uint8(i%15 + 1)
+	}
+
+	b.ReportAllocs()
+	b.SetBytes(int64(500 * 16 * 16))
+	for i := 0; i < b.N; i++ {
+		for n := 0; n < 500; n++ {
+			c.Spr(s, (n*7)%ScreenWidth, (n*13)%ScreenHeight, false, false)
+		}
+	}
+}
+
+// BenchmarkSpritesScaled is the same drawn at double size, which has to work
+// out where in the sprite each screen pixel came from.
+func BenchmarkSpritesScaled(b *testing.B) {
+	c := New(ScreenWidth, ScreenHeight)
+	s := NewSurface(16, 16)
+	for i := range s.Pix {
+		s.Pix[i] = uint8(i%15 + 1)
+	}
+
+	b.ReportAllocs()
+	b.SetBytes(int64(500 * 32 * 32))
+	for i := 0; i < b.N; i++ {
+		for n := 0; n < 500; n++ {
+			c.SSpr(s, 0, 0, 16, 16, (n*7)%ScreenWidth, (n*13)%ScreenHeight, 32, 32, false, false)
+		}
+	}
+}
+
+// BenchmarkMap is a screen filled with tiles, which is what a tile map costs
+// every frame.
+func BenchmarkMap(b *testing.B) {
+	c := New(ScreenWidth, ScreenHeight)
+	sheet := NewSurface(64, 16)
+	for i := range sheet.Pix {
+		sheet.Pix[i] = uint8(i%15 + 1)
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		for y := 0; y < ScreenHeight/8+1; y++ {
+			for x := 0; x < ScreenWidth/8+1; x++ {
+				c.SSpr(sheet, (x%4)*8, 0, 8, 8, x*8, y*8, 8, 8, false, false)
+			}
+		}
+	}
+}

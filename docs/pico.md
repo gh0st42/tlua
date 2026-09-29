@@ -349,6 +349,33 @@ Lua's own libraries are all still there — `math`, `string`, `table`, `io`,
 `require` finds modules beside the script, and in `TLUA_INCLUDE` and
 `LUA_PATH`, exactly as it does elsewhere.
 
+## What things cost
+
+A frame has a sixtieth of a second in it: 16.6 milliseconds. Measured on an
+M1 laptop, at 480x270:
+
+| | |
+| --- | --- |
+| clearing the screen | 0.04 ms |
+| 500 sprites of 16x16, at their own size | 0.14 ms |
+| a screen of 8x8 tiles through `map()` | 0.18 ms |
+| the frame reaching the window | 0.14 ms |
+| a whole frame of the bigger examples | 0.2 to 0.4 ms |
+
+So the drawing is not usually what a program has to watch; the Lua around it
+is. Per-pixel work is the thing that costs: `pset` called for every pixel of a
+480x270 screen is 130,000 calls a frame, which the language will not do in the
+time available. Two ways out, in the order to try them:
+
+- **Ask for a smaller screen.** `vid(4)` is 160x90, a ninth of the pixels, and
+  the window scales it back up. `examples/pico/plasma.lua` does this.
+- **Hold the calls you use in locals**: `local sin, pset = sin, pset` at the top
+  of the file. A global is a lookup by name in a table, and a loop making six of
+  them per pixel spends about a tenth of its time doing that.
+
+Everything the console itself does is free of allocation, so what a program
+gives the garbage collector to do is its own.
+
 ## What is different
 
 - **No sound.** Neither `sfx` nor `music` exists.

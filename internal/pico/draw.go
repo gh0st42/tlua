@@ -365,12 +365,22 @@ func (c *Console) Blit(src *Surface, sx, sy, sw, sh, dx, dy, dw, dh int, flipX, 
 		return
 	}
 
+	// Drawn at its own size, which is what spr() does and what a tile map does,
+	// a sprite needs none of the arithmetic that stretching one needs: the
+	// source pixel is a step along the row. That case is most of the drawing a
+	// game does, so it gets a loop of its own with no division in it.
+	if sw == dw && sh == dh {
+		c.blitSameSize(src, sx, sy, dx, dy, dw, dh, x0, x1, y0, y1, flipX, flipY)
+		return
+	}
+
 	for py := y0; py < y1; py++ {
 		row := py - dy
 		if flipY {
 			row = dh - 1 - row
 		}
 		srcY := sy + row*sh/dh
+		dst := c.target.Pix[py*c.target.W:]
 		for px := x0; px < x1; px++ {
 			col := px - dx
 			if flipX {
@@ -380,7 +390,59 @@ func (c *Console) Blit(src *Surface, sx, sy, sw, sh, dx, dy, dw, dh int, flipX, 
 			if c.transparent[v] {
 				continue
 			}
-			c.target.Pix[py*c.target.W+px] = c.drawPal[v]
+			dst[px] = c.drawPal[v]
+		}
+	}
+}
+
+// blitSameSize copies a sprite pixel for pixel, walking both rows at once.
+//
+// Everything that can be worked out per row is: where the source row is, where
+// the destination row is, and which way along the source to walk. What is left
+// in the inner loop is a load, a test and a store.
+func (c *Console) blitSameSize(src *Surface, sx, sy, dx, dy, dw, dh, x0, x1, y0, y1 int, flipX, flipY bool) {
+	step := 1
+	// Where in the source the first pixel drawn comes from.
+	first := sx + (x0 - dx)
+	if flipX {
+		step = -1
+		first = sx + dw - 1 - (x0 - dx)
+	}
+
+	for py := y0; py < y1; py++ {
+		row := py - dy
+		if flipY {
+			row = dh - 1 - row
+		}
+		srcY := sy + row
+		if srcY < 0 || srcY >= src.H {
+			// Off the sprite: every pixel of this row reads as colour 0, and
+			// there is nothing to do unless that colour draws.
+			if c.transparent[0] {
+				continue
+			}
+		}
+
+		dst := c.target.Pix[py*c.target.W : py*c.target.W+c.target.W]
+		if srcY < 0 || srcY >= src.H {
+			for px := x0; px < x1; px++ {
+				dst[px] = c.drawPal[0]
+			}
+			continue
+		}
+
+		srcRow := src.Pix[srcY*src.W : srcY*src.W+src.W]
+		srcX := first
+		for px := x0; px < x1; px++ {
+			v := uint8(0)
+			if srcX >= 0 && srcX < src.W {
+				v = srcRow[srcX]
+			}
+			srcX += step
+			if c.transparent[v] {
+				continue
+			}
+			dst[px] = c.drawPal[v]
 		}
 	}
 }
