@@ -105,8 +105,9 @@ take; the `.luarc.json` at the root points at it.
 
 Drawing happens on an indexed framebuffer, one byte a pixel, which is scaled to
 the window by a whole number with nearest-neighbour, so pixels stay square.
-`vid(0)` to `vid(2)` switch between 480x270, 240x135 and 160x90, and `vid(13)`
-gives the 320x200 a VGA card called mode 13h.
+`vid()` switches resolution with Picotron's own numbering — `vid(0)` 480x270,
+`vid(3)` 240x135, `vid(4)` 160x90, and the 320x180 and 240x180 it lists as
+planned — plus `vid(13)`, the 320x200 a VGA card called mode 13h.
 
 The palette is whatever a program asks for, up to 256 colours. It starts with
 64: 0-15 are PICO-8's palette exactly and 16-31 its extended one, while 32-63

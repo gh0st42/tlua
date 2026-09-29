@@ -329,13 +329,17 @@ func TestClonedPalettesAreTheirOwn(t *testing.T) {
 }
 
 func TestTheVideoModes(t *testing.T) {
+	// Picotron's own numbering, so that the same call means the same thing in
+	// both, plus the one that is ours.
 	cases := []struct {
 		mode int
 		w, h int
 	}{
 		{0, 480, 270}, // the console's own size
-		{1, 240, 135},
-		{2, 160, 90},
+		{1, 320, 180}, // listed as planned in Picotron
+		{2, 240, 180}, // listed as planned in Picotron
+		{3, 240, 135},
+		{4, 160, 90},
 		{13, 320, 200}, // what a VGA card called mode 13h
 	}
 	for _, c := range cases {
@@ -350,6 +354,9 @@ func TestTheVideoModes(t *testing.T) {
 
 	if _, _, ok := Mode(7); ok {
 		t.Error("there is no mode 7")
+	}
+	if _, _, ok := Mode(5); ok {
+		t.Error("there is no mode 5")
 	}
 	if got := ModeOf(321, 200); got != -1 {
 		t.Errorf("a size that is not a mode reported %d, want -1", got)

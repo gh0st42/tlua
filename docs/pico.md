@@ -50,16 +50,20 @@ number, with black around the edges.
 | Mode | Size | |
 | --- | --- | --- |
 | `vid(0)` | 480x270 | the console's own |
-| `vid(1)` | 240x135 | half of it |
-| `vid(2)` | 160x90 | a quarter, and enough to work out every pixel in Lua |
+| `vid(1)` | 320x180 | listed as planned in Picotron |
+| `vid(2)` | 240x180 | listed as planned in Picotron |
+| `vid(3)` | 240x135 | half of it each way |
+| `vid(4)` | 160x90 | a third each way, and small enough to work out every pixel in Lua |
 | `vid(13)` | 320x200 | what a VGA card called mode 13h |
 
 `vid()` on its own says which mode is in use and how big it is; a size asked
 for some other way reports as mode -1. `window{width=, height=}` still takes
 any size at all, and `screen()` reports it.
 
-Only the fourth of those is Picotron's; mode 13 is here because a great deal of
-pixel art was drawn at 320x200, and because it goes with the VGA palette below.
+The numbering is Picotron's, including the two modes it lists as planned rather
+than supported, so that the same call means the same thing in both. Mode 13 is
+the one addition: a great deal of pixel art was drawn at 320x200, and it goes
+with the VGA palette below.
 
 ### Colours
 
@@ -324,8 +328,8 @@ Lua's own libraries are all still there — `math`, `string`, `table`, `io`,
   memory layout to poke at, and artwork is written as text in the program.
 - **No `flip()`.** A program is built from `_update` and `_draw`; it cannot
   draw from inside a loop of its own.
-- **Colours 32 to 63 are not Picotron's**, as above, and neither are the video
-  modes: Picotron's own numbering is not reproduced, only the idea.
+- **Colours 32 to 63 are not Picotron's**, as above. The video modes are, apart
+  from `vid(13)`.
 - `color(c, c2)` takes the fill pattern's second colour as its own argument
   rather than packing two colours into one number, because 64 colours do not
   fit in a nibble each.

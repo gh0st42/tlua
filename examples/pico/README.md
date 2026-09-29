@@ -27,7 +27,7 @@ tlua play -fullscreen examples/pico/plasma.lua
 | [snake.lua](snake.lua) | A whole game: a grid, a score, a title screen and an ending. |
 | [platformer.lua](platformer.lua) | A tile map with `map()`, gravity, collision, and a camera that follows. |
 | [paint.lua](paint.lua) | Drawing with the mouse onto an offscreen surface with `target()`. |
-| [modes.lua](modes.lua) | `vid()`: the same picture at each of the four resolutions. |
+| [modes.lua](modes.lua) | `vid()`: the same picture at each of the six resolutions. |
 
 Two of them are worth reading before writing anything: `hello.lua` for the
 shape of a program, and `sprites.lua` for how artwork is written without any

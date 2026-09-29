@@ -1,10 +1,13 @@
 -- modes: the same picture at every resolution the console has.
 --
--- X steps through the video modes. Nothing in the drawing changes — it is
--- written against screen(), so it lays itself out to whatever it is given —
--- and the window scales the result up by a whole number either way.
+-- X steps through the video modes: 0, 3 and 4 are Picotron's, 1 and 2 are the
+-- two it lists as planned, and 13 is the 320x200 a VGA card called mode 13h.
+--
+-- Nothing in the drawing changes between them. It is written against screen(),
+-- so it lays itself out to whatever it is given, and the window scales the
+-- result up by a whole number either way.
 
-local modes = { 0, 1, 2, 13 }
+local modes = { 0, 1, 2, 3, 4, 13 }
 local chosen = 1
 local spin = 0
 

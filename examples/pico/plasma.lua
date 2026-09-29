@@ -2,11 +2,12 @@
 --
 -- At 480x270 that would be a hundred and thirty thousand pset() calls a frame,
 -- which is more than Lua will do in a sixtieth of a second. So the program asks
--- for a smaller screen: vid(2) is 160x90, a quarter of the console's own size,
--- and the window scales whatever it is given up to fit. A fantasy console gets
--- to choose its own limits, and this is how.
+-- for a smaller screen: vid(4) is 160x90, a third of the console's own size
+-- each way and a ninth of the pixels, and the window scales whatever it is
+-- given up to fit. A fantasy console gets to choose its own limits, and this is
+-- how.
 
-vid(2)
+vid(4)
 local w, h = screen()
 
 -- Which colours to run through, darkest to brightest. The ramps at 40 and up

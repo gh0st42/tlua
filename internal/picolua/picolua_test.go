@@ -611,9 +611,11 @@ func TestVideoModes(t *testing.T) {
 	}
 
 	cases := []struct{ call, want string }{
-		{`vid(0)`, "480,270"},
-		{`vid(1)`, "240,135"},
-		{`vid(2)`, "160,90"},
+		{`vid(0)`, "480,270"}, // Picotron's numbering
+		{`vid(1)`, "320,180"},
+		{`vid(2)`, "240,180"},
+		{`vid(3)`, "240,135"},
+		{`vid(4)`, "160,90"},
 		{`vid(13)`, "320,200"}, // what a VGA card called mode 13h
 	}
 	for _, c := range cases {
@@ -651,7 +653,7 @@ func TestAVideoModeThatIsNotOneIsAnError(t *testing.T) {
 
 func TestDrawingSurvivesAChangeOfResolution(t *testing.T) {
 	f := start(t, 4, 2, `
-		vid(2)
+		vid(4)
 		cls(3)
 		rectfill(0, 0, 159, 89, 9)`)
 	if got := f.Screen().Get(159, 89); got != 9 {

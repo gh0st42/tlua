@@ -233,7 +233,8 @@ function palette(what, colour) end
 ---@return integer rgb
 function rgb(colour) end
 
---- Switches resolution: 0 is 480x270, 1 is 240x135, 2 is 160x90, and 13 is
+--- Switches resolution, by Picotron's numbering: 0 is 480x270, 3 is 240x135 and
+--- 4 is 160x90; 1 and 2 are the 320x180 and 240x180 it lists as planned. 13 is
 --- 320x200, what a VGA card called mode 13h. With nothing, says which mode is in
 --- use (-1 for a size asked for some other way) and how big it is.
 ---@param mode? integer

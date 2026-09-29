@@ -80,9 +80,10 @@ func (r *Runtime) installSystem() {
 			return 0
 		},
 
-		// vid(mode) switches resolution: 0 is the console's own 480x270, 1 and 2
-		// are half and a quarter of it, and 13 is 320x200, what a VGA card
-		// called mode 13h. vid() on its own says which one is in use.
+		// vid(mode) switches resolution. 0, 3 and 4 are Picotron's 480x270,
+		// 240x135 and 160x90, by its own numbers; 1 and 2 are the two it lists
+		// as planned; 13 is 320x200, what a VGA card called mode 13h. vid() on
+		// its own says which one is in use.
 		"vid": func(L *lua.LState) int {
 			screen := r.Vid.Screen
 			if isNone(L, 1) {
