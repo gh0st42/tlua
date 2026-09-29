@@ -470,7 +470,7 @@ func (e *Editor) outlineDialog() {
 		line := r.line
 		list.AddItem(r.label, "", 0, func() {
 			e.closeModal(name)
-			e.gotoLine(b, line)
+			e.revealLine(b, line)
 			e.setStatus(fmt.Sprintf("%s line %d", b.name, line))
 		})
 	}

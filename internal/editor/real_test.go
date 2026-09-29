@@ -164,3 +164,61 @@ func TestRealServerReportsASyntaxError(t *testing.T) {
 	t.Logf("status line: %s", strings.TrimSpace(dump(screen)[len(dump(screen))-1]))
 	t.Logf("buffer bar:  %s", strings.TrimSpace(dump(screen)[1]))
 }
+
+// TestRealProjectFunctionJump drives the function list over a real project file,
+// and skips when that file is not on this machine.
+func TestRealProjectFunctionJump(t *testing.T) {
+	data, err := os.ReadFile("/Users/lab/syncthing/Code/love2d/slimey/main.lua")
+	if err != nil {
+		t.Skip("the project is not here")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.lua")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e, screen := start(t, path)
+
+	for _, name := range []string{"camera_follow", "map_transfer", "create_ingame_menu"} {
+		press(screen, tcell.KeyF2, 0, tcell.ModAlt)
+		waitFor(t, e, "the function list", func() bool { return e.modals == 1 })
+
+		wanted := -1
+		onEditor(t, e, func() {
+			list := outlineList(t, e)
+			for i := 0; i < list.GetItemCount(); i++ {
+				if label, _ := list.GetItemText(i); strings.Contains(label, name) {
+					list.SetCurrentItem(i)
+					wanted = i
+					return
+				}
+			}
+			t.Fatalf("%s is not in the list", name)
+		})
+		_ = wanted
+		press(screen, tcell.KeyEnter, 0, tcell.ModNone)
+		waitFor(t, e, "the jump to "+name, func() bool { return e.modals == 0 })
+
+		// The definition is the top line of the window, with the cursor on it.
+		waitFor(t, e, name+" at the top of the window", func() bool {
+			row, column, _, _ := e.buffers[0].area.GetCursor()
+			viewRow, viewColumn := e.buffers[0].area.GetOffset()
+			return row == viewRow && column == 0 && viewColumn == 0
+		})
+		redraw(t, e)
+
+		rows := dump(screen)
+		onEditor(t, e, func() {
+			row, _, _, _ := e.buffers[0].area.GetCursor()
+			lines := strings.Split(e.buffers[0].area.GetText(), "\n")
+			t.Logf("%-20s cursor line %d: %q", name, row+1, strings.TrimSpace(lines[row]))
+			if !strings.Contains(lines[row], name) {
+				t.Errorf("the cursor line does not define %s", name)
+			}
+		})
+		if !strings.Contains(rows[3], name) {
+			t.Errorf("the top line of the window is %q, want the definition of %s", rows[3], name)
+		}
+	}
+}

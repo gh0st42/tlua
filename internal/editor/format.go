@@ -118,7 +118,7 @@ func (e *Editor) formatBuffer(b *buffer) error {
 // column as that line now allows.
 func (e *Editor) restoreCursor(b *buffer, row, column int) {
 	offset := offsetAt(b.area.GetText(), row, column)
-	b.area.Select(offset, offset)
+	e.showAndSelect(b, offset, offset)
 }
 
 // offsetAt returns the byte offset of a display column on a line, counting

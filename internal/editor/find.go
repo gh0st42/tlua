@@ -134,7 +134,7 @@ func (e *Editor) findFrom(backwards bool) {
 		e.setStatus(fmt.Sprintf("%q not found", e.search.what))
 		return
 	}
-	b.area.Select(start, end)
+	e.showAndSelect(b, start, end)
 	note := ""
 	if wrapped {
 		note = ", wrapped round"
@@ -160,7 +160,8 @@ func (e *Editor) replaceCurrent() {
 		}
 	}
 	b.area.Replace(start, end, e.search.with)
-	b.area.Select(start+len(e.search.with), start+len(e.search.with))
+	after := start + len(e.search.with)
+	e.showAndSelect(b, after, after)
 	e.setStatus(fmt.Sprintf("Replaced one occurrence of %q", e.search.what))
 	e.findNext()
 }
@@ -182,7 +183,7 @@ func (e *Editor) replaceAll() {
 		b.area.Replace(matches[i][0], matches[i][1], e.search.with)
 	}
 	first := matches[0][0]
-	b.area.Select(first, first+len(e.search.with))
+	e.showAndSelect(b, first, first+len(e.search.with))
 	e.setStatus(fmt.Sprintf("Replaced %d occurrences of %q", len(matches), e.search.what))
 }
 

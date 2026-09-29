@@ -197,7 +197,7 @@ func (e *Editor) gotoDiagnostic(b *buffer, d lsp.Diagnostic) {
 		e.gotoLine(b, d.Range.Start.Line+1)
 		return
 	}
-	b.area.Select(offset, offset)
+	e.showAndSelect(b, offset, offset)
 }
 
 // noProblemsMessage says why there is nothing to go to.

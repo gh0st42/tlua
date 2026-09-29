@@ -292,23 +292,14 @@ func (e *Editor) bufferFor(path string) (int, *buffer) {
 	return -1, nil
 }
 
-// gotoLine puts the cursor at the start of a 1-based line.
+// gotoLine puts the cursor at the start of a 1-based line, and the line where it
+// can be seen.
 func (e *Editor) gotoLine(b *buffer, line int) {
 	if line < 1 {
 		line = 1
 	}
-	text := b.area.GetText()
-	offset, cur := 0, 1
-	for cur < line {
-		nl := strings.IndexByte(text[offset:], '\n')
-		if nl < 0 {
-			offset = len(text)
-			break
-		}
-		offset += nl + 1
-		cur++
-	}
-	b.area.Select(offset, offset)
+	offset := offsetAt(b.area.GetText(), line-1, 0)
+	e.showAndSelect(b, offset, offset)
 }
 
 // displayDir names a directory in a way that can be recognised: relative to the

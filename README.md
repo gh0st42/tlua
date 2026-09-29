@@ -280,6 +280,10 @@ navigates the file as well as its functions. `Enter`, or a click, jumps.
 ╚═══════════════════════════════════════════════════════════╝
 ```
 
+`Enter` puts the definition at the top of the window with the cursor at the
+start of its line, so what you jumped to is followed by its body rather than
+sitting at the bottom of the screen.
+
 A row is just the line and the name — no "function" or "local" spelled out — and
 the colour says how it is reached, with the legend along the bottom:
 
