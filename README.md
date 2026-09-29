@@ -117,6 +117,10 @@ reads a `.gpl` file from any pixel art tool, and `palette(i, 0xRRGGBB)` changes
 one colour — which changes every pixel already drawn in it, the cheapest fade
 there is.
 
+While a program runs, the window keeps `alt-enter` and `F11` for fullscreen,
+`ctrl-D` for a frame rate counter and `ctrl-Q` for closing it; the program is
+not shown those keys.
+
 In the editor, the Run menu's "Run with" setting decides what `F5` does:
 `tlua`, a console window, or love2d.
 

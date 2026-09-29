@@ -22,7 +22,8 @@ type app struct {
 	// mouse position is turned back into a console pixel.
 	view view
 
-	reader reader
+	reader  reader
+	overlay overlay
 
 	status   int
 	failed   bool // the program stopped with an error; draw nothing more
@@ -42,9 +43,13 @@ func (a *app) Update() error {
 	default:
 	}
 
-	a.handleHostKeys()
+	// The window's own keys are decided before the program is given anything,
+	// so that the keys they use can be kept from it.
+	a.reader.poll()
+	action, used := hostShortcut(a.reader.justPressed, held)
+	a.apply(action)
 
-	if err := a.rt.Tick(a.reader.frame(a.view)); err != nil {
+	if err := a.rt.Tick(a.reader.frame(a.view, used)); err != nil {
 		a.failed = true
 		a.status = a.s.report(err)
 		return ebiten.Termination
@@ -57,14 +62,51 @@ func (a *app) Update() error {
 	return nil
 }
 
-// handleHostKeys deals with the two keys that belong to the window rather than
-// to the program.
-func (a *app) handleHostKeys() {
-	if a.reader.justPressed(ebiten.KeyF11) ||
-		(a.reader.justPressed(ebiten.KeyEnter) && held(ebiten.KeyAltLeft, ebiten.KeyAltRight)) {
-		ebiten.SetFullscreen(!ebiten.IsFullscreen())
+// hostAction is what a key belonging to the window, rather than to the program,
+// asks for.
+type hostAction int
+
+const (
+	actionNone hostAction = iota
+	actionFullscreen
+	actionOverlay
+	actionQuit
+)
+
+// hostShortcut reports what the window's own keys ask for this tick, and which
+// keys that used up.
+//
+// These belong to the window rather than to the program, and the program is not
+// shown the keys they take: a game that reads enter, or D as a direction for a
+// second player, would otherwise find alt-enter and ctrl-D meaning two things at
+// once. Taking only the key and not the modifier is deliberate — a program
+// watching for shift or control is watching for something else.
+func hostShortcut(pressed func(ebiten.Key) bool, down func(...ebiten.Key) bool) (hostAction, []ebiten.Key) {
+	alt := down(ebiten.KeyAltLeft, ebiten.KeyAltRight)
+	// Control or command: whichever of the two the machine's owner reaches for.
+	ctrl := down(ebiten.KeyControlLeft, ebiten.KeyControlRight, ebiten.KeyMetaLeft, ebiten.KeyMetaRight)
+
+	switch {
+	case pressed(ebiten.KeyF11):
+		return actionFullscreen, []ebiten.Key{ebiten.KeyF11}
+	case alt && pressed(ebiten.KeyEnter):
+		return actionFullscreen, []ebiten.Key{ebiten.KeyEnter}
+	case ctrl && pressed(ebiten.KeyD):
+		return actionOverlay, []ebiten.Key{ebiten.KeyD}
+	case ctrl && pressed(ebiten.KeyQ):
+		return actionQuit, []ebiten.Key{ebiten.KeyQ}
 	}
-	if a.reader.justPressed(ebiten.KeyQ) && held(ebiten.KeyControlLeft, ebiten.KeyControlRight, ebiten.KeyMetaLeft, ebiten.KeyMetaRight) {
+	return actionNone, nil
+}
+
+// apply carries out a window shortcut.
+func (a *app) apply(action hostAction) {
+	switch action {
+	case actionFullscreen:
+		ebiten.SetFullscreen(!ebiten.IsFullscreen())
+	case actionOverlay:
+		a.overlay.toggle()
+	case actionQuit:
 		a.stopping = true
 	}
 }
@@ -128,6 +170,8 @@ func (a *app) Draw(screen *ebiten.Image) {
 	// smoothing it is exactly what this is not for.
 	op.Filter = ebiten.FilterNearest
 	screen.DrawImage(a.picture, op)
+
+	a.overlay.draw(screen, a.view, frame.W, frame.H)
 }
 
 // LayoutF reports the screen in real pixels rather than in the window's

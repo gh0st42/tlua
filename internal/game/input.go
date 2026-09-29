@@ -69,16 +69,27 @@ type reader struct {
 	justPressedKeys []ebiten.Key
 }
 
-// frame reads everything the program can ask about this tick. The view is
-// needed because the mouse has to be reported in console pixels, not in the
-// pixels of whatever size the window happens to be.
-func (rd *reader) frame(v view) pico.Frame {
+// poll reads the keys that went down this tick. It is called before the frame
+// is built, because the window's own shortcuts are decided from these and take
+// their keys out of what the program is shown.
+func (rd *reader) poll() {
+	rd.justPressedKeys = inpututil.AppendJustPressedKeys(rd.justPressedKeys[:0])
+}
+
+// frame reads everything the program can ask about this tick, less whatever the
+// window's own shortcuts took. The view is needed because the mouse has to be
+// reported in console pixels, not in the pixels of whatever size the window
+// happens to be.
+func (rd *reader) frame(v view, used []ebiten.Key) pico.Frame {
 	var f pico.Frame
 
 	// Keys, both as names for key() and as buttons for btn().
 	rd.keys = inpututil.AppendPressedKeys(rd.keys[:0])
 	rd.names = rd.names[:0]
 	for _, k := range rd.keys {
+		if consumed(used, k) {
+			continue
+		}
 		rd.names = append(rd.names, keyName(k))
 	}
 	f.Keys = rd.names
@@ -86,7 +97,7 @@ func (rd *reader) frame(v view) pico.Frame {
 	for player := range buttonKeys {
 		for button, keys := range buttonKeys[player] {
 			for _, k := range keys {
-				if ebiten.IsKeyPressed(k) {
+				if ebiten.IsKeyPressed(k) && !consumed(used, k) {
 					f.Buttons[player][button] = true
 					break
 				}
@@ -113,10 +124,18 @@ func (rd *reader) frame(v view) pico.Frame {
 
 	rd.typed = ebiten.AppendInputChars(rd.typed[:0])
 	f.Text = rd.typed
-
-	// The keys pressed this tick, for the window's own shortcuts.
-	rd.justPressedKeys = inpututil.AppendJustPressedKeys(rd.justPressedKeys[:0])
 	return f
+}
+
+// consumed reports whether one of the window's own shortcuts took a key this
+// tick.
+func consumed(used []ebiten.Key, k ebiten.Key) bool {
+	for _, c := range used {
+		if c == k {
+			return true
+		}
+	}
+	return false
 }
 
 // justPressed reports whether a key went down on this tick, which is how the

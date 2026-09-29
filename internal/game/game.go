@@ -38,8 +38,11 @@ Given a directory, the file run is its main.lua; given nothing, the
 main.lua in the current directory.
 
 While it runs:
-  F11, alt-enter   fullscreen
+  alt-enter, F11   fullscreen
+  ctrl-D           show the frame rate
   ctrl-Q           quit
+
+Those keys belong to the window: the program is not shown them.
 `
 
 // Options is what the command line asked for.

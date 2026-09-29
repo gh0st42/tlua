@@ -285,8 +285,21 @@ window is, and a pointer off the picture reads as a negative number.
 `t()` counts ticks at sixty a second rather than reading a clock, so motion
 stays in step with what is drawn, however the machine is behaving.
 
-While a program runs, `F11` or alt-enter fills the screen, `ctrl-Q` closes it,
-and `ctrl-C` in the terminal does too.
+While a program runs, the window keeps three keys for itself:
+
+| Key | |
+| --- | --- |
+| `alt-enter`, `F11` | fills the screen, and back |
+| `ctrl-D` | shows the frame rate, and what it is being drawn at |
+| `ctrl-Q` | closes the window |
+
+The program is not shown those keys, so a game that reads enter, or D as a
+direction, does not act on them as well. `ctrl-C` in the terminal the program
+was started from closes the window too.
+
+The frame rate counter is drawn over the picture rather than into it, so it
+cannot be read back by `pget()`, cannot smear into a program that does not
+clear the screen, and is not recoloured by `palette()`.
 
 ## The short helpers
 

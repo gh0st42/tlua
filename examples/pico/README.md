@@ -38,5 +38,8 @@ for the colour numbers.
 
 The keyboard is two pads. Player one has the arrow keys with Z, X, C and V
 beside them; player two has E, S, D and F with shift, A, Q and tab. Any game
-pads plugged in are players one to four. `F11` or alt-enter fills the screen,
-`ctrl-Q` quits, and `ctrl-C` in the terminal closes the window too.
+pads plugged in are players one to four.
+
+`alt-enter` or `F11` fills the screen, `ctrl-D` shows the frame rate, `ctrl-Q`
+quits, and `ctrl-C` in the terminal closes the window too. Those keys belong to
+the window, so a program never sees them.
