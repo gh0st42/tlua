@@ -243,34 +243,83 @@ numbers once, and then uses that same grid both to draw with and to walk on.
 
 ## Files
 
-A game is not only Lua: there is artwork, and usually a level or a table of
-numbers kept beside it.
+A game is not only Lua: there is artwork, a sound or two, and usually a level
+or a table of numbers kept beside it.
 
 | Call | What it does |
 | --- | --- |
-| `loadpng(path)` | Reads a PNG and reduces it to the palette. |
-| `fetch(path)` | Reads a file and gives it back as a string. |
+| `loadpng(name)` | Reads a PNG and reduces it to the palette. |
+| `fetch(name)` | Reads a file and gives it back as a string. |
+| `sfx(name)`, `music(name)` | Below. |
 
-Both look in two places, in order: **inside the executable**, if the program was
-fused with `tlua fuse -play`, and then **beside the program's own main.lua**. So
-a game started from somewhere else still finds its own artwork, and the same
-`loadpng("art.png")` works whether the game is a directory or a single
-executable. An absolute path is taken as it stands.
+**Ask for what you want, not where it is.** A name with no extension on it is
+looked for with each extension the kind of resource uses, in each of the places
+a game keeps that kind of thing:
 
-```lua
-local sheet = loadpng("art/tiles.png")
-local level = fetch("levels/1.txt")
-```
+| Asking for | Looked for as |
+| --- | --- |
+| `sfx("jump")` | `jump.wav`, `jump.ogg`, `sfx/jump.wav`, `sfx/jump.ogg`, `assets/sfx/jump.wav`, … |
+| `sfx("jump.wav")` | `jump.wav`, `sfx/jump.wav`, `assets/sfx/jump.wav`, `assets/jump.wav` |
+| `sfx("assets/sfx/jump.wav")` | exactly that, first |
+| `loadpng("player")` | `player.png`, `gfx/player.png`, `assets/gfx/player.png`, … |
+| `music("theme")` | `theme.ogg`, `theme.wav`, `music/theme.ogg`, `assets/music/…`, then the `sfx` folders |
+| `fetch("level1")` | `level1.txt`, `data/level1.txt`, `maps/level1.txt`, `assets/maps/…`, … |
+
+So a game can keep everything loose beside its main.lua, or in `gfx/`, `sfx/`,
+`music/`, `maps/`, or under `assets/`, and none of that has to be written down
+in the program. An absolute path is taken literally, and the answer is
+remembered, so asking again costs one read rather than a search.
+
+Underneath, every one of those looks in two places in turn: **inside the
+executable**, if the program was fused with `tlua fuse -play`, and then
+**beside the program's own main.lua**. A game started from somewhere else still
+finds its own artwork, and the same `loadpng("art.png")` works whether the game
+is a directory or a single file.
 
 `require` reads the same way, out of the attached archive before the disk, so a
 game split across modules ships as one file too. Lua's own `io` is untouched
 and always means the disk — which is what a program wants for a save file, and
-not what it wants for the artwork it shipped with.
+not what it wants for what it shipped with.
 
-There is no sound yet. When there is, its loader will read through the same two
-places, because that is the only way anything here reads a file.
+When nothing is found, the error says every place it looked, because a search
+that fails silently is worse than no search at all:
 
-## Input
+```
+no sound called "jump": tried jump.wav, jump.ogg, sfx/jump.wav, ...
+```
+
+## Sound
+
+| Call | What it does |
+| --- | --- |
+| `sfx(name, [channel], [volume])` | Plays a sound, and reports the channel it went to. |
+| `sfx(-1)`, `sfx(false)` | Stops everything; `sfx(-1, channel)` stops one. |
+| `music(name, [fade_ms], [volume])` | Starts the music, which loops. |
+| `music(-1, [fade_ms])` | Stops it, fading out over that many milliseconds. |
+| `music()` | What is playing, or nothing. |
+| `volume([v])` | How loud it all is, from 0 to 1; reports what it was. |
+
+WAV and Ogg Vorbis, whatever their sample rate — both are resampled on the way
+in and each is decoded once however often it is played.
+
+There are eight channels for effects. Without a channel the sound goes to one
+that has finished; with one it takes that channel, stopping whatever was on it.
+The music is separate and does not use them up.
+
+```lua
+if btnp("x") then sfx("jump") end       -- sfx/jump.wav, wherever it is
+if hit then sfx("hurt", -1, 0.4) end    -- quieter, on any free channel
+music("theme", 1000)                    -- fading in over a second
+```
+
+A sound that cannot be found comes back as nothing with a message, rather than
+stopping the game: a missing noise is not worth dying over.
+
+Sounds are files, not a tracker. Picotron's sfx and music editors have no
+counterpart here, and nothing generates a waveform: what plays is what was
+recorded somewhere else.
+
+## Input## Input
 
 | Call | What it does |
 | --- | --- |
@@ -407,7 +456,8 @@ gives the garbage collector to do is its own.
 
 ## What is different
 
-- **No sound.** Neither `sfx` nor `music` exists.
+- **Sound is files.** `sfx` and `music` play a .wav or an .ogg by name; there
+  is no tracker, no sfx editor, and no instruments.
 - **No cartridge**, no sprite or map editor, and no `poke`/`peek`: there is no
   memory layout to poke at, and artwork is written as text in the program.
 - **No `flip()`.** A program is built from `_update` and `_draw`; it cannot
@@ -417,8 +467,9 @@ gives the garbage collector to do is its own.
 - `color(c, c2)` takes the fill pattern's second colour as its own argument
   rather than packing two colours into one number, because 64 colours do not
   fit in a nibble each.
-- Triangles, `held()`, `typed()`, `textwidth()`, `clamp()`, `loadpng()` and the
-  whole of `palette()` are additions.
+- Triangles, `held()`, `typed()`, `textwidth()`, `clamp()`, `loadpng()`,
+  `fetch()`, `volume()`, the whole of `palette()`, and looking a resource up by
+  name are additions.
 
 ## Shipping a game
 

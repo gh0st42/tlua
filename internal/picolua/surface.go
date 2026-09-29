@@ -101,8 +101,7 @@ func (r *Runtime) installSurfaces() {
 		// it reads from is the host's business: a game fused into a single
 		// executable finds its artwork inside itself.
 		"loadpng": func(L *lua.LState) int {
-			path := L.CheckString(1)
-			data, err := r.read(path)
+			path, data, err := r.find(kindImage, L.CheckString(1))
 			if err == nil {
 				var s *pico.Surface
 				s, err = pico.DecodePNG(data, r.Vid.Palette())
@@ -122,8 +121,7 @@ func (r *Runtime) installSurfaces() {
 		// same way loadpng does — out of a fused executable first, then from
 		// beside the program — so a game does not care which it is.
 		"fetch": func(L *lua.LState) int {
-			path := L.CheckString(1)
-			data, err := r.read(path)
+			_, data, err := r.find(kindData, L.CheckString(1))
 			if err != nil {
 				L.Push(lua.LNil)
 				L.Push(lua.LString(err.Error()))

@@ -242,7 +242,15 @@ func (r *Runtime) installStdlib() {
 
 		"tostr": func(L *lua.LState) int {
 			v := L.Get(1)
-			if L.OptBool(2, false) {
+			// Only true, or a number that is not zero, asks for hexadecimal.
+			//
+			// Being strict here would be worse than useless: a call that
+			// reports a value and a message hands over both, so
+			// tostr(sfx("jump")) would be an error about its second argument.
+			// Being merely truthy would be worse still — that message would
+			// quietly turn the number into hexadecimal. Anything that is not
+			// plainly a flag is not one.
+			if wantsHex(L.Get(2)) {
 				if n, ok := v.(lua.LNumber); ok {
 					L.Push(lua.LString("0x" + strconv.FormatInt(int64(n), 16)))
 					return 1
@@ -298,6 +306,17 @@ func (r *Runtime) installStdlib() {
 // this is not a hot path.
 func (r *Runtime) reseed(seed int64) {
 	r.rng = rand.New(rand.NewSource(seed))
+}
+
+// wantsHex reports whether tostr's second argument is asking for hexadecimal.
+func wantsHex(v lua.LValue) bool {
+	switch v := v.(type) {
+	case lua.LBool:
+		return bool(v)
+	case lua.LNumber:
+		return v != 0
+	}
+	return false
 }
 
 // num1 wraps a one-number function as a Lua function.

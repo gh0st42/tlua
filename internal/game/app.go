@@ -58,6 +58,9 @@ func (a *app) Update() error {
 		a.status = code
 		return ebiten.Termination
 	}
+	if a.s.sound != nil {
+		a.s.sound.Update() // music fades are counted in frames
+	}
 	a.applyWindow()
 	return nil
 }

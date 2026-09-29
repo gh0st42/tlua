@@ -21,6 +21,7 @@ import (
 	"tlua/internal/interp"
 	"tlua/internal/payload"
 	"tlua/internal/picolua"
+	"tlua/internal/sound"
 )
 
 const usage = `usage: tlua play [options] [script | directory] [args...]
@@ -174,6 +175,8 @@ type session struct {
 	// the only thing that differs between them.
 	start func() error
 
+	sound *sound.Engine
+
 	interrupt chan os.Signal
 }
 
@@ -200,7 +203,7 @@ func load(opts Options) (*session, error) {
 		ScriptArgIdx: opts.ArgIdx,
 	})
 
-	s := &session{opts: opts, interp: in}
+	s := &session{opts: opts, interp: in, sound: sound.New()}
 	s.start = func() error { return in.DoScript(script, opts.Args) }
 	s.rt = picolua.New(in.L, picolua.Options{
 		Title:       title,
@@ -208,6 +211,7 @@ func load(opts Options) (*session, error) {
 		FPS:         ebiten.ActualFPS,
 		ButtonLabel: buttonLabel,
 		ReadFile:    besideProgram(filepath.Dir(script)),
+		Sound:       s.sound,
 	})
 	return s, nil
 }
@@ -226,7 +230,7 @@ func RunFused(p *payload.Payload, exe string) int {
 	}
 	defer f.Close()
 
-	s := &session{interp: f.Interp}
+	s := &session{interp: f.Interp, sound: sound.New()}
 	// A fused program is handed the whole command line, as a .love executable
 	// is, so there are no options of ours to read here.
 	args := os.Args[1:]
@@ -237,6 +241,7 @@ func RunFused(p *payload.Payload, exe string) int {
 		FPS:         ebiten.ActualFPS,
 		ButtonLabel: buttonLabel,
 		ReadFile:    attachedFirst(p),
+		Sound:       s.sound,
 	})
 	return s.play()
 }
@@ -256,6 +261,9 @@ func titleFor(script string) string {
 func (s *session) close() {
 	if s.interrupt != nil {
 		signal.Stop(s.interrupt)
+	}
+	if s.sound != nil {
+		s.sound.Close()
 	}
 	s.interp.Close()
 }

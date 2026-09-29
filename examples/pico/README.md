@@ -31,6 +31,7 @@ tlua fuse -play -o snake examples/pico/snake.lua   # one executable, no tlua
 | [platformer.lua](platformer.lua) | A tile map with `map()`, gravity, collision, and a camera that follows. |
 | [paint.lua](paint.lua) | Drawing with the mouse onto an offscreen surface with `target()`. |
 | [modes.lua](modes.lua) | `vid()`: the same picture at each of the six resolutions. |
+| [sound.lua](sound.lua) | `sfx()` and `music()`, and where they look for what you ask for. |
 
 Two of them are worth reading before writing anything: `hello.lua` for the
 shape of a program, and `sprites.lua` for how artwork is written without any

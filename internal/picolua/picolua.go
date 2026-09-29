@@ -63,6 +63,10 @@ type Options struct {
 	// game was fused, which is the sort of thing found only after shipping.
 	ReadFile func(name string) ([]byte, error)
 
+	// Sound plays what sfx() and music() ask for. Without one a program runs
+	// in silence, and behaves in every other way as though it were not.
+	Sound Sound
+
 	// ButtonLabel reports what the key that works a console button is called
 	// on the keyboard in front of the person, which is not the same as where
 	// that key sits. Without one, btnkey() falls back to the place's own name.
@@ -91,7 +95,12 @@ type Runtime struct {
 	fps   func() float64
 	label func(player, button int) string
 	read  func(name string) ([]byte, error)
+	sound Sound
 	rng   *rand.Rand
+
+	// found remembers where a resource turned out to be, so that asking for
+	// it again costs one read rather than a search.
+	found map[string]string
 
 	window        Window
 	windowChanged bool
@@ -153,10 +162,15 @@ func New(L *lua.LState, opts Options) *Runtime {
 	if r.read == nil {
 		r.read = os.ReadFile
 	}
+	r.sound = opts.Sound
+	if r.sound == nil {
+		r.sound = newSilent()
+	}
 
 	r.installSurfaceType()
 	r.installDrawing()
 	r.installInput()
+	r.installSound()
 	r.installSystem()
 	r.installStdlib()
 	return r

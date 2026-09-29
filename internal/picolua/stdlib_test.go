@@ -274,6 +274,7 @@ func TestEveryDocumentedNameIsThere(t *testing.T) {
 		spr sspr target map
 		btn btnp held key keyp mouse mousebtn btnkey typed
 		t time frame fps printh exit window fullscreen vid
+		sfx music volume
 		flr ceil abs sqrt sgn sin cos atan2 min max mid clamp rnd srand
 		add del deli all foreach count sub split tostr tonum chr ord`)
 
@@ -320,5 +321,35 @@ func TestTheHostCanNameTheKeysItself(t *testing.T) {
 	}
 	if got := lua.LVAsString(L.GetGlobal("answer")); got != "p1/b4" {
 		t.Errorf("btnkey asked for %q", got)
+	}
+}
+
+func TestTostrTakesASecondResultInItsStride(t *testing.T) {
+	// A call that reports a value and an error hands over both; tostr() is
+	// usually what the first one is wrapped in, and the second one must not
+	// turn that into a complaint.
+	f := start(t, 2, 1, `
+		local function two() return 12, "and a message" end
+		plain = tostr(two())
+		hex = tostr(255, 1)`)
+	if got := f.str(`plain`); got != "12" {
+		t.Errorf("tostr of two results gave %q", got)
+	}
+	if got := f.str(`hex`); got != "0xff" {
+		t.Errorf("a number should ask for hexadecimal, got %q", got)
+	}
+
+	cases := []struct{ expr, want string }{
+		{`tostr(255, true)`, "0xff"},
+		{`tostr(255, 1)`, "0xff"},
+		{`tostr(255, false)`, "255"},
+		{`tostr(255, 0)`, "255"},
+		{`tostr(255, nil)`, "255"},
+		{`tostr(255, "a message")`, "255"}, // a stray second result, not a flag
+	}
+	for _, c := range cases {
+		if got := f.str(c.expr); got != c.want {
+			t.Errorf("%s = %q, want %q", c.expr, got, c.want)
+		}
 	}
 }

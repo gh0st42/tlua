@@ -357,6 +357,31 @@ function btnkey(button, player) end
 ---@return string
 function typed() end
 
+--- Plays a sound, and reports the channel it went to. The name is looked for
+--- with the extensions and in the folders a game keeps sounds in: sfx("jump")
+--- finds sfx/jump.wav or assets/sfx/jump.wav.
+---
+--- sfx(-1) stops every channel, and sfx(-1, channel) stops one.
+---@param name string|integer
+---@param channel? integer 0 to 7, or -1 for any free one
+---@param volume? number 0 to 1
+---@return integer|nil channel, string? err
+function sfx(name, channel, volume) end
+
+--- Starts the music, which loops until something else is asked for. music(-1)
+--- stops it, with an optional fade in milliseconds, and music() on its own
+--- reports what is playing.
+---@param name? string|integer
+---@param fade_ms? integer
+---@param volume? number 0 to 1
+---@return string|nil playing, string? err
+function music(name, fade_ms, volume) end
+
+--- How loud everything is, from 0 to 1. Reports what it was.
+---@param v? number
+---@return number previous
+function volume(v) end
+
 --- Seconds since the program started.
 ---@return number
 function t() end

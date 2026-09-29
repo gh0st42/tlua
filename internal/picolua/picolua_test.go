@@ -2,6 +2,7 @@ package picolua
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -24,15 +25,27 @@ type fixture struct {
 	log *strings.Builder
 }
 
+// errNotThere is what a test's file reader says about a file it does not have.
+var errNotThere = errors.New("no such file")
+
 // start loads a program onto a small screen, so that a test can write out what
 // it expects to see.
 func start(t *testing.T, w, h int, src string) *fixture {
+	t.Helper()
+	return startWith(t, Options{Width: w, Height: h, Seed: 1}, src)
+}
+
+// startWith is start for a test that cares how the runtime was set up.
+func startWith(t *testing.T, opts Options, src string) *fixture {
 	t.Helper()
 	L := lua.NewState()
 	t.Cleanup(L.Close)
 
 	log := &strings.Builder{}
-	rt := New(L, Options{Width: w, Height: h, Out: log, Seed: 1})
+	if opts.Out == nil {
+		opts.Out = log
+	}
+	rt := New(L, opts)
 
 	fn, err := L.Load(strings.NewReader(src), "main.lua")
 	if err != nil {
@@ -707,8 +720,16 @@ func TestFilesAreReadThroughTheHost(t *testing.T) {
 	if got := lua.LVAsString(L.GetGlobal("err")); !strings.Contains(got, "nothing.txt") {
 		t.Errorf("the error does not name the file: %q", got)
 	}
-	if strings.Join(asked, " ") != "level.txt art.png nothing.txt" {
-		t.Errorf("the host was asked for %v", asked)
+	// A name that is a path is found first time; one that is nowhere is looked
+	// for in each of the places a game keeps such things.
+	if asked[0] != "level.txt" || asked[1] != "art.png" {
+		t.Errorf("the first two were asked for as %v", asked[:2])
+	}
+	searched := strings.Join(asked[2:], " ")
+	for _, want := range []string{"nothing.txt", "data/nothing.txt", "assets/nothing.txt"} {
+		if !strings.Contains(searched, want) {
+			t.Errorf("a missing file was not looked for as %q: %v", want, asked[2:])
+		}
 	}
 }
 
@@ -736,4 +757,158 @@ func smallPNG(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+// soundFixture is a runtime whose sounds can be looked at rather than heard.
+func soundFixture(t *testing.T, files map[string]string, src string) (*fixture, *silent) {
+	t.Helper()
+	heard := newSilent()
+	f := startWith(t, Options{
+		Width: 4, Height: 2, Seed: 1,
+		Sound: heard,
+		ReadFile: func(name string) ([]byte, error) {
+			if body, ok := files[name]; ok {
+				return []byte(body), nil
+			}
+			return nil, errNotThere
+		},
+	}, src)
+	return f, heard
+}
+
+func TestSfxFindsASoundAndPlaysIt(t *testing.T) {
+	f, heard := soundFixture(t, map[string]string{
+		"sfx/jump.wav":        "RIFF jump",
+		"assets/sfx/coin.ogg": "OggS coin",
+		"blip.wav":            "RIFF blip",
+	}, "")
+
+	cases := []struct{ call, want string }{
+		{`sfx("jump")`, "0"}, // found as sfx/jump.wav
+		{`sfx("coin")`, "1"}, // found as assets/sfx/coin.ogg
+		{`sfx("blip.wav")`, "2"},
+		{`sfx("assets/sfx/coin.ogg")`, "3"}, // spelled out in full
+	}
+	for _, c := range cases {
+		if got := f.str(c.call); got != c.want {
+			t.Errorf("%s = %q, want channel %q", c.call, got, c.want)
+		}
+	}
+
+	if heard.channels[0] != "sfx/jump.wav" {
+		t.Errorf("channel 0 is playing %q", heard.channels[0])
+	}
+	if heard.channels[1] != "assets/sfx/coin.ogg" {
+		t.Errorf("channel 1 is playing %q", heard.channels[1])
+	}
+}
+
+func TestSfxCanBeToldWhichChannel(t *testing.T) {
+	f, heard := soundFixture(t, map[string]string{"sfx/jump.wav": "RIFF"}, "")
+	if got := f.str(`sfx("jump", 5)`); got != "5" {
+		t.Errorf("sfx on channel 5 went to %q", got)
+	}
+	if heard.channels[5] == "" {
+		t.Error("channel 5 is silent")
+	}
+
+	f.eval(`sfx(-1, 5)`)
+	if heard.channels[5] != "" {
+		t.Error("stopping channel 5 left something on it")
+	}
+}
+
+func TestSfxStopsEverythingWhenAsked(t *testing.T) {
+	f, heard := soundFixture(t, map[string]string{"sfx/a.wav": "RIFF"}, "")
+	for i := 0; i < 3; i++ {
+		f.eval(`sfx("a")`)
+	}
+	f.eval(`sfx(-1)`)
+	for i, playing := range heard.channels {
+		if playing != "" {
+			t.Errorf("channel %d is still playing %q", i, playing)
+		}
+	}
+
+	// false says the same thing, for anyone who finds -1 strange.
+	f.eval(`sfx("a")`)
+	f.eval(`sfx(false)`)
+	if heard.channels[0] != "" {
+		t.Error("sfx(false) should stop everything too")
+	}
+}
+
+func TestASoundThatIsNowhereIsNotAnError(t *testing.T) {
+	// A missing sound should not stop a game in its tracks; it comes back as
+	// nothing, with a message saying where it was looked for.
+	f, _ := soundFixture(t, nil, "")
+	if got := f.str(`sfx("nope") == nil`); got != "true" {
+		t.Errorf("a missing sound gave %q", got)
+	}
+	if got := f.str(`select(2, sfx("nope"))`); !strings.Contains(got, "sfx/nope.wav") {
+		t.Errorf("the message does not say where it looked: %q", got)
+	}
+}
+
+func TestMusicPlaysLoopsAndStops(t *testing.T) {
+	f, heard := soundFixture(t, map[string]string{
+		"music/theme.ogg": "OggS theme",
+		"sfx/jingle.wav":  "RIFF jingle",
+	}, "")
+
+	if got := f.str(`music("theme")`); got != "music/theme.ogg" {
+		t.Errorf("music started %q", got)
+	}
+	if heard.music != "music/theme.ogg" {
+		t.Errorf("the music is %q", heard.music)
+	}
+	if got := f.str(`music()`); got != "music/theme.ogg" {
+		t.Errorf("music() reported %q", got)
+	}
+
+	// Music is looked for among the sounds as well, since a small game keeps
+	// everything in one place.
+	if got := f.str(`music("jingle")`); got != "sfx/jingle.wav" {
+		t.Errorf("music found %q", got)
+	}
+
+	f.eval(`music(-1)`)
+	if heard.music != "" {
+		t.Errorf("the music is still %q", heard.music)
+	}
+	if got := f.str(`music() == nil`); got != "true" {
+		t.Errorf("with nothing playing, music() gave %q", got)
+	}
+}
+
+func TestVolumeIsReadAndSet(t *testing.T) {
+	f, heard := soundFixture(t, nil, "")
+	if got := f.str(`volume()`); got != "1" {
+		t.Errorf("the volume starts at %q", got)
+	}
+	if got := f.str(`volume(0.25)`); got != "1" {
+		t.Errorf("setting the volume reported %q as what it was", got)
+	}
+	if heard.volume != 0.25 {
+		t.Errorf("the volume is %v", heard.volume)
+	}
+	f.eval(`volume(9)`)
+	if heard.volume != 1 {
+		t.Errorf("a volume above one should be held to one, got %v", heard.volume)
+	}
+}
+
+func TestAProgramWithNoSoundBehavesTheSame(t *testing.T) {
+	// No host to play anything: a program still gets a channel back and can
+	// ask what is playing, so its own logic does not have to care.
+	f := startWith(t, Options{
+		Width: 2, Height: 1,
+		ReadFile: func(string) ([]byte, error) { return []byte("RIFF"), nil },
+	}, "")
+	if got := f.str(`sfx("jump")`); got != "0" {
+		t.Errorf("sfx gave %q", got)
+	}
+	if got := f.str(`music("theme")`); got == "" {
+		t.Error("music gave nothing back")
+	}
 }

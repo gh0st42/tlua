@@ -128,10 +128,15 @@ tlua fuse -play -o mygame mygame/   # a directory with main.lua in it
 ./mygame                            # opens its own window
 ```
 
-Its artwork and data go in with it. `loadpng("art.png")`, `fetch("level.txt")`
+Its artwork, sounds and data go in with it. `loadpng`, `fetch`, `sfx`, `music`
 and `require` all read what was attached before they read the disk, so the same
 game runs from a directory while it is being written and from one file once it
 is finished.
+
+Resources are asked for by name rather than by path: `sfx("jump")` finds
+`sfx/jump.wav` or `assets/sfx/jump.wav`, `loadpng("player")` finds
+`gfx/player.png`, and a full path still means exactly itself. WAV and Ogg
+Vorbis play, on eight channels with separate looping music.
 
 In the editor, the Run menu's "Run with" setting decides what `F5` does:
 `tlua`, a console window, or love2d.
