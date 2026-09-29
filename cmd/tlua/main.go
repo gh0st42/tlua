@@ -13,6 +13,7 @@ import (
 
 	"tlua/internal/editor"
 	"tlua/internal/fuse"
+	"tlua/internal/game"
 	"tlua/internal/interp"
 	"tlua/internal/payload"
 	"tlua/internal/version"
@@ -23,6 +24,7 @@ const banner = "tlua " + version.Number + " (Lua 5.1 via gopher-lua, pure Go)"
 
 const usage = `usage: tlua [options] [script [args]]
        tlua edit [file...]
+       tlua play [script | directory] [args]
        tlua fuse [-o output] <main.lua | directory | archive.zip>
 
 Options:
@@ -44,11 +46,16 @@ Environment:
   TLUA_INIT      chunk to run at startup ("@file" runs a file)
   TLUA_LSP       language server the editor formats, completes and hovers
                  with, or "off"; by default it looks for one on PATH
-  TLUA_LOVE      love2d binary for the editor's "Run with LOVE" mode
+  TLUA_LOVE      love2d binary for the editor's LOVE run mode
 
 The edit subcommand opens a full-screen Lua editor: a menu bar, several files
 at once, F5 to run the primary file, F9 to check its syntax, and, when a
 language server is on PATH, formatting on save, completion and hover help.
+
+The play subcommand opens a window and runs a program against a fantasy
+console in the spirit of PICO-8 and Picotron: a 480x270 screen, 64 colours,
+sprites, input and a program built out of _update() and _draw(). The calls
+are listed in docs/pico.md; "tlua play -h" explains the options.
 
 The fuse subcommand attaches a Lua program to a copy of this binary, producing
 a standalone executable; "tlua fuse -h" explains it. A zip concatenated onto
@@ -77,6 +84,8 @@ func main() {
 			os.Exit(fuse.Command(os.Args[2:]))
 		case "edit":
 			os.Exit(editCommand(os.Args[2:]))
+		case "play":
+			os.Exit(game.Command(os.Args[2:]))
 		}
 	}
 

@@ -69,7 +69,7 @@ func (e *Editor) buildMenus() []*menu {
 		{title: "Run", hotkey: 'R', items: []menuItem{
 			{label: "Run", shortcut: "F5", action: e.runPrimary},
 			{label: "Run this buffer", action: e.runCurrent},
-			{label: e.runModeLabel(), action: e.toggleRunMode},
+			{label: e.runModeLabel(), action: e.cycleRunMode},
 			{label: "Stop program", shortcut: "Ctrl-C", action: e.stopProgram},
 			{separator: true},
 			{label: "Check syntax", shortcut: "F9", action: e.checkCurrent},

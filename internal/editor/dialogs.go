@@ -346,9 +346,9 @@ func (e *Editor) showHelp() {
 		"  Alt-F, Alt-E, Alt-S, Alt-R, Alt-W, Alt-H open the menus.",
 		"  The mouse works: click the bars, the text and the menus.",
 		"  The file marked » in the buffer bar is the one F5 runs;",
-		"  set it from the Run menu, where \"Run with LOVE\" makes F5",
-		"  hand its folder to love2d instead. A ! or ? after a name",
-		"  means the server found something wrong with that file.",
+		"  set it from the Run menu, where \"Run with\" chooses tlua,",
+		"  a console window (tlua play) or love2d. A ! or ? after a",
+		"  name means the server found something wrong with it.",
 	}, "\n"))
 	dialogColors(text.Box)
 	text.SetTitle(" Help ")

@@ -30,15 +30,23 @@ func loveProject(t *testing.T) string {
 	return dir
 }
 
+// chooseRunMode cycles round to the mode a test wants, as a person would from
+// the Run menu.
+func chooseRunMode(e *Editor, want runMode) {
+	for i := 0; i < int(runModes) && e.runMode != want; i++ {
+		e.cycleRunMode()
+	}
+}
+
 func TestRunWithLoveRunsTheFolder(t *testing.T) {
 	t.Setenv(EnvLove, fakeLove(t))
 	dir := loveProject(t)
 
 	e, screen := start(t, filepath.Join(dir, "main.lua"))
 	onEditor(t, e, func() {
-		e.toggleRunMode()
+		chooseRunMode(e, runWithLove)
 		if e.runMode != runWithLove {
-			t.Fatal("the toggle did not turn on")
+			t.Fatal("the setting did not come round to love")
 		}
 	})
 
@@ -94,7 +102,7 @@ func TestRunWithLoveFromAnotherFileInTheProject(t *testing.T) {
 
 	e, screen := start(t, filepath.Join(dir, "player.lua"))
 	onEditor(t, e, func() {
-		e.toggleRunMode()
+		chooseRunMode(e, runWithLove)
 		e.setPrimary()
 	})
 
@@ -116,7 +124,7 @@ func TestRunWithLoveWithoutAMainFile(t *testing.T) {
 	dir := t.TempDir()
 
 	e, screen := start(t, write(t, filepath.Join(dir, "script.lua"), "print('x')\n"))
-	onEditor(t, e, e.toggleRunMode)
+	onEditor(t, e, func() { chooseRunMode(e, runWithLove) })
 
 	press(screen, tcell.KeyF5, 0, tcell.ModNone)
 	waitFor(t, e, "the explanation", func() bool { return e.modals == 1 })
@@ -132,7 +140,7 @@ func TestRunWithLoveWhenLoveIsNotInstalled(t *testing.T) {
 
 	e, screen := start(t, filepath.Join(dir, "main.lua"))
 	onEditor(t, e, func() {
-		e.toggleRunMode()
+		chooseRunMode(e, runWithLove)
 		if !strings.Contains(e.status, "was not found") {
 			t.Errorf("the toggle did not say love is missing: %q", e.status)
 		}
@@ -146,29 +154,54 @@ func TestRunWithLoveWhenLoveIsNotInstalled(t *testing.T) {
 	}
 }
 
-// The menu says which way F5 will go.
+// The menu says which way F5 will go, and choosing it moves on to the next.
 func TestRunMenuShowsTheMode(t *testing.T) {
 	t.Setenv(EnvLove, fakeLove(t))
 	dir := loveProject(t)
 	e, screen := start(t, filepath.Join(dir, "main.lua"))
-
 	run := menuIndex(t, e, "Run")
-	press(screen, tcell.KeyRune, 'r', tcell.ModAlt)
-	waitFor(t, e, "the Run menu", func() bool { return e.openMenu == run })
-	redraw(t, e)
-	if words := screenWords(screen); !strings.Contains(words, "Run with LOVE: off") {
-		t.Errorf("the menu does not show the mode: %s", words)
-	}
-	press(screen, tcell.KeyEscape, 0, tcell.ModNone)
-	waitFor(t, e, "the menu to close", func() bool { return e.openMenu == -1 })
 
-	onEditor(t, e, e.toggleRunMode)
-	press(screen, tcell.KeyRune, 'r', tcell.ModAlt)
-	waitFor(t, e, "the Run menu again", func() bool { return e.openMenu == run })
-	redraw(t, e)
-	if words := screenWords(screen); !strings.Contains(words, "Run with LOVE: on") {
-		t.Errorf("the menu does not show the mode: %s", words)
+	for _, want := range []string{"Run with: tlua", "Run with: console window", "Run with: LOVE", "Run with: tlua"} {
+		press(screen, tcell.KeyRune, 'r', tcell.ModAlt)
+		waitFor(t, e, "the Run menu", func() bool { return e.openMenu == run })
+		redraw(t, e)
+		if words := screenWords(screen); !strings.Contains(words, want) {
+			t.Fatalf("the menu does not say %q: %s", want, words)
+		}
+		press(screen, tcell.KeyEscape, 0, tcell.ModNone)
+		waitFor(t, e, "the menu to close", func() bool { return e.openMenu == -1 })
+		onEditor(t, e, e.cycleRunMode)
 	}
+}
+
+// The console window is this same binary, run again with "play".
+func TestRunAsAConsoleProgram(t *testing.T) {
+	dir := t.TempDir()
+	script := write(t, filepath.Join(dir, "game.lua"), "cls(3)\n")
+
+	e, _ := start(t, script)
+	onEditor(t, e, func() {
+		chooseRunMode(e, runWithPico)
+		cmd, what, err := e.runCommand(e.buf())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cmd.Path != e.exe {
+			t.Errorf("it runs %q, want this binary %q", cmd.Path, e.exe)
+		}
+		if len(cmd.Args) < 2 || cmd.Args[1] != "play" {
+			t.Errorf("arguments are %q, want play first", cmd.Args)
+		}
+		if cmd.Args[len(cmd.Args)-1] != "game.lua" {
+			t.Errorf("arguments are %q, want the file last", cmd.Args)
+		}
+		if cmd.Dir != filepath.Dir(script) {
+			t.Errorf("it runs in %q, want the file's own folder", cmd.Dir)
+		}
+		if !strings.Contains(what, "play") {
+			t.Errorf("the output would say %q", what)
+		}
+	})
 }
 
 func TestFindLove(t *testing.T) {
@@ -216,7 +249,7 @@ func TestSettingsShowTheirStateInTheMenus(t *testing.T) {
 	menus := []struct {
 		title, hotkey, want string
 	}{
-		{"Run", "r", "Run with LOVE: off"},
+		{"Run", "r", "Run with: tlua"},
 		{"Edit", "e", "Format on save: on"},
 		{"Edit", "e", "Parameters on status line: off"},
 	}

@@ -9,15 +9,22 @@ import (
 	"strings"
 )
 
-// runMode is what F5 starts.
+// runMode is what F5 starts. A file can be a plain script, a program for the
+// console tlua itself provides, or a LÖVE game, and which one it is belongs to
+// the project rather than to the file, so it is a setting rather than a guess.
 type runMode int
 
 const (
 	// runWithTlua runs the file itself through this interpreter.
 	runWithTlua runMode = iota
+	// runWithPico runs it in a window against the console API, which is
+	// "tlua play" on the file.
+	runWithPico
 	// runWithLove hands the folder holding the file to love2d, which is how a
 	// LÖVE game is run: "love ." from the directory with main.lua in it.
 	runWithLove
+
+	runModes // how many there are, for cycling through them
 )
 
 // EnvLove names the environment variable that picks the love2d binary, as a
@@ -62,7 +69,16 @@ func findLove() (command string, args []string, ok bool) {
 func (e *Editor) runCommand(b *buffer) (*exec.Cmd, string, error) {
 	dir, file := filepath.Dir(b.path), filepath.Base(b.path)
 
-	if e.runMode == runWithLove {
+	switch e.runMode {
+	case runWithPico:
+		// The window is this same binary, so there is nothing to look for:
+		// "tlua play" on the file, from its own folder so that the modules it
+		// requires are found the way they would be anywhere else.
+		cmd := exec.Command(e.exe, "play", "--", file)
+		cmd.Dir = dir
+		return cmd, "tlua play " + file, nil
+
+	case runWithLove:
 		command, args, ok := findLove()
 		if !ok {
 			return nil, "", fmt.Errorf("love was not found; put it on PATH or set %s", EnvLove)
@@ -81,29 +97,40 @@ func (e *Editor) runCommand(b *buffer) (*exec.Cmd, string, error) {
 	return cmd, file, nil
 }
 
-// toggleRunMode swaps between running a file through the interpreter and handing
-// its folder to love2d.
-func (e *Editor) toggleRunMode() {
-	if e.runMode == runWithLove {
-		e.runMode = runWithTlua
-		e.setStatus("F5 runs the » file with tlua")
-	} else {
-		e.runMode = runWithLove
+// cycleRunMode moves on to the next way of running a file, and says what that
+// means now rather than making anyone open the menu again to find out.
+func (e *Editor) cycleRunMode() {
+	e.runMode = (e.runMode + 1) % runModes
+
+	switch e.runMode {
+	case runWithPico:
+		e.setStatus("F5 runs the » file in a window, with the console API")
+	case runWithLove:
 		command, _, ok := findLove()
-		switch {
-		case !ok:
+		if !ok {
 			e.setStatus("F5 will run love, but love was not found; set " + EnvLove)
-		default:
-			e.setStatus("F5 runs love in the folder of the » file (" + command + ")")
+			break
 		}
+		e.setStatus("F5 runs love in the folder of the » file (" + command + ")")
+	default:
+		e.setStatus("F5 runs the » file with tlua")
 	}
 	e.menus = e.buildMenus() // the menu shows the state
 }
 
+// runModeName is what the setting is called.
+func (e *Editor) runModeName() string {
+	switch e.runMode {
+	case runWithPico:
+		return "console window"
+	case runWithLove:
+		return "LOVE"
+	default:
+		return "tlua"
+	}
+}
+
 // runModeLabel is what the Run menu says about the setting.
 func (e *Editor) runModeLabel() string {
-	if e.runMode == runWithLove {
-		return "Run with LOVE: on"
-	}
-	return "Run with LOVE: off"
+	return "Run with: " + e.runModeName()
 }

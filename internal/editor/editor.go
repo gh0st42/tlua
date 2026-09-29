@@ -76,7 +76,8 @@ type Editor struct {
 	// comes in, and drained by a goroutine that brings the buffers up to date.
 	diagnosticsWake chan struct{}
 
-	// runMode is what F5 starts: this interpreter, or love2d on the folder.
+	// runMode is what F5 starts: this interpreter, a console window, or
+	// love2d on the folder.
 	runMode runMode
 
 	outputShown bool

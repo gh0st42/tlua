@@ -1,10 +1,11 @@
 # tlua
 
-A standalone Lua interpreter written in pure Go, with a DOS-style editor and
-LÖVE-style standalone executables. It embeds
-[gopher-lua](https://github.com/yuin/gopher-lua) (Lua 5.1), so there is no cgo,
-no linking against liblua, and `CGO_ENABLED=0 go build` produces a single
-static binary you can drop on any machine.
+A standalone Lua interpreter written in pure Go, with a DOS-style editor, a
+fantasy console for writing games, and LÖVE-style standalone executables. It
+embeds [gopher-lua](https://github.com/yuin/gopher-lua) (Lua 5.1) and draws
+with [Ebitengine](https://ebitengine.org), neither of which needs cgo, so
+`CGO_ENABLED=0 go build` still produces a single static binary you can drop on
+any machine.
 
 It runs ordinary `.lua` files from disk, including the modules they `require()`.
 
@@ -27,6 +28,7 @@ be deleted there.
 ```
 usage: tlua [options] [script [args]]
        tlua edit [file...]
+       tlua play [script | directory] [args]
        tlua fuse [-o output] <main.lua | directory | archive.zip>
 
 Options:
@@ -48,7 +50,7 @@ Environment:
   TLUA_INIT      chunk to run at startup ("@file" runs a file)
   TLUA_LSP       language server the editor formats, completes and hovers
                  with, or "off"; by default it looks for one on PATH
-  TLUA_LOVE      love2d binary for the editor's "Run with LOVE" mode
+  TLUA_LOVE      love2d binary for the editor's LOVE run mode
 ```
 
 ```sh
@@ -58,7 +60,56 @@ tlua -p ./vendor -l inspect app.lua
 echo 'print(1+1)' | tlua          # program on stdin
 tlua -i                           # REPL
 tlua edit app.lua                 # full-screen editor
+tlua play examples/pico/snake.lua # a game, in a window
 ```
+
+## The console
+
+`tlua play` opens a window and runs a Lua program against a fantasy console in
+the spirit of PICO-8 and Picotron: a 480x270 screen, 64 colours, sprites, four
+players' worth of input, and a program built out of `_update()` and `_draw()`.
+
+```lua
+function _draw()
+	cls(1)
+	print("hello", 8, 8, 7)
+	circfill(64, 64, 10 + sin(t()) * 4, 12)
+end
+```
+
+```sh
+tlua play game.lua              # one file
+tlua play .                     # the main.lua in this directory
+tlua play -scale 3 game.lua     # three screen pixels to a console pixel
+tlua play -fullscreen game.lua
+```
+
+Sprites are written out as text in the program itself, so a game is one file
+with nothing beside it:
+
+```lua
+local coin = sprite[[
+	.aaa.
+	a9a9a
+	a9a9a
+	.aaa.
+]]
+```
+
+[docs/pico.md](docs/pico.md) is the whole API, and
+[examples/pico](examples/pico) has eleven programs written against it — from
+`hello.lua` up to a snake game, a platformer with a tile map, and a painting
+program. [library/pico.lua](library/pico.lua) declares it for
+lua-language-server, so an editor completes these names and shows what they
+take; the `.luarc.json` at the root points at it.
+
+Drawing happens on an indexed framebuffer, one byte a pixel, which is scaled to
+the window by a whole number with nearest-neighbour, so pixels stay square.
+Colours 0-15 are PICO-8's palette exactly and 16-31 its extended one; 32-63 are
+tlua's own ramps rather than Picotron's, which are not published as a list.
+
+In the editor, the Run menu's "Run with" setting decides what `F5` does:
+`tlua`, a console window, or love2d.
 
 ## The editor
 
@@ -459,7 +510,12 @@ internal/payload/  the format of a program attached to a binary, and its archive
 internal/fuse/     the fuse subcommand: packing a program onto the interpreter
 internal/editor/   the full-screen editor
 internal/lsp/      a small Language Server Protocol client
-examples/          hello.lua, and app/ to fuse
+internal/pico/     the fantasy console: framebuffer, palette, drawing, font
+internal/picolua/  that console's Lua API
+internal/game/     the window: Ebitengine, the frame loop, input
+docs/pico.md       the console API, written out
+library/pico.lua   the same API declared for lua-language-server
+examples/          hello.lua, app/ to fuse, and pico/ for the console
 bin/               build output (git-ignored)
 ```
 
@@ -491,7 +547,17 @@ bin/               build output (git-ignored)
 | [internal/editor/complete.go](internal/editor/complete.go) | the completion panel and the hover box |
 | [internal/editor/signature.go](internal/editor/signature.go) | the parameter hint |
 | [internal/editor/diagnostics.go](internal/editor/diagnostics.go) | what the server finds wrong, and moving between it |
-| [internal/editor/love.go](internal/editor/love.go) | the run mode, and finding love2d |
+| [internal/editor/runmode.go](internal/editor/runmode.go) | what F5 starts: tlua, a console window, or love2d |
+| [internal/pico/pico.go](internal/pico/pico.go) | the console's screen and drawing state |
+| [internal/pico/draw.go](internal/pico/draw.go) | lines, rectangles, ellipses, triangles, sprites |
+| [internal/pico/font.go](internal/pico/font.go) | the 3x5 font, written out as pictures |
+| [internal/pico/palette.go](internal/pico/palette.go) | the 64 colours |
+| [internal/pico/input.go](internal/pico/input.go) | buttons, keys and the mouse, held and repeating |
+| [internal/picolua/picolua.go](internal/picolua/picolua.go) | the Lua runtime: callbacks, arguments, the window request |
+| [internal/picolua/draw.go](internal/picolua/draw.go) | the drawing calls as Lua sees them |
+| [internal/picolua/stdlib.go](internal/picolua/stdlib.go) | `flr`, `rnd`, `add`, `all`, `split` and the rest |
+| [internal/game/game.go](internal/game/game.go) | the `play` subcommand: loading and starting a program |
+| [internal/game/app.go](internal/game/app.go) | the frame loop, and fitting the picture to the window |
 
 Tests sit beside what they cover: unit tests in each `internal` package, and
 end-to-end tests in [cmd/tlua](cmd/tlua/) that build the binary and drive it as
