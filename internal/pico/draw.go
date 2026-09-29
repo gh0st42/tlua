@@ -331,18 +331,55 @@ func (c *Console) Tri(x0, y0, x1, y1, x2, y2 int, col uint8) {
 
 /* --- sprites --- */
 
+// Orientation is how a sprite is turned as it is drawn: mirrored across one
+// axis, the other, or along the diagonal, which between them make all eight
+// ways of putting a square down.
+//
+// The three are what a Tiled map stores in the top bits of a tile number, and
+// keeping them in one value means a map can hand over what it read without
+// taking it apart first.
+type Orientation uint8
+
+const (
+	// FlipX mirrors left to right, FlipY top to bottom, and Turn along the
+	// diagonal running down from the top left — a transpose, which is what
+	// turns the other two into rotations.
+	FlipX Orientation = 1 << iota
+	FlipY
+	Turn
+
+	// Upright is a sprite the way it was drawn.
+	Upright Orientation = 0
+)
+
+// Flips reports the orientation the two older flags describe.
+func Flips(x, y bool) Orientation {
+	var o Orientation
+	if x {
+		o |= FlipX
+	}
+	if y {
+		o |= FlipY
+	}
+	return o
+}
+
+func (o Orientation) flipX() bool  { return o&FlipX != 0 }
+func (o Orientation) flipY() bool  { return o&FlipY != 0 }
+func (o Orientation) turned() bool { return o&Turn != 0 }
+
 // Spr draws a surface at its own size, skipping the colours Palt marks
 // transparent.
-func (c *Console) Spr(src *Surface, x, y int, flipX, flipY bool) {
+func (c *Console) Spr(src *Surface, x, y int, turn Orientation) {
 	if src == nil {
 		return
 	}
-	c.Blit(src, 0, 0, src.W, src.H, x, y, src.W, src.H, flipX, flipY)
+	c.Blit(src, 0, 0, src.W, src.H, x, y, src.W, src.H, turn)
 }
 
 // SprCell draws sprite n of a sheet at its own size, spanning wide by tall
 // cells of it. A number that is not a sprite on that sheet draws nothing.
-func (c *Console) SprCell(sheet *Surface, n, x, y, wide, tall int, flipX, flipY bool) {
+func (c *Console) SprCell(sheet *Surface, n, x, y, wide, tall int, turn Orientation) {
 	if sheet == nil {
 		return
 	}
@@ -350,21 +387,21 @@ func (c *Console) SprCell(sheet *Surface, n, x, y, wide, tall int, flipX, flipY 
 	if !ok {
 		return
 	}
-	c.Blit(sheet, sx, sy, w, h, x, y, w, h, flipX, flipY)
+	c.Blit(sheet, sx, sy, w, h, x, y, w, h, turn)
 }
 
 // SSpr draws part of a surface, stretched to fill the destination rectangle.
-func (c *Console) SSpr(src *Surface, sx, sy, sw, sh, dx, dy, dw, dh int, flipX, flipY bool) {
-	c.Blit(src, sx, sy, sw, sh, dx, dy, dw, dh, flipX, flipY)
+func (c *Console) SSpr(src *Surface, sx, sy, sw, sh, dx, dy, dw, dh int, turn Orientation) {
+	c.Blit(src, sx, sy, sw, sh, dx, dy, dw, dh, turn)
 }
 
 // Blit copies a rectangle of src onto the target, scaling it to dw by dh,
-// optionally mirrored, and skipping transparent colours.
+// turned however the orientation says, and skipping transparent colours.
 //
 // It walks the destination, not the source: that way the scaling has no gaps, a
 // clipped sprite costs only what is on screen, and a program that asks for a
 // destination the size of the world does not hang.
-func (c *Console) Blit(src *Surface, sx, sy, sw, sh, dx, dy, dw, dh int, flipX, flipY bool) {
+func (c *Console) Blit(src *Surface, sx, sy, sw, sh, dx, dy, dw, dh int, turn Orientation) {
 	if src == nil || sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0 {
 		return
 	}
@@ -378,28 +415,43 @@ func (c *Console) Blit(src *Surface, sx, sy, sw, sh, dx, dy, dw, dh int, flipX, 
 		return
 	}
 
-	// Drawn at its own size, which is what spr() does and what a tile map does,
-	// a sprite needs none of the arithmetic that stretching one needs: the
-	// source pixel is a step along the row. That case is most of the drawing a
-	// game does, so it gets a loop of its own with no division in it.
-	if sw == dw && sh == dh {
-		c.blitSameSize(src, sx, sy, dx, dy, dw, dh, x0, x1, y0, y1, flipX, flipY)
+	// Drawn at its own size and the right way up, which is what spr() does and
+	// what most of a tile map does, a sprite needs none of the arithmetic the
+	// other cases need: the source pixel is a step along the row.
+	if sw == dw && sh == dh && !turn.turned() {
+		c.blitSameSize(src, sx, sy, dx, dy, dw, dh, x0, x1, y0, y1, turn.flipX(), turn.flipY())
 		return
+	}
+
+	// Turned along the diagonal, a row of the destination reads down a column
+	// of the source, so the two sizes trade places.
+	srcAcross, srcDown := sw, sh
+	if turn.turned() {
+		srcAcross, srcDown = sh, sw
 	}
 
 	for py := y0; py < y1; py++ {
 		row := py - dy
-		if flipY {
+		if turn.flipY() {
 			row = dh - 1 - row
 		}
-		srcY := sy + row*sh/dh
+		down := row * srcDown / dh
 		dst := c.target.Pix[py*c.target.W:]
+
 		for px := x0; px < x1; px++ {
 			col := px - dx
-			if flipX {
+			if turn.flipX() {
 				col = dw - 1 - col
 			}
-			v := src.Get(sx+col*sw/dw, srcY)
+			across := col * srcAcross / dw
+
+			// Along the diagonal, what was across is down and the other way
+			// about.
+			fromX, fromY := across, down
+			if turn.turned() {
+				fromX, fromY = down, across
+			}
+			v := src.Get(sx+fromX, sy+fromY)
 			if c.transparent[v] {
 				continue
 			}
@@ -428,16 +480,14 @@ func (c *Console) blitSameSize(src *Surface, sx, sy, dx, dy, dw, dh, x0, x1, y0,
 			row = dh - 1 - row
 		}
 		srcY := sy + row
+
+		dst := c.target.Pix[py*c.target.W : py*c.target.W+c.target.W]
 		if srcY < 0 || srcY >= src.H {
 			// Off the sprite: every pixel of this row reads as colour 0, and
 			// there is nothing to do unless that colour draws.
 			if c.transparent[0] {
 				continue
 			}
-		}
-
-		dst := c.target.Pix[py*c.target.W : py*c.target.W+c.target.W]
-		if srcY < 0 || srcY >= src.H {
 			for px := x0; px < x1; px++ {
 				dst[px] = c.drawPal[0]
 			}

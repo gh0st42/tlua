@@ -1,6 +1,7 @@
 package game
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -192,5 +193,52 @@ func TestTheJumpButtonIsNotMissedNearTheGround(t *testing.T) {
 	if highest >= ground-2 {
 		t.Errorf("the press made just before landing was lost: after landing it got no higher than %d, standing is %d",
 			highest, ground)
+	}
+}
+
+// TestTheProjectExamplesRun plays the examples that are a folder rather than a
+// file — the ones with artwork and a level beside them, which is what a game
+// looks like once it is more than one screen.
+//
+// It is the only test that reads a real map, its tileset and its PNG off the
+// disk, together, the way a game does.
+func TestTheProjectExamplesRun(t *testing.T) {
+	entries, err := os.ReadDir(examplesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirs := []string{}
+	for _, e := range entries {
+		if e.IsDir() {
+			dirs = append(dirs, filepath.Join(examplesDir, e.Name()))
+		}
+	}
+	if len(dirs) == 0 {
+		t.Fatalf("no project examples in %s", examplesDir)
+	}
+
+	for _, dir := range dirs {
+		t.Run(filepath.Base(filepath.Clean(dir)), func(t *testing.T) {
+			s, err := load(Options{Script: dir})
+			if err != nil {
+				t.Fatalf("loading: %v", err)
+			}
+			defer s.close()
+			if err := s.runMain(); err != nil {
+				t.Fatalf("starting: %v", err)
+			}
+
+			for i := 0; i < 120; i++ {
+				if err := s.rt.Tick(playing(i)); err != nil {
+					t.Fatalf("frame %d, _update: %v", i, err)
+				}
+				if err := s.rt.Draw(); err != nil {
+					t.Fatalf("frame %d, _draw: %v", i, err)
+				}
+			}
+			if blank(s.rt.Screen()) {
+				t.Error("two seconds in and the screen is still empty")
+			}
+		})
 	}
 }

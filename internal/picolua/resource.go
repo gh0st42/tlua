@@ -36,6 +36,16 @@ var (
 		dirs: []string{"", "music", "assets/music", "bgm", "assets/bgm", "sfx", "assets/sfx", "assets"},
 		exts: []string{".ogg", ".wav"},
 	}
+	kindMap = kind{
+		what: "map",
+		dirs: []string{"", "maps", "assets/maps", "assets"},
+		exts: []string{".tmj", ".json"},
+	}
+	kindTileset = kind{
+		what: "tileset",
+		dirs: []string{"", "gfx", "assets/gfx", "maps", "assets/maps", "assets"},
+		exts: []string{".tsj", ".json"},
+	}
 	kindData = kind{
 		what: "file",
 		dirs: []string{"", "data", "assets/data", "maps", "assets/maps", "assets"},

@@ -22,7 +22,7 @@ func BenchmarkFrame(b *testing.B) {
 			c.CircFill(n*4, n*2, 12, uint8(n))
 		}
 		for n := 0; n < 200; n++ {
-			c.Spr(sprite, n*2, n, false, false)
+			c.Spr(sprite, n*2, n, Upright)
 		}
 		c.Print("score 1200\nlives 3", 4, 4, 7)
 	}
@@ -68,7 +68,7 @@ func BenchmarkSprites(b *testing.B) {
 	b.SetBytes(int64(500 * 16 * 16))
 	for i := 0; i < b.N; i++ {
 		for n := 0; n < 500; n++ {
-			c.Spr(s, (n*7)%ScreenWidth, (n*13)%ScreenHeight, false, false)
+			c.Spr(s, (n*7)%ScreenWidth, (n*13)%ScreenHeight, Upright)
 		}
 	}
 }
@@ -86,7 +86,7 @@ func BenchmarkSpritesScaled(b *testing.B) {
 	b.SetBytes(int64(500 * 32 * 32))
 	for i := 0; i < b.N; i++ {
 		for n := 0; n < 500; n++ {
-			c.SSpr(s, 0, 0, 16, 16, (n*7)%ScreenWidth, (n*13)%ScreenHeight, 32, 32, false, false)
+			c.SSpr(s, 0, 0, 16, 16, (n*7)%ScreenWidth, (n*13)%ScreenHeight, 32, 32, Upright)
 		}
 	}
 }
@@ -104,7 +104,7 @@ func BenchmarkMap(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for y := 0; y < ScreenHeight/8+1; y++ {
 			for x := 0; x < ScreenWidth/8+1; x++ {
-				c.SSpr(sheet, (x%4)*8, 0, 8, 8, x*8, y*8, 8, 8, false, false)
+				c.SSpr(sheet, (x%4)*8, 0, 8, 8, x*8, y*8, 8, 8, Upright)
 			}
 		}
 	}

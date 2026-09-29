@@ -102,7 +102,7 @@ func (r *Runtime) installDrawing() {
 		// position it draws at the cursor and moves it down a line, so that
 		// several prints in a row stack up.
 		"print": func(L *lua.LState) int {
-			text := tostr(L.CheckAny(1))
+			text := text(L, L.CheckAny(1))
 			cx, cy := r.Vid.CursorAt()
 			switch {
 			case isNone(L, 2) && isNone(L, 3):

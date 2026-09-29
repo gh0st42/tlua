@@ -216,14 +216,15 @@ func (r *Runtime) installSurfaces() {
 			sheet, at := r.spriteSheet(L, "spr")
 			if sheet == nil {
 				s := checkSurface(L, 1)
-				r.Vid.Spr(s, coord(L, 2), coord(L, 3), L.OptBool(4, false), L.OptBool(5, false))
+				r.Vid.Spr(s, coord(L, 2), coord(L, 3),
+					pico.Flips(L.OptBool(4, false), L.OptBool(5, false)))
 				return 0
 			}
 			n := L.CheckInt(at)
 			r.Vid.SprCell(sheet, n,
 				coord(L, at+1), coord(L, at+2),
 				optCoord(L, at+3, 1), optCoord(L, at+4, 1),
-				L.OptBool(at+5, false), L.OptBool(at+6, false))
+				pico.Flips(L.OptBool(at+5, false), L.OptBool(at+6, false)))
 			return 0
 		},
 
@@ -319,10 +320,19 @@ func (r *Runtime) installSurfaces() {
 			return 1
 		},
 
-		// map(cells, sheet, [x], [y], [tile_w], [tile_h], [draw_zero]) draws a
-		// grid of sprites. A row of cells is either a table of sprite numbers
-		// or a string of hex digits, so a level can be written out in the
-		// program as readably as a sprite can.
+		// map draws a level, in either of the two ways there is one:
+		//
+		//	map([tx], [ty], [sx], [sy], [tw], [th], [flags])
+		//	map(cells, sheet, [x], [y], [tile_w], [tile_h], [draw_zero])
+		//
+		// The first draws a window of the current map — the one usemap() was
+		// given, loaded from a map editor — and is Picotron's own call. With
+		// flags, only sprites carrying one of them are drawn, which is how one
+		// layer of artwork becomes two of scenery.
+		//
+		// The second draws a grid of sprite numbers written out in the program
+		// itself. A row is a table of numbers or a string of hex digits, so a
+		// small level can be as readable in the source as a sprite is.
 		//
 		// The numbers are sprite numbers, counted from zero as everywhere
 		// else. Sprite 0 is left undrawn unless the last argument asks for it,
@@ -331,6 +341,14 @@ func (r *Runtime) installSurfaces() {
 		//
 		// Tiles are the size of the sheet's own cells unless told otherwise.
 		"map": func(L *lua.LState) int {
+			// A table is a grid of sprite numbers written out in the program;
+			// anything else means the current map, which is Picotron's own
+			// call. Both are useful: one for a level typed into the source,
+			// one for a level drawn in an editor.
+			if _, ok := L.Get(1).(*lua.LTable); !ok {
+				r.drawMap(L, r.theMap(L, "map"), nil, 1)
+				return 0
+			}
 			cells := L.CheckTable(1)
 			sheet := checkSurface(L, 2)
 			dx, dy := optCoord(L, 3, 0), optCoord(L, 4, 0)
@@ -354,7 +372,7 @@ func (r *Runtime) installSurfaces() {
 					}
 					sx := (tile % across) * tw
 					sy := (tile / across) * th
-					r.Vid.SSpr(sheet, sx, sy, tw, th, dx+col*tw, y, tw, th, false, false)
+					r.Vid.SSpr(sheet, sx, sy, tw, th, dx+col*tw, y, tw, th, pico.Upright)
 				})
 			}
 			return 0
@@ -411,7 +429,7 @@ func (r *Runtime) stretch(L *lua.LState, s *pico.Surface, at int) int {
 	dx, dy := coord(L, at+4), coord(L, at+5)
 	r.Vid.SSpr(s, sx, sy, sw, sh, dx, dy,
 		optCoord(L, at+6, sw), optCoord(L, at+7, sh),
-		L.OptBool(at+8, false), L.OptBool(at+9, false))
+		pico.Flips(L.OptBool(at+8, false), L.OptBool(at+9, false)))
 	return 0
 }
 

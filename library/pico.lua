@@ -369,6 +369,94 @@ function sget(x, y) end
 ---@param colour? integer defaults to the pen colour
 function sset(x, y, colour) end
 
+---@class Tilemap A level: layers of sprites, with things placed on them.
+local Tilemap = {}
+
+---@return integer width, integer height in cells
+function Tilemap:size() end
+
+---@return integer width, integer height of one cell, in pixels
+function Tilemap:tile() end
+
+--- The names of its layers, in order.
+---@return string[]
+function Tilemap:layers() end
+
+--- One layer, by name or by its place counted from one.
+---@param which string|integer
+---@return MapLayer|nil
+function Tilemap:layer(which) end
+
+--- What was placed on a layer, as plain tables with name, class, x, y, w, h
+--- and props.
+---@param which string|integer
+---@return table[]
+function Tilemap:objects(which) end
+
+--- What the map itself was labelled with in the editor.
+---@return table
+function Tilemap:props() end
+
+--- Draws a window of it without making it the current map.
+function Tilemap:draw(tx, ty, sx, sy, tw, th, flags) end
+
+---@class MapLayer One layer of a map.
+local MapLayer = {}
+
+---@return string
+function MapLayer:name() end
+
+---@return integer width, integer height in cells
+function MapLayer:size() end
+
+--- Whether it is drawn; with an argument, sets that.
+---@param on? boolean
+---@return boolean
+function MapLayer:visible(on) end
+
+---@return table[]
+function MapLayer:objects() end
+
+---@param x integer
+---@param y integer
+---@return integer sprite
+function MapLayer:get(x, y) end
+
+---@param x integer
+---@param y integer
+---@param sprite integer
+function MapLayer:set(x, y, sprite) end
+
+--- Draws a window of this layer alone.
+function MapLayer:draw(tx, ty, sx, sy, tw, th, flags) end
+
+--- Reads a Tiled map (.tmj) and everything it draws with: the tilesets it
+--- names, and the pictures those name in turn.
+---@param name string
+---@return Tilemap|nil map, string? err
+function loadmap(name) end
+
+--- Makes a map the one that map(), mget() and mset() mean. Reports the one it
+--- replaced.
+---@param m? Tilemap
+---@return Tilemap|nil previous
+function usemap(m) end
+
+--- The sprite in a square of the current map, or 0 for an empty one. Without a
+--- layer it means the first one.
+---@param x integer
+---@param y integer
+---@param layer? string|integer
+---@return integer sprite
+function mget(x, y, layer) end
+
+--- Puts a sprite in a square of the current map.
+---@param x integer
+---@param y integer
+---@param sprite integer
+---@param layer? string|integer
+function mset(x, y, sprite, layer) end
+
 --- Draws a grid of sprites. A row of cells is a table of sprite numbers or a
 --- string of hex digits.
 ---
@@ -383,6 +471,18 @@ function sset(x, y, colour) end
 ---@param tile_h? integer defaults to the sheet's cell height
 ---@param draw_zero? boolean draw sprite 0 as well
 function map(cells, sheet, x, y, tile_w, tile_h, draw_zero) end
+
+--- Draws a window of the current map: from cell tx, ty, onto the screen at
+--- sx, sy, tw by th cells of it. With flags, only sprites carrying one of them
+--- are drawn. Everything may be left out, and then the whole map is drawn at
+--- the origin.
+---@param tx? integer
+---@param ty? integer
+---@param sx? integer
+---@param sy? integer
+---@param tw? integer
+---@param th? integer
+---@param flags? integer
 
 --- Whether a button is held. 0 to 5 are left, right, up, down, O and X, which
 --- can also be named. With no arguments, whether anything at all is held.

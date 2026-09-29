@@ -84,6 +84,15 @@ tlua play -scale 3 game.lua     # three screen pixels to a console pixel
 tlua play -fullscreen game.lua
 ```
 
+A level can be drawn in a map editor and loaded whole — Tiled's own format,
+with its tilesets and their artwork:
+
+```lua
+usemap(loadmap("level1"))
+map()
+if fget(mget(x, y), SOLID) then end   -- what a tile is comes with the artwork
+```
+
 A sheet of sprites is a surface with a cell size on it — 8x8, 16x16, whatever
 the artwork was drawn at — and its sprites are drawn by number:
 

@@ -272,6 +272,7 @@ func TestEveryDocumentedNameIsThere(t *testing.T) {
 		tri trifill print cursor textwidth textheight camera clip pal palt
 		rrect rrectfill fillp screen palette rgb surface sprite loadpng fetch
 		spr sspr target map usesheet sget sset fget fset
+		loadmap usemap mget mset
 		btn btnp held key keyp mouse mousebtn btnkey typed
 		t time frame fps printh exit window fullscreen vid
 		sfx music volume

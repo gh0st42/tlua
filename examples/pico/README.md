@@ -34,6 +34,13 @@ tlua fuse -play -o snake examples/pico/snake.lua   # one executable, no tlua
 | [modes.lua](modes.lua) | `vid()`: the same picture at each of the six resolutions. |
 | [sound.lua](sound.lua) | `sfx()` and `music()`, and where they look for what you ask for. |
 
+And one that is a folder rather than a file, because a level drawn in an editor
+is three of them:
+
+| Example | What it is for |
+| --- | --- |
+| [cellar/](cellar/) | A Tiled map with its tileset and artwork: `loadmap`, `mget`, sprite flags for collision, and objects placed in the editor. Run it with `tlua play examples/pico/cellar`. |
+
 Two of them are worth reading before writing anything: `hello.lua` for the
 shape of a program, and `sprites.lua` for how artwork is written without any
 files. `palette.lua` is worth keeping open beside whatever is being written,

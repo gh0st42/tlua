@@ -120,7 +120,13 @@ type Runtime struct {
 	current      *pico.Surface
 	currentValue lua.LValue
 
+	// currentMap is the map that map(), mget() and mset() mean.
+	currentMap      *pico.Tilemap
+	currentMapValue lua.LValue
+
 	surfaceMeta *lua.LTable
+	mapMeta     *lua.LTable
+	layerMeta   *lua.LTable
 }
 
 // New installs the API on a Lua state and reports the runtime that drives it.
@@ -143,15 +149,16 @@ func New(L *lua.LState, opts Options) *Runtime {
 	}
 
 	r := &Runtime{
-		L:             L,
-		Vid:           pico.New(opts.Width, opts.Height),
-		In:            pico.NewInput(),
-		out:           opts.Out,
-		fps:           opts.FPS,
-		rng:           rand.New(rand.NewSource(seed)),
-		window:        Window{Title: opts.Title},
-		currentTarget: lua.LNil,
-		currentValue:  lua.LNil,
+		L:               L,
+		Vid:             pico.New(opts.Width, opts.Height),
+		In:              pico.NewInput(),
+		out:             opts.Out,
+		fps:             opts.FPS,
+		rng:             rand.New(rand.NewSource(seed)),
+		window:          Window{Title: opts.Title},
+		currentTarget:   lua.LNil,
+		currentValue:    lua.LNil,
+		currentMapValue: lua.LNil,
 	}
 	r.clock = opts.Clock
 	if r.clock == nil {
@@ -175,6 +182,7 @@ func New(L *lua.LState, opts Options) *Runtime {
 	}
 
 	r.installSurfaceType()
+	r.installMaps()
 	r.installDrawing()
 	r.installInput()
 	r.installSound()
@@ -308,6 +316,19 @@ func (r *Runtime) register(funcs map[string]lua.LGFunction) {
 	for name, fn := range funcs {
 		r.L.SetGlobal(name, r.L.NewFunction(fn))
 	}
+}
+
+// text renders a value for printing, asking anything that can describe itself
+// to do so. A map or a sheet says what it is that way, and without this they
+// would both print as an address.
+func text(L *lua.LState, v lua.LValue) string {
+	switch v.(type) {
+	case *lua.LUserData, *lua.LTable:
+		if s, ok := L.ToStringMeta(v).(lua.LString); ok {
+			return string(s)
+		}
+	}
+	return tostr(v)
 }
 
 // tostr renders a value the way the console's print does: numbers without a

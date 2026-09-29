@@ -1370,3 +1370,17 @@ func TestThePictureHasTheLastWordOnItsOwnSprites(t *testing.T) {
 		t.Errorf("sprite 0 has flags %q; only the tileset mentions it, and says bit 4", got)
 	}
 }
+
+func TestThingsThatCanDescribeThemselvesDoSo(t *testing.T) {
+	// print, printh and tostr all ask a value to describe itself, so that a
+	// map or a sheet says what it is rather than where it is.
+	f := start(t, 40, 10, `
+		s = sprite([[11|11]], 1, 1)
+		said = tostr(s)`)
+	if got := f.str(`said`); got != "surface 2x2" {
+		t.Errorf("tostr of a surface gave %q", got)
+	}
+	if got := f.str(`tostr(12) .. "/" .. tostr(nil)`); got != "12/nil" {
+		t.Errorf("ordinary values still print as they did: %q", got)
+	}
+}

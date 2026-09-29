@@ -325,20 +325,75 @@ or with `sspr`; see `examples/pico/sprites.lua` and `examples/pico/sheets.lua`.
 
 ### Maps
 
+A level can be written out in the program, or drawn in an editor and loaded.
+
+**Written out**, it is a list of rows, each a table of sprite numbers or a
+string of hex digits:
+
 ```lua
 map(cells, sheet, [x], [y], [tile_w], [tile_h], [draw_zero])
 ```
 
-`cells` is a list of rows, each one a table of sprite numbers or a string of hex
-digits. Tiles are the size of the sheet's own cells unless told otherwise.
+Tiles are the size of the sheet's own cells unless told otherwise, and **sprite
+0 is not drawn** unless the last argument asks for it — which is what lets a `0`
+in a level mean open sky, as long as the first cell of the sheet is blank.
 
-**Sprite 0 is not drawn**, unless the last argument asks for it. That is what
-lets a `0` in a level mean open sky: leave the first cell of the sheet blank and
-nothing else has to be said. The numbers are ordinary sprite numbers otherwise,
-counted from zero as everywhere else.
+**Drawn in an editor**, it is a Tiled map, and loading it brings everything it
+needs with it:
 
-`examples/pico/platformer.lua` writes its level out as text, turns it into
-numbers once, and then uses that same grid both to draw with and to walk on.
+```lua
+usemap(loadmap("level1"))     -- the .tmj, its tilesets, and their pictures
+map()                          -- the whole thing, at the origin
+map(tx, ty, sx, sy, tw, th)    -- a window of it, put where you like
+```
+
+| Call | What it does |
+| --- | --- |
+| `loadmap(name)` | Reads a map and the artwork it draws with. |
+| `usemap([m])` | Makes it the current map; reports the one it replaced. |
+| `map(…)` | Draws the current map, as above. |
+| `map(…, flags)` | Only sprites carrying one of those flags. |
+| `mget(x, y, [layer])` | The sprite in a square. |
+| `mset(x, y, n, [layer])` | Puts one there. |
+| `m:size()`, `m:tile()` | The map in cells, and a cell in pixels. |
+| `m:layers()` | Their names, in order. |
+| `m:layer(name_or_number)` | One of them; layers are numbered from one. |
+| `m:objects(name_or_number)` | What was placed on a layer, as plain tables. |
+| `m:props()` | What the map itself was labelled with. |
+| `m:draw(…)` | Draws it without making it current. |
+| `layer:draw(…)`, `layer:get/set`, `layer:visible(…)` | One layer on its own. |
+
+The seventh argument to `map()` is a flag mask, as it is on PICO-8: only sprites
+carrying one of those flags are drawn. That is how one layer of artwork becomes
+two of scenery — everything solid drawn over everything else — without the map
+having to be split.
+
+An object is a plain table: `name`, `class`, `x`, `y`, `w`, `h` and `props`,
+each property keeping the kind of value the editor gave it.
+
+```lua
+for thing in all(level:objects("things")) do
+	if thing.class == "start" then player.x, player.y = thing.x, thing.y end
+end
+```
+
+**Collision comes from the artwork**, not from a list of tile numbers:
+
+```lua
+local SOLID = 0
+if fget(mget(x, y), SOLID) then ... end
+```
+
+What is read: CSV and base64 layers, packed with zlib, gzip or nothing; several
+tilesets in one map; tile layers and object layers; and the flip bits Tiled
+keeps in the top of a tile number, which between them make all eight ways of
+putting a tile down — mirrored either way, and turned. Zstandard compression is
+not read, and says so. `examples/pico/cellar` is a worked example, folder and
+all.
+
+Inside a map, sprite 0 is nothing: it is what the editor means by an empty
+square and what this console means by the blank first cell of a sheet, which is
+why that cell is left blank.
 
 ## Input## Input
 

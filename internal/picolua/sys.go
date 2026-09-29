@@ -32,7 +32,7 @@ func (r *Runtime) installSystem() {
 		"printh": func(L *lua.LState) int {
 			parts := make([]string, 0, L.GetTop())
 			for i := 1; i <= L.GetTop(); i++ {
-				parts = append(parts, tostr(L.Get(i)))
+				parts = append(parts, text(L, L.Get(i)))
 			}
 			fmt.Fprintln(r.out, strings.Join(parts, "\t"))
 			return 0

@@ -238,7 +238,7 @@ func TestClipConfinesEveryShape(t *testing.T) {
 	c.Print("XX", 0, 0, 10)
 	s := NewSurface(8, 8)
 	s.Fill(11)
-	c.Spr(s, 0, 0, false, false)
+	c.Spr(s, 0, 0, Upright)
 
 	for y := 0; y < 8; y++ {
 		for x := 0; x < 8; x++ {
@@ -355,7 +355,7 @@ func TestFillPatternDoesNotTouchSpritesOrText(t *testing.T) {
 	s := NewSurface(2, 1)
 	s.Set(0, 0, 7)
 	s.Set(1, 0, 7)
-	c.Spr(s, 0, 0, false, false)
+	c.Spr(s, 0, 0, Upright)
 	c.Print(".", 0, 1, 7)
 	if c.Screen.Get(0, 0) != 7 || c.Screen.Get(1, 0) != 7 {
 		t.Errorf("the sprite was dithered away:\n%s", dump(c.Screen))

@@ -256,7 +256,7 @@ func (r *Runtime) installStdlib() {
 					return 1
 				}
 			}
-			L.Push(lua.LString(tostr(v)))
+			L.Push(lua.LString(text(L, v)))
 			return 1
 		},
 

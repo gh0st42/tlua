@@ -88,7 +88,7 @@ func TestSprDrawsAtItsOwnSizeAndSkipsColourZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.Spr(s, 1, 1, false, false)
+	c.Spr(s, 1, 1, Upright)
 	wantScreen(t, c, `
 		111111
 		171711
@@ -102,17 +102,17 @@ func TestSprCanBeFlipped(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := New(2, 2)
-	c.Spr(s, 0, 0, true, false)
+	c.Spr(s, 0, 0, FlipX)
 	if got := dump(c.Screen); got != "21\n43" {
 		t.Errorf("flipped across: %q", got)
 	}
 	c.Cls(0)
-	c.Spr(s, 0, 0, false, true)
+	c.Spr(s, 0, 0, FlipY)
 	if got := dump(c.Screen); got != "34\n12" {
 		t.Errorf("flipped down: %q", got)
 	}
 	c.Cls(0)
-	c.Spr(s, 0, 0, true, true)
+	c.Spr(s, 0, 0, FlipX|FlipY)
 	if got := dump(c.Screen); got != "43\n21" {
 		t.Errorf("flipped both ways: %q", got)
 	}
@@ -125,7 +125,7 @@ func TestPaltChoosesWhatIsTransparent(t *testing.T) {
 	}
 	c := New(2, 1)
 	c.Cls(1)
-	c.Spr(s, 0, 0, false, false)
+	c.Spr(s, 0, 0, Upright)
 	if got := c.Screen.Get(0, 0); got != 1 {
 		t.Errorf("pixel is %d; colour 0 should be transparent to begin with", got)
 	}
@@ -133,7 +133,7 @@ func TestPaltChoosesWhatIsTransparent(t *testing.T) {
 	c.Cls(1)
 	c.Palt(0, false) // colour 0 now draws
 	c.Palt(7, true)  // and 7 does not
-	c.Spr(s, 0, 0, false, false)
+	c.Spr(s, 0, 0, Upright)
 	if got := c.Screen.Get(0, 0); got != 0 {
 		t.Errorf("pixel is %d, want the sprite's 0 now that it is opaque", got)
 	}
@@ -143,7 +143,7 @@ func TestPaltChoosesWhatIsTransparent(t *testing.T) {
 
 	c.Cls(1)
 	c.PaltNone()
-	c.Spr(s, 0, 0, false, false)
+	c.Spr(s, 0, 0, Upright)
 	if got := c.Screen.Get(0, 0); got != 0 || c.Screen.Get(1, 0) != 7 {
 		t.Errorf("with nothing transparent the whole sprite should draw:\n%s", dump(c.Screen))
 	}
@@ -155,7 +155,7 @@ func TestSSprStretchesAndShrinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := New(4, 4)
-	c.SSpr(s, 0, 0, 2, 2, 0, 0, 4, 4, false, false)
+	c.SSpr(s, 0, 0, 2, 2, 0, 0, 4, 4, Upright)
 	wantScreen(t, c, `
 		1122
 		1122
@@ -165,7 +165,7 @@ func TestSSprStretchesAndShrinks(t *testing.T) {
 	big := NewSurface(4, 4)
 	big.Fill(6)
 	c.Cls(0)
-	c.SSpr(big, 0, 0, 4, 4, 0, 0, 2, 2, false, false)
+	c.SSpr(big, 0, 0, 4, 4, 0, 0, 2, 2, Upright)
 	wantScreen(t, c, `
 		66..
 		66..
@@ -183,7 +183,7 @@ func TestSSprTakesPartOfASheet(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := New(2, 2)
-	c.SSpr(sheet, 2, 2, 2, 2, 0, 0, 2, 2, false, false) // the bottom right tile
+	c.SSpr(sheet, 2, 2, 2, 2, 0, 0, 2, 2, Upright) // the bottom right tile
 	if got := dump(c.Screen); got != "44\n44" {
 		t.Errorf("screen:\n%s", got)
 	}
@@ -193,10 +193,10 @@ func TestBlitIgnoresEmptyAndBackwardsRectangles(t *testing.T) {
 	c := New(2, 2)
 	s := NewSurface(2, 2)
 	s.Fill(7)
-	c.Blit(s, 0, 0, 2, 2, 0, 0, 0, 2, false, false)   // no width
-	c.Blit(s, 0, 0, 2, 2, 0, 0, -4, -4, false, false) // backwards
-	c.Blit(s, 0, 0, 0, 0, 0, 0, 2, 2, false, false)   // nothing to read
-	c.Blit(nil, 0, 0, 2, 2, 0, 0, 2, 2, false, false)
+	c.Blit(s, 0, 0, 2, 2, 0, 0, 0, 2, Upright)   // no width
+	c.Blit(s, 0, 0, 2, 2, 0, 0, -4, -4, Upright) // backwards
+	c.Blit(s, 0, 0, 0, 0, 0, 0, 2, 2, Upright)   // nothing to read
+	c.Blit(nil, 0, 0, 2, 2, 0, 0, 2, 2, Upright)
 	if got := dump(c.Screen); got != "..\n.." {
 		t.Errorf("screen:\n%s", got)
 	}
@@ -208,7 +208,7 @@ func TestBlitOfAnEnormousDestinationCostsOnlyTheScreen(t *testing.T) {
 	c := New(8, 8)
 	s := NewSurface(2, 2)
 	s.Fill(7)
-	c.SSpr(s, 0, 0, 2, 2, -1<<20, -1<<20, 1<<21, 1<<21, false, false)
+	c.SSpr(s, 0, 0, 2, 2, -1<<20, -1<<20, 1<<21, 1<<21, Upright)
 	if got := c.Screen.Get(4, 4); got != 7 {
 		t.Errorf("the middle of the screen is %d, want 7", got)
 	}
@@ -221,7 +221,7 @@ func TestDrawingIntoASurfaceThenDrawingItBack(t *testing.T) {
 	c.RectFill(0, 0, 1, 1, 9)
 	c.SetTarget(nil)
 	for i := 0; i < 3; i++ {
-		c.Spr(stamp, i*2, 1, false, false)
+		c.Spr(stamp, i*2, 1, Upright)
 	}
 	wantScreen(t, c, `
 		......
@@ -345,8 +345,8 @@ func TestDrawingOneSpriteOfASheet(t *testing.T) {
 	sheet.SetGrid(2, 2)
 
 	c := New(4, 2)
-	c.SprCell(sheet, 0, 0, 0, 1, 1, false, false) // the first cell
-	c.SprCell(sheet, 3, 2, 0, 1, 1, false, false) // and the last
+	c.SprCell(sheet, 0, 0, 0, 1, 1, Upright) // the first cell
+	c.SprCell(sheet, 3, 2, 0, 1, 1, Upright) // and the last
 	wantScreen(t, c, `
 		1144
 		1144`)
@@ -354,8 +354,8 @@ func TestDrawingOneSpriteOfASheet(t *testing.T) {
 	// A sprite that is not there draws nothing, rather than a sliver of
 	// whatever is next to it.
 	c.Cls(0)
-	c.SprCell(sheet, 9, 0, 0, 1, 1, false, false)
-	c.SprCell(nil, 0, 0, 0, 1, 1, false, false)
+	c.SprCell(sheet, 9, 0, 0, 1, 1, Upright)
+	c.SprCell(nil, 0, 0, 0, 1, 1, Upright)
 	wantScreen(t, c, `
 		....
 		....`)
@@ -373,7 +373,7 @@ func TestDrawingASpriteThatSpansCells(t *testing.T) {
 	sheet.SetGrid(2, 2)
 
 	c := New(4, 4)
-	c.SprCell(sheet, 0, 0, 0, 2, 2, false, false) // all four cells at once
+	c.SprCell(sheet, 0, 0, 0, 2, 2, Upright) // all four cells at once
 	wantScreen(t, c, `
 		1122
 		1122
@@ -382,10 +382,96 @@ func TestDrawingASpriteThatSpansCells(t *testing.T) {
 
 	// Flipping a span turns the whole block over, not each cell.
 	c.Cls(0)
-	c.SprCell(sheet, 0, 0, 0, 2, 2, true, false)
+	c.SprCell(sheet, 0, 0, 0, 2, 2, FlipX)
 	wantScreen(t, c, `
 		2211
 		2211
 		4433
 		4433`)
+}
+
+func TestTheEightWaysOfPuttingASpriteDown(t *testing.T) {
+	// A shape with no symmetry at all, so that every one of the eight comes
+	// out different: an L in the corner.
+	s, err := ParseSprite(`
+		123
+		4..
+		7..`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		turn Orientation
+		want string
+	}{
+		{Upright, "123\n4..\n7.."},
+		{FlipX, "321\n..4\n..7"},
+		{FlipY, "7..\n4..\n123"},
+		{FlipX | FlipY, "..7\n..4\n321"},
+
+		// Along the diagonal: rows become columns.
+		{Turn, "147\n2..\n3.."},
+		{Turn | FlipX, "741\n..2\n..3"},
+		{Turn | FlipY, "3..\n2..\n147"},
+		{Turn | FlipX | FlipY, "..3\n..2\n741"},
+	}
+
+	for _, c := range cases {
+		screen := New(3, 3)
+		screen.Blit(s, 0, 0, 3, 3, 0, 0, 3, 3, c.turn)
+		if got := dump(screen.Screen); got != c.want {
+			t.Errorf("turn %d drew\n%s\nwant\n%s", c.turn, got, c.want)
+		}
+	}
+}
+
+func TestTurningIsFourRotationsAndTheirMirrors(t *testing.T) {
+	// Every one of the eight has to be a different picture, or one of them is
+	// not doing what it says.
+	s, err := ParseSprite("12|34")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]Orientation{}
+	for turn := Orientation(0); turn < 8; turn++ {
+		screen := New(2, 2)
+		screen.Blit(s, 0, 0, 2, 2, 0, 0, 2, 2, turn)
+		got := dump(screen.Screen)
+		if first, ok := seen[got]; ok {
+			t.Errorf("turns %d and %d both drew\n%s", first, turn, got)
+		}
+		seen[got] = turn
+	}
+}
+
+func TestATurnedSpriteCanBeStretchedToo(t *testing.T) {
+	s, err := ParseSprite("12|34")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := New(4, 4)
+	c.SSpr(s, 0, 0, 2, 2, 0, 0, 4, 4, Turn)
+	wantScreen(t, c, `
+		1133
+		1133
+		2244
+		2244`)
+}
+
+func TestFlipsMakesAnOrientationOutOfTheTwoFlags(t *testing.T) {
+	cases := []struct {
+		x, y bool
+		want Orientation
+	}{
+		{false, false, Upright},
+		{true, false, FlipX},
+		{false, true, FlipY},
+		{true, true, FlipX | FlipY},
+	}
+	for _, c := range cases {
+		if got := Flips(c.x, c.y); got != c.want {
+			t.Errorf("Flips(%v, %v) = %d, want %d", c.x, c.y, got, c.want)
+		}
+	}
 }
