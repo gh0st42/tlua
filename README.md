@@ -483,6 +483,28 @@ tlua fuse --base bin/tlua.exe -o myapp.exe mygame/
 `tlua fuse` also accepts an already fused binary as `--base`; the old program is
 stripped first, so rebuilding an app does not stack payloads.
 
+### Compressing with UPX
+
+**Pack the interpreter first, then fuse onto it.** A fused binary is the
+interpreter with the program and a twenty-one byte trailer appended, and it
+finds its own program by reading the end of its own file. Packing it afterwards
+rewrites the file, and the trailer goes with it.
+
+```sh
+upx --best tlua                        # 17.8 MB -> 9.2 MB
+tlua fuse --base tlua -o mygame mygame/    # then fuse: works
+```
+
+The other order is worse than it looks. On Linux, `upx` reports success and the
+executable still runs — as a bare interpreter, because the program it was
+carrying is no longer where it looks for it. Nothing says so: a fused game
+packed after the fact drops the person into a REPL.
+
+On Windows it survives, because UPX copies the appended data to the end of the
+packed file by default (`--overlay=copy`); `--overlay=strip` would lose it
+there too. On macOS the question does not come up: UPX refuses to pack Mach-O
+at all, and appending to one already invalidates its signature — see below.
+
 ### Inside a fused archive
 
 The entry point is `main.lua` at the archive root (a single wrapping folder,
