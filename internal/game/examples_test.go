@@ -19,6 +19,8 @@ const examplesDir = "../../examples/pico"
 // example that was left broken, or an API change that quietly stopped meaning
 // what the examples say it means.
 func TestEveryExampleRuns(t *testing.T) {
+	useATempHome(t)
+
 	scripts, err := filepath.Glob(filepath.Join(examplesDir, "*.lua"))
 	if err != nil {
 		t.Fatal(err)
@@ -197,6 +199,8 @@ func TestTheJumpButtonIsNotMissedNearTheGround(t *testing.T) {
 // It is the only test that reads a real map, its tileset and its PNG off the
 // disk, together, the way a game does.
 func TestTheProjectExamplesRun(t *testing.T) {
+	useATempHome(t)
+
 	entries, err := os.ReadDir(examplesDir)
 	if err != nil {
 		t.Fatal(err)
@@ -232,4 +236,15 @@ func TestTheProjectExamplesRun(t *testing.T) {
 			}
 		})
 	}
+}
+
+// useATempHome sends anything a program saves somewhere of the test's own.
+//
+// An example that keeps a high score would otherwise write into the home
+// directory of whoever ran the tests, which is not a thing a test should do.
+func useATempHome(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("AppData", t.TempDir())
 }

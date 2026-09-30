@@ -2,6 +2,9 @@
 --
 -- Arrow keys to turn, X to start again. Shows the shape of a game with states
 -- in it: a title, a game, and an ending, each drawn and updated differently.
+--
+-- The best score outlives the game: store() keeps it where the person's other
+-- saved games go, and fetch() reads it back the next time this is run.
 
 local w, h = screen()
 local cell = 10
@@ -58,6 +61,11 @@ local function start()
 end
 
 function _init()
+	-- Whatever was saved last time, if anything was, and if it is still a
+	-- number: a save file is text and can be edited into nonsense.
+	local saved = fetch("best")
+	best = type(saved) == "number" and saved or 0
+
 	start()
 	state = "title"
 end
@@ -88,7 +96,10 @@ local function step()
 	add(snake, ahead, 1)
 	if ahead.x == food.x and ahead.y == food.y then
 		score = score + 1
-		best = max(best, score)
+		if score > best then
+			best = score
+			store("best", best) -- kept for the next time this is run
+		end
 		drop_food()
 	else
 		deli(snake) -- no food, so the tail keeps up with the head

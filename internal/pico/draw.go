@@ -353,13 +353,16 @@ const (
 )
 
 // Flips reports the orientation the two older flags describe.
-func Flips(x, y bool) Orientation {
+func Flips(x, y bool, turn ...bool) Orientation {
 	var o Orientation
 	if x {
 		o |= FlipX
 	}
 	if y {
 		o |= FlipY
+	}
+	if len(turn) > 0 && turn[0] {
+		o |= Turn
 	}
 	return o
 }

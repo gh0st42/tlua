@@ -28,7 +28,7 @@ tlua fuse -play -o snake examples/pico/snake.lua   # one executable, no tlua
 | [input.lua](input.lua) | Buttons, keys, the mouse and the wheel, all shown as they are pressed. |
 | [starfield.lua](starfield.lua) | Three hundred stars, one `pset` each, and perspective by division. |
 | [plasma.lua](plasma.lua) | Per-pixel drawing, and `vid(2)` asking for a smaller screen to afford it. |
-| [snake.lua](snake.lua) | A whole game: a grid, a score, a title screen and an ending. |
+| [snake.lua](snake.lua) | A whole game: a grid, a score, a title screen and an ending, with the best score kept between runs by `store` and `fetch`. |
 | [platformer.lua](platformer.lua) | A tile map with `map()`, gravity, collision, and a camera that follows. |
 | [paint.lua](paint.lua) | Drawing with the mouse onto an offscreen surface with `target()`. |
 | [modes.lua](modes.lua) | `vid()`: the same picture at each of the six resolutions. |

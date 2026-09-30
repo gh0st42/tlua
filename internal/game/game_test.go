@@ -175,3 +175,54 @@ func TestTheWindowIsNamedAfterTheProgram(t *testing.T) {
 		}
 	}
 }
+
+func TestWhereASaveGoesAndWhatItMayBeCalled(t *testing.T) {
+	// The host is the only part of this that touches the disk, so it is the
+	// part that has to refuse a name that would write somewhere else. The
+	// names come from a program, which may have taken them from whoever is
+	// playing.
+	useATempHome(t)
+
+	read, write := savesFor("my game")
+	if read == nil || write == nil {
+		t.Skip("this machine has nowhere to put application data")
+	}
+
+	if err := write("scores.txt", []byte("hello")); err != nil {
+		t.Fatalf("saving: %v", err)
+	}
+	back, err := read("scores.txt")
+	if err != nil || string(back) != "hello" {
+		t.Errorf("reading back gave %q, %v", back, err)
+	}
+	if _, err := read("never-written.txt"); err == nil {
+		t.Error("a file that was never saved should not read")
+	}
+
+	for _, name := range []string{"../escape", "dir/name", "/etc/passwd", "", ".", ".."} {
+		if err := write(name, []byte("x")); err == nil {
+			t.Errorf("%q was accepted as a name to save under", name)
+		}
+		if _, err := read(name); err == nil {
+			t.Errorf("%q was accepted as a name to read", name)
+		}
+	}
+}
+
+func TestAProgramsNameBecomesAFolderName(t *testing.T) {
+	cases := map[string]string{
+		"cellar":        "cellar",
+		"My Game":       "My-Game",
+		"../../escape":  "escape",
+		"a/b":           "a-b",
+		"":              "program",
+		"...":           "program",
+		"game.lua":      "game.lua",
+		"tlua's finest": "tlua-s-finest",
+	}
+	for in, want := range cases {
+		if got := slug(in); got != want {
+			t.Errorf("slug(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

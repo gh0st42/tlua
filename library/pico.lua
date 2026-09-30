@@ -313,11 +313,20 @@ function sprite(art, cell_w, cell_h) end
 ---@return Surface|nil surface, string? err
 function loadpng(path, cell_w, cell_h) end
 
---- Reads a file and gives it back as a string: a level, a table of numbers,
---- whatever a game keeps beside itself. Reads the same two places loadpng does.
----@param path string
----@return string|nil contents, string? err
-function fetch(path) end
+--- Reads back what store() saved, or failing that a file the game was shipped
+--- with. A saved value comes back as the value it was; a plain file comes back
+--- as its text.
+---@param name string
+---@return any|nil value, string? err
+function fetch(name) end
+
+--- Saves something for the next time the game is run: a score, where the player
+--- had got to, what they chose. Strings, numbers, truths and tables of them can
+--- be saved. The name is a name, not a path.
+---@param name string
+---@param value string|number|boolean|table
+---@return boolean|nil ok, string? err
+function store(name, value) end
 
 --- Draws a sprite, in whichever of three ways it is asked:
 ---
@@ -334,7 +343,8 @@ function fetch(path) end
 ---@param h? integer cells tall
 ---@param flip_x? boolean
 ---@param flip_y? boolean
-function spr(sheet, n, x, y, w, h, flip_x, flip_y) end
+---@param turn? boolean mirrored across its own diagonal: a tile's flipd
+function spr(sheet, n, x, y, w, h, flip_x, flip_y, turn) end
 
 --- Draws a rectangle of pixels — not of cells — stretched to fill the
 --- destination. Without a surface in front, it comes from the current sheet.
@@ -349,7 +359,8 @@ function spr(sheet, n, x, y, w, h, flip_x, flip_y) end
 ---@param dh? number defaults to sh
 ---@param flip_x? boolean
 ---@param flip_y? boolean
-function sspr(s, sx, sy, sw, sh, dx, dy, dw, dh, flip_x, flip_y) end
+---@param turn? boolean mirrored across its own diagonal
+function sspr(s, sx, sy, sw, sh, dx, dy, dw, dh, flip_x, flip_y, turn) end
 
 --- Sends later drawing to a surface, or back to the screen when given nothing.
 --- Reports what it replaced.
@@ -804,3 +815,28 @@ function chr(...) end
 ---@param index? integer
 ---@return integer|nil
 function ord(s, index) end
+
+--- Makes a coroutine: Lua's coroutine.create, under the name this lineage calls
+--- it by. For work that takes many frames and reads better written straight
+--- through — a cutscene, a path being walked.
+---@param fn function
+---@return thread
+function cocreate(fn) end
+
+--- Carries a coroutine on from where it yielded. coroutine.resume.
+---@param co thread
+---@param ... any passed to the coroutine
+---@return boolean ok, ... any what it yielded or returned
+function coresume(co, ...) end
+
+--- "running", "suspended", "normal" or "dead". coroutine.status.
+---@param co thread
+---@return string
+function costatus(co) end
+
+--- Suspends the coroutine this is called in, handing its arguments back to
+--- whoever resumed it. coroutine.yield. Not flip(): that suspends the program's
+--- own loop, which a coroutine of your own is not.
+---@param ... any
+---@return ... any what the next resume passes in
+function yield(...) end

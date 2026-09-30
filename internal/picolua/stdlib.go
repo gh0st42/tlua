@@ -14,6 +14,7 @@ import (
 // another; having them under these names, with these edges, is what lets a
 // program from that world run here and read the way it was written.
 func (r *Runtime) installStdlib() {
+	r.installCoroutines()
 	r.register(map[string]lua.LGFunction{
 		"flr":  num1(math.Floor),
 		"ceil": num1(math.Ceil),
@@ -344,4 +345,36 @@ func substring(s string, from, to int) string {
 		return ""
 	}
 	return string(runes[from-1 : to])
+}
+
+// installCoroutines gives Lua's coroutines the short names this lineage calls
+// them by, so that code written for one of these consoles runs here.
+//
+// They are the language's own, not new ones: cocreate is coroutine.create.
+// What they are for is a piece of work that takes many frames and reads better
+// written straight through — a cutscene, a path being walked, a level being
+// built a little at a time — resumed once a frame from _update.
+//
+//	local job = cocreate(function()
+//		for i = 1, 100 do build_a_bit(i) yield() end
+//	end)
+//	function _update() if costatus(job) ~= "dead" then coresume(job) end end
+//
+// flip() is not for these: it suspends the program's own loop, and a coroutine
+// of a program's own is not that loop. Inside one, use yield.
+func (r *Runtime) installCoroutines() {
+	co, ok := r.L.GetGlobal("coroutine").(*lua.LTable)
+	if !ok {
+		return // an interpreter without the coroutine library, which is not ours
+	}
+	for name, field := range map[string]string{
+		"cocreate": "create",
+		"coresume": "resume",
+		"costatus": "status",
+		"yield":    "yield",
+	} {
+		if fn := r.L.GetField(co, field); fn != lua.LNil {
+			r.L.SetGlobal(name, fn)
+		}
+	}
 }

@@ -273,10 +273,10 @@ counting. **Sprites are numbered from zero**, left to right and then down.
 | `sprite(art, [cell_w], [cell_h])` | Reads a sprite written as text. |
 | `surface(w, h, [cell_w], [cell_h])` | A blank one, every pixel transparent. |
 | `loadpng(name, [cell_w], [cell_h])` | Reads a PNG and reduces it to the palette. |
-| `spr(sheet, n, x, y, [w], [h], [flip_x], [flip_y])` | Sprite `n` of a sheet, spanning `w` by `h` cells. |
-| `spr(picture, x, y, [flip_x], [flip_y])` | A picture, whole, at a place. |
-| `spr(n, x, y, [w], [h], [flip_x], [flip_y])` | Sprite `n` of the current sheet. |
-| `sspr(surface, sx, sy, sw, sh, dx, dy, [dw], [dh], [flip_x], [flip_y])` | A rectangle of **pixels**, stretched. |
+| `spr(sheet, n, x, y, [w], [h], [flip_x], [flip_y], [turn])` | Sprite `n` of a sheet, spanning `w` by `h` cells. |
+| `spr(picture, x, y, [flip_x], [flip_y], [turn])` | A picture, whole, at a place. |
+| `spr(n, x, y, [w], [h], [flip_x], [flip_y], [turn])` | Sprite `n` of the current sheet. |
+| `sspr(surface, sx, sy, sw, sh, dx, dy, [dw], [dh], [flip_x], [flip_y], [turn])` | A rectangle of **pixels**, stretched. |
 | `sspr(sx, sy, sw, sh, dx, dy, …)` | The same, from the current sheet. |
 | `usesheet([s])` | Makes `s` the current sheet; reports the one it replaced. |
 | `sget(x, y)`, `sset(x, y, [c])` | Pixels of the current sheet. |
@@ -296,6 +296,11 @@ pixels, and it does not care whether the surface has a grid.
 
 `s:sprite(n)` is a **copy** of that cell, so drawing on it leaves the sheet
 alone.
+
+`turn` mirrors a sprite across its own diagonal — rows become columns. With the
+two flips it makes all eight ways of putting a sprite down, which is what a map
+has always been able to ask for: it is a tile's `flipd`, and a tile object's.
+`turn` with `flip_x` is a quarter turn clockwise; with `flip_y`, anticlockwise.
 
 ### Sprite flags
 
@@ -594,6 +599,47 @@ The frame rate counter is drawn over the picture rather than into it, so it
 cannot be read back by `pget()`, cannot smear into a program that does not
 clear the screen, and is not recoloured by `palette()`.
 
+## Saving
+
+A game keeps what it wants to survive being closed: a high score, where the
+player had got to, what they chose.
+
+| Call | What it does |
+| --- | --- |
+| `store(name, value)` | Saves it. `true`, or `nil` and why not. |
+| `fetch(name)` | Reads it back — the value that was saved, or the text of a file the game shipped with. |
+
+```lua
+store("scores", { 1200, 900, 80 })
+local scores = fetch("scores") or {}
+```
+
+A table is written out as text, laid out the way it would be typed, so a save
+file can be read, fixed and kept in version control. Saving the same thing twice
+gives the same bytes. Strings, numbers, truths and tables are what can be
+saved; a function or a table that holds itself says so rather than being
+silently dropped.
+
+**Where it goes** is the host's business, not the program's: with the person's
+other application data — `~/Library/Application Support/tlua/saves/<game>` on a
+Mac, `~/.config/tlua/saves/<game>` on Linux, `AppData` on Windows — because a
+game may be run from a folder nobody can write to, from a read-only disk, or as
+a single fused executable with no folder at all. A name is a name, not a path:
+`store("dir/name", …)` is refused.
+
+**`fetch` looks at saves first**, and at what the game shipped with after, so a
+game can ship its defaults and have the player's own version take over once
+there is one:
+
+```lua
+local settings = fetch("settings")   -- theirs, or the one shipped, or nil
+```
+
+A saved file is **parsed, not run**. It is a file on somebody's disk that a
+program is about to trust, and running it would make a save file a place to put
+code. A file that has been edited into nonsense comes back as `nil` and a
+complaint naming the line.
+
 ## The short helpers
 
 These are the names PICO-8 and Picotron programs are written with. They exist
@@ -621,6 +667,27 @@ here so that such a program reads the way it was written.
 
 `split("1,2,3")` is a table of numbers; a second argument is the separator and
 a third of `false` leaves the parts as strings.
+
+**Coroutines.** `cocreate` `coresume` `costatus` `yield`
+
+These are Lua's own under the names this lineage calls them by: `cocreate` is
+`coroutine.create`. What they are for is a piece of work that takes many frames
+and reads better written straight through — a cutscene, a path being walked, a
+level built a little at a time:
+
+```lua
+local job = cocreate(function()
+	for i = 1, 100 do build_a_bit(i) yield() end
+end)
+
+function _update()
+	if costatus(job) ~= "dead" then coresume(job) end
+end
+```
+
+`flip()` is not for these. It suspends the program's own loop, and a coroutine
+of a program's own is not that loop; inside one, use `yield`. A program that
+tries is told so rather than behaving strangely.
 
 Lua's own libraries are all still there — `math`, `string`, `table`, `io`,
 `os`, `require` — since this is the same interpreter as `tlua` itself.
@@ -668,8 +735,6 @@ gives the garbage collector to do is its own.
 - Triangles, `held()`, `typed()`, `textwidth()`, `clamp()`, `loadpng()`,
   `fetch()`, `volume()`, `usesheet()`, `setfps()`, the whole of `palette()`,
   and looking a resource up by name are additions.
-- **Nothing is saved.** `fetch()` reads a file the game was shipped with; there
-  is no `store()`, so a high score or a save file has nowhere to go yet.
 - A sheet's cells are a uniform grid. Picotron's sprites can each have their own
   size, which is a property of its `.gfx` files rather than of a PNG.
 

@@ -235,16 +235,37 @@ func (r *Runtime) installSurfaces() {
 			return 2
 		},
 
-		// fetch(path) reads a file and gives it back as a string: a level, a
-		// table of numbers, whatever a game keeps beside itself. It reads the
-		// same way loadpng does — out of a fused executable first, then from
-		// beside the program — so a game does not care which it is.
+		// fetch(path) reads a file and gives it back: a level, a table of
+		// numbers, whatever a game keeps beside itself. It reads the same way
+		// loadpng does — out of a fused executable first, then from beside the
+		// program — so a game does not care which it is.
+		//
+		// What store() saved is looked for first, and comes back as the table
+		// or the string that was saved rather than as the text it was written
+		// as. That way a game can ship a file of its own and have the player's
+		// own version of it take over once there is one:
+		//
+		//	local settings = fetch("settings")   -- theirs, or the one shipped
 		"fetch": func(L *lua.LState) int {
-			_, data, err := r.find(kindData, L.CheckString(1))
-			if err != nil {
-				L.Push(lua.LNil)
-				L.Push(lua.LString(err.Error()))
-				return 2
+			name := L.CheckString(1)
+			data, ok := r.readSaved(name)
+			if !ok {
+				var err error
+				if _, data, err = r.find(kindData, name); err != nil {
+					L.Push(lua.LNil)
+					L.Push(lua.LString(err.Error()))
+					return 2
+				}
+			}
+			if stored(data) {
+				v, err := decode(L, string(data))
+				if err != nil {
+					L.Push(lua.LNil)
+					L.Push(lua.LString(fmt.Sprintf("%s: %v", name, err)))
+					return 2
+				}
+				L.Push(v)
+				return 1
 			}
 			L.Push(lua.LString(data))
 			return 1
@@ -252,28 +273,33 @@ func (r *Runtime) installSurfaces() {
 
 		// spr draws a sprite, in whichever of the three ways it was asked.
 		//
-		//	spr(n, x, y, [w], [h], [flip_x], [flip_y])         the current sheet
-		//	spr(sheet, n, x, y, [w], [h], [flip_x], [flip_y])  a sheet by name
-		//	spr(picture, x, y, [flip_x], [flip_y])             a whole picture
+		//	spr(n, x, y, [w], [h], [flip_x], [flip_y], [turn])
+		//	spr(sheet, n, x, y, [w], [h], [flip_x], [flip_y], [turn])
+		//	spr(picture, x, y, [flip_x], [flip_y], [turn])
 		//
 		// The first is Picotron's own call. The second is the same thing with
 		// the sheet said out loud, because there is more than one here. The
 		// third is what a surface that was never cut into sprites means, and
 		// there is no mistaking which is which: a sheet takes a sprite number
 		// and a picture takes a place.
+		//
+		// turn mirrors the sprite across its own diagonal. With the two flips
+		// it makes all eight ways of putting a sprite down, which is what a
+		// map has always been able to ask for — it is a tile's flipd — and
+		// what a program could not until now.
 		"spr": func(L *lua.LState) int {
 			sheet, at := r.spriteSheet(L, "spr")
 			if sheet == nil {
 				s := checkSurface(L, 1)
 				r.Vid.Spr(s, coord(L, 2), coord(L, 3),
-					pico.Flips(L.OptBool(4, false), L.OptBool(5, false)))
+					pico.Flips(L.OptBool(4, false), L.OptBool(5, false), L.OptBool(6, false)))
 				return 0
 			}
 			n := L.CheckInt(at)
 			r.Vid.SprCell(sheet, n,
 				coord(L, at+1), coord(L, at+2),
 				optCoord(L, at+3, 1), optCoord(L, at+4, 1),
-				pico.Flips(L.OptBool(at+5, false), L.OptBool(at+6, false)))
+				pico.Flips(L.OptBool(at+5, false), L.OptBool(at+6, false), L.OptBool(at+7, false)))
 			return 0
 		},
 
@@ -281,8 +307,8 @@ func (r *Runtime) installSurfaces() {
 		// to fit, either from a surface said out loud or from the current
 		// sheet:
 		//
-		//	sspr(sx, sy, sw, sh, dx, dy, [dw, dh], [flip_x], [flip_y])
-		//	sspr(sheet, sx, sy, sw, sh, dx, dy, [dw, dh], [flip_x], [flip_y])
+		//	sspr(sx, sy, sw, sh, dx, dy, [dw, dh], [flip_x], [flip_y], [turn])
+		//	sspr(sheet, sx, sy, sw, sh, dx, dy, [dw, dh], [flip_x], [flip_y], [turn])
 		"sspr": func(L *lua.LState) int {
 			if _, ok := L.Get(1).(*lua.LUserData); ok {
 				return r.stretch(L, checkSurface(L, 1), 2)
@@ -478,7 +504,7 @@ func (r *Runtime) stretch(L *lua.LState, s *pico.Surface, at int) int {
 	dx, dy := coord(L, at+4), coord(L, at+5)
 	r.Vid.SSpr(s, sx, sy, sw, sh, dx, dy,
 		optCoord(L, at+6, sw), optCoord(L, at+7, sh),
-		pico.Flips(L.OptBool(at+8, false), L.OptBool(at+9, false)))
+		pico.Flips(L.OptBool(at+8, false), L.OptBool(at+9, false), L.OptBool(at+10, false)))
 	return 0
 }
 

@@ -1381,3 +1381,96 @@ func TestThingsThatCanDescribeThemselvesDoSo(t *testing.T) {
 		t.Errorf("ordinary values still print as they did: %q", got)
 	}
 }
+
+// TestASpriteCanBeTurnedAsWellAsFlipped is the eighth way of putting a sprite
+// down: across its own diagonal, which is what a map's flipd means and what
+// spr() could not ask for until it had a turn argument of its own.
+func TestASpriteCanBeTurnedAsWellAsFlipped(t *testing.T) {
+	// An L, so that every one of the eight orientations looks different.
+	const art = `local s = sprite[[
+		77.
+		7..
+		7..
+	]]`
+
+	f := start(t, 3, 3, art+`
+		spr(s, 0, 0)`)
+	f.want(`
+		77.
+		7..
+		7..`)
+
+	// Mirrored left to right.
+	f = start(t, 3, 3, art+`
+		spr(s, 0, 0, true)`)
+	f.want(`
+		.77
+		..7
+		..7`)
+
+	// Turned: rows become columns, so the foot of the L moves across the top.
+	f = start(t, 3, 3, art+`
+		spr(s, 0, 0, false, false, true)`)
+	f.want(`
+		777
+		7..
+		...`)
+
+	// And the two together, which is a quarter turn rather than a mirror.
+	f = start(t, 3, 3, art+`
+		spr(s, 0, 0, true, false, true)`)
+	f.want(`
+		777
+		..7
+		...`)
+}
+
+// TestASheetSpriteAndAStretchedOneTurnTheSameWay checks the argument reaches
+// the other two ways of drawing, since each counts its arguments differently.
+func TestASheetSpriteAndAStretchedOneTurnTheSameWay(t *testing.T) {
+	const art = `local sheet = sprite([[
+		77.
+		7..
+		7..
+	]], 3, 3)`
+
+	f := start(t, 3, 3, art+`
+		spr(sheet, 0, 0, 0, 1, 1, false, false, true)`)
+	f.want(`
+		777
+		7..
+		...`)
+
+	f = start(t, 3, 3, art+`
+		sspr(sheet, 0, 0, 3, 3, 0, 0, 3, 3, false, false, true)`)
+	f.want(`
+		777
+		7..
+		...`)
+}
+
+// TestTheCoroutineCallsAreTheOnesThisLineageUses covers the short names, which
+// are the language's own functions under the names a program written for one of
+// these consoles will call them by.
+func TestTheCoroutineCallsAreTheOnesThisLineageUses(t *testing.T) {
+	f := start(t, 4, 4, `
+		job = cocreate(function(from)
+			for i = from, from + 2 do yield(i) end
+			return "done"
+		end)
+		steps = {}
+		while costatus(job) ~= "dead" do
+			local ok, v = coresume(job, 10)
+			add(steps, tostr(v))
+		end`)
+
+	if got := f.str(`table.concat(steps, ",")`); got != "10,11,12,done" {
+		t.Errorf("the coroutine ran %q", got)
+	}
+	if got := f.str(`costatus(job)`); got != "dead" {
+		t.Errorf("it finished %q", got)
+	}
+	if got := f.str(`cocreate == coroutine.create, yield == coroutine.yield`); got != "true,true" {
+		t.Errorf("they should be the language's own: %q", got)
+	}
+}

@@ -79,6 +79,17 @@ type Options struct {
 	// game was fused, which is the sort of thing found only after shipping.
 	ReadFile func(name string) ([]byte, error)
 
+	// ReadSave and WriteSave are where a program's own saved files live —
+	// what store() writes and fetch() reads back. They are kept apart from
+	// ReadFile because they are a different place with different rules: the
+	// game's own files ship with it and are read-only, while these belong to
+	// whoever is playing and are written while the game runs.
+	//
+	// Names reaching them are plain: no directory, no path. Without a
+	// WriteSave a program cannot save, and says so when it tries.
+	ReadSave  func(name string) ([]byte, error)
+	WriteSave func(name string, data []byte) error
+
 	// Sound plays what sfx() and music() ask for. Without one a program runs
 	// in silence, and behaves in every other way as though it were not.
 	Sound Sound
@@ -106,15 +117,17 @@ type Runtime struct {
 	Vid *pico.Console
 	In  *pico.Input
 
-	out    io.Writer
-	clock  func() float64
-	fps    func() float64
-	label  func(player, button int) string
-	read   func(name string) ([]byte, error)
-	tps    int
-	setTPS func(rate int)
-	sound  Sound
-	rng    *rand.Rand
+	out      io.Writer
+	clock    func() float64
+	fps      func() float64
+	label    func(player, button int) string
+	read     func(name string) ([]byte, error)
+	readSave func(name string) ([]byte, error)
+	write    func(name string, data []byte) error
+	tps      int
+	setTPS   func(rate int)
+	sound    Sound
+	rng      *rand.Rand
 
 	// found remembers where a resource turned out to be, so that asking for
 	// it again costs one read rather than a search.
@@ -207,6 +220,7 @@ func New(L *lua.LState, opts Options) *Runtime {
 	if r.read == nil {
 		r.read = os.ReadFile
 	}
+	r.readSave, r.write = opts.ReadSave, opts.WriteSave
 	r.sound = opts.Sound
 	if r.sound == nil {
 		r.sound = newSilent()
@@ -219,6 +233,7 @@ func New(L *lua.LState, opts Options) *Runtime {
 	r.installSound()
 	r.installSystem()
 	r.installStdlib()
+	r.installStore()
 	r.installFlip()
 	return r
 }

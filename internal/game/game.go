@@ -203,6 +203,8 @@ func load(opts Options) (*session, error) {
 		ScriptArgIdx: opts.ArgIdx,
 	})
 
+	read, write := savesFor(title)
+
 	s := &session{opts: opts, interp: in, sound: sound.New()}
 	s.start = func() error {
 		chunk, err := in.LoadScript(script)
@@ -219,6 +221,8 @@ func load(opts Options) (*session, error) {
 		ButtonLabel: buttonLabel,
 		ReadFile:    besideProgram(filepath.Dir(script)),
 		Sound:       s.sound,
+		ReadSave:    read,
+		WriteSave:   write,
 	})
 	return s, nil
 }
@@ -236,6 +240,8 @@ func RunFused(p *payload.Payload, exe string) int {
 		return 1
 	}
 	defer f.Close()
+
+	read, write := savesFor(titleFor(exe))
 
 	s := &session{interp: f.Interp, sound: sound.New()}
 	// A fused program is handed the whole command line, as a .love executable
@@ -256,6 +262,8 @@ func RunFused(p *payload.Payload, exe string) int {
 		ButtonLabel: buttonLabel,
 		ReadFile:    attachedFirst(p),
 		Sound:       s.sound,
+		ReadSave:    read,
+		WriteSave:   write,
 	})
 	return s.play()
 }
@@ -435,4 +443,68 @@ func besideProgram(dir string) func(string) ([]byte, error) {
 		}
 		return os.ReadFile(name)
 	}
+}
+
+// savesFor reports where a program's own saved files go, and how to read and
+// write them.
+//
+// They go where the person's other application data goes — Application Support
+// on a Mac, ~/.config on Linux, AppData on Windows — under the program's own
+// name, because a game may be run from a folder nobody can write to, from a
+// read-only disk, or as a single fused executable with no folder of its own.
+// Nothing is created until something is saved.
+//
+// On a machine with nowhere to put them, both come back nil, and a program that
+// tries to save is told so rather than failing quietly.
+func savesFor(program string) (read func(string) ([]byte, error), write func(string, []byte) error) {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return nil, nil
+	}
+	dir := filepath.Join(base, "tlua", "saves", slug(program))
+
+	read = func(name string) ([]byte, error) {
+		if err := plainName(name); err != nil {
+			return nil, err
+		}
+		return os.ReadFile(filepath.Join(dir, name))
+	}
+	write = func(name string, data []byte) error {
+		if err := plainName(name); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dir, name), data, 0o644)
+	}
+	return read, write
+}
+
+// plainName refuses anything that is not a file name, since these come from a
+// program that may have been given one by whoever is playing.
+func plainName(name string) error {
+	if name == "" || name == "." || name == ".." ||
+		strings.ContainsAny(name, `/\`) || filepath.IsAbs(name) {
+		return fmt.Errorf("%q is not a name a save can have", name)
+	}
+	return nil
+}
+
+// slug turns a program's name into one a folder can have.
+func slug(name string) string {
+	out := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			return r
+		case r == '-', r == '_', r == '.':
+			return r
+		}
+		return '-'
+	}, name)
+	out = strings.Trim(out, "-.")
+	if out == "" {
+		return "program"
+	}
+	return out
 }
