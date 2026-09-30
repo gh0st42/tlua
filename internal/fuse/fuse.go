@@ -28,7 +28,8 @@ executable that runs the program instead of reading options.
 Options:
   -o output     where to write the executable (default: named after the source)
   -play         the program is written for the console: the executable opens a
-                window and runs it the way "tlua play" does
+                window and runs it the way "tlua play" does. A program that
+                calls boot() itself needs no flag.
   --base path   interpreter to build on (default: this binary; use a
                 cross-compiled tlua to build for another platform)
 `
@@ -68,12 +69,16 @@ func Command(args []string) int {
 	}
 	if *play {
 		kind = kind.AsGame()
-	} else if looksLikeAGame(mainSource(kind, data)) {
+	} else if main := mainSource(kind, data); looksLikeAGame(main) && !asksForAWindow(main) {
 		// Fused without -play, a console program fails at the first drawing
 		// call with "attempt to call a non-function object", which says
 		// nothing about what is actually wrong. Better to say it here.
+		//
+		// A program that calls boot() has said it for itself and needs no
+		// telling: that is what the call is for.
 		fmt.Fprintf(os.Stderr,
-			"note: %s defines _draw or _update; fuse it with -play if it should open a window\n", src)
+			"note: %s defines _draw or _update; fuse it with -play, or have it call boot(), "+
+				"if it should open a window\n", src)
 	}
 
 	if *out == "" {
@@ -249,6 +254,14 @@ var gameCallbacks = regexp.MustCompile(`(?:^|[^\w])(?:function\s+)?_(?:draw|upda
 // of output and nothing else.
 func looksLikeAGame(src []byte) bool {
 	return src != nil && gameCallbacks.Match(src)
+}
+
+// asksForAWindow reports whether a program calls boot(), which is how one says
+// for itself that it wants the console. Used only to hold back the hint above.
+var bootCall = regexp.MustCompile(`(?:^|[^\w.:])boot\s*[({"']`)
+
+func asksForAWindow(src []byte) bool {
+	return src != nil && bootCall.Match(src)
 }
 
 // mainSource reports the program's main chunk, for looking at before it is

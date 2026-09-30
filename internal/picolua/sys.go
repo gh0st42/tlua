@@ -74,36 +74,30 @@ func (r *Runtime) installSystem() {
 		// window the program wants. Width and height change the resolution of
 		// the screen itself; the rest is up to the host.
 		"window": func(L *lua.LState) int {
-			opts := L.CheckTable(1)
-
-			if v, ok := opts.RawGetString("title").(lua.LString); ok {
-				r.window.Title = string(v)
-				r.windowChanged = true
-			}
-			if v, ok := opts.RawGetString("scale").(lua.LNumber); ok {
-				r.window.Scale = int(v)
-				r.windowChanged = true
-			}
-			if v, ok := opts.RawGetString("fullscreen").(lua.LBool); ok {
-				r.window.Fullscreen = bool(v)
-				r.windowChanged = true
-			}
-
-			w, h := r.Vid.Screen.W, r.Vid.Screen.H
-			if v, ok := opts.RawGetString("width").(lua.LNumber); ok {
-				w = int(v)
-			}
-			if v, ok := opts.RawGetString("height").(lua.LNumber); ok {
-				h = int(v)
-			}
-			if w != r.Vid.Screen.W || h != r.Vid.Screen.H {
-				if w <= 0 || h <= 0 || w*h > maxSurfacePixels {
-					L.RaiseError("window: %dx%d is not a size a screen can be", w, h)
-				}
-				r.Vid.Resize(w, h)
-				r.windowChanged = true
-			}
+			r.ApplyWindow(L, L.CheckTable(1))
 			return 0
+		},
+
+		// boot() says that this program wants a window and the console.
+		//
+		// It is for a program run as an ordinary script — `tlua game.lua`,
+		// or a shebang line, or one fused without -play — where the console
+		// API is not there until something asks for it. The host installs it,
+		// and opens a window once the file has finished running, which is why
+		// the callbacks may be written after the call.
+		//
+		// Here it is already true: this program is being played. Saying so
+		// again costs nothing, which is the point — the same file runs either
+		// way. Whatever window options it carries are applied, as window()
+		// does, so that a program can say both in one line:
+		//
+		//	boot{ title = "snake", scale = 3 }
+		"boot": func(L *lua.LState) int {
+			if opts, ok := L.Get(1).(*lua.LTable); ok {
+				r.ApplyWindow(L, opts)
+			}
+			L.Push(lua.LTrue)
+			return 1
 		},
 
 		// vid(mode) switches resolution. 0, 3 and 4 are Picotron's 480x270,
@@ -157,3 +151,38 @@ func modeList() string {
 // maxTPS is as fast as a program may ask to be run. Past this it is not a frame
 // rate, it is a busy loop with a drawing call in it.
 const maxTPS = 1000
+
+// ApplyWindow is the body of window(), and of whatever boot() was given: it
+// changes what the window is asked to be, and the size of the screen behind it.
+//
+// It is exported because the first boot() a program makes is the host's, made
+// before there is a console to take the call — see internal/game/boot.go.
+func (r *Runtime) ApplyWindow(L *lua.LState, opts *lua.LTable) {
+	if v, ok := opts.RawGetString("title").(lua.LString); ok {
+		r.window.Title = string(v)
+		r.windowChanged = true
+	}
+	if v, ok := opts.RawGetString("scale").(lua.LNumber); ok {
+		r.window.Scale = int(v)
+		r.windowChanged = true
+	}
+	if v, ok := opts.RawGetString("fullscreen").(lua.LBool); ok {
+		r.window.Fullscreen = bool(v)
+		r.windowChanged = true
+	}
+
+	w, h := r.Vid.Screen.W, r.Vid.Screen.H
+	if v, ok := opts.RawGetString("width").(lua.LNumber); ok {
+		w = int(v)
+	}
+	if v, ok := opts.RawGetString("height").(lua.LNumber); ok {
+		h = int(v)
+	}
+	if w != r.Vid.Screen.W || h != r.Vid.Screen.H {
+		if w <= 0 || h <= 0 || w*h > maxSurfacePixels {
+			L.RaiseError("window: %dx%d is not a size a screen can be", w, h)
+		}
+		r.Vid.Resize(w, h)
+		r.windowChanged = true
+	}
+}

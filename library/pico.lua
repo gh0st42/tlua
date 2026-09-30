@@ -320,6 +320,18 @@ function loadpng(path, cell_w, cell_h) end
 ---@return any|nil value, string? err
 function fetch(name) end
 
+--- Says that this program wants a window and the console API, for a program run
+--- as an ordinary script: `tlua game.lua`, a shebang line, or one fused without
+--- -play. Call it first, before anything else of the console: nothing of it
+--- exists until this runs. The window opens once the file has finished, so the
+--- callbacks may be written after the call.
+---
+--- In a program already being played it is simply true. Takes what window()
+--- takes, so `boot{ title = "snake", scale = 3 }` says both at once.
+---@param options? { title?: string, scale?: integer, fullscreen?: boolean, width?: integer, height?: integer }
+---@return boolean
+function boot(options) end
+
 --- Saves something for the next time the game is run: a score, where the player
 --- had got to, what they chose. Strings, numbers, truths and tables of them can
 --- be saved. The name is a name, not a path.

@@ -144,3 +144,36 @@ func TestTheMainChunkIsFoundInsideAnArchive(t *testing.T) {
 		t.Errorf("reading a main chunk out of nonsense gave %q", got)
 	}
 }
+
+func TestNoticingAProgramThatAsksForAWindowItself(t *testing.T) {
+	// A program that calls boot() has already said what it is, so the hint
+	// about -play would be telling it something it knows.
+	asking := []string{
+		"boot()\nfunction _draw() end\n",
+		"boot{ title = \"x\" }\n",
+		"local w = boot()\n",
+		"\tboot()\n",
+	}
+	for _, src := range asking {
+		if !asksForAWindow([]byte(src)) {
+			t.Errorf("not noticed as asking for a window:\n%s", src)
+		}
+	}
+
+	quiet := []string{
+		"function _draw() end\n",
+		"local reboot = 1\n", // a longer word that ends in boot
+		"thing.boot()\n",     // somebody else's boot
+		"thing:boot()\n",     //
+		"-- boot is mentioned here\n" + "function _draw() end\n",
+		"",
+	}
+	for _, src := range quiet {
+		if asksForAWindow([]byte(src)) {
+			t.Errorf("wrongly taken for asking:\n%s", src)
+		}
+	}
+	if asksForAWindow(nil) {
+		t.Error("nothing at all asks for nothing")
+	}
+}

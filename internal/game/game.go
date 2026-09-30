@@ -320,6 +320,13 @@ func (s *session) play() int {
 	if err := s.runMain(); err != nil {
 		return s.report(err)
 	}
+	return s.afterStart()
+}
+
+// afterStart is everything between a program having started and the window
+// closing. It is shared with a program that started itself as a script and
+// asked for a window part way through with boot().
+func (s *session) afterStart() int {
 	// A program can be over before it starts: exit() in _init, or a script that
 	// only wanted to print something.
 	if quit, code := s.rt.Quitting(); quit {

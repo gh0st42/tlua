@@ -84,6 +84,15 @@ tlua play -scale 3 game.lua     # three screen pixels to a console pixel
 tlua play -fullscreen game.lua
 ```
 
+A program can ask for the window itself instead, on its first line, and then it
+runs like any other script — including from a shebang, and fused with no flag:
+
+```lua
+#!/usr/bin/env tlua
+boot()                          -- this program wants a window and the console
+function _draw() cls(1) print("hello", 8, 8, 7) end
+```
+
 A level can be drawn in a map editor and loaded whole — Tiled's own format,
 with its tilesets and their artwork:
 
@@ -152,7 +161,8 @@ tlua fuse -play -o mygame mygame/   # a directory with main.lua in it
 ./mygame                            # opens its own window
 ```
 
-Its artwork, sounds and data go in with it. `loadpng`, `fetch`, `sfx`, `music`
+The `-play` flag is only for a program that does not say `boot()` itself; one
+that does needs no telling. Its artwork, sounds and data go in with it. `loadpng`, `fetch`, `sfx`, `music`
 and `require` all read what was attached before they read the disk, so the same
 game runs from a directory while it is being written and from one file once it
 is finished.
@@ -458,6 +468,7 @@ of them.
 tlua fuse -o myapp main.lua      # embed one file
 tlua fuse -o myapp mygame/       # zip the folder (needs mygame/main.lua)
 tlua fuse -o myapp game.zip      # embed an existing archive
+tlua fuse -play -o mygame mygame/   # a console program: opens a window
 cat tlua game.zip > myapp && chmod +x myapp    # the LÖVE way, also works
 ./myapp --any --args you --like
 ```

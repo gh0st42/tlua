@@ -11,11 +11,12 @@ tlua play -scale 3 game.lua   # three screen pixels to a console pixel
 tlua play -fullscreen game.lua
 ```
 
-It is a window and a framebuffer, nothing more: no sound, no cartridges, no
-editor of sprites or maps. Artwork is written out as text in the program
-itself, which is why every example ships as a single file.
+There are no cartridges and no editor of sprites or maps: artwork is written
+out as text in the program, or drawn elsewhere and loaded from a PNG, and a
+level comes out of a map editor.
 
-- [examples/pico](../examples/pico) has twelve programs written against this.
+- [examples/pico](../examples/pico) has fifteen programs written against this,
+  and one folder with its artwork and level beside it.
 - [library/pico.lua](../library/pico.lua) declares it all for
   lua-language-server, so an editor can complete these names and show what they
   take. The `.luarc.json` at the root of this repository points at it.
@@ -38,6 +39,40 @@ The file itself is run first, so anything at the top level happens before
 screen, which is enough for something that only wants to show a picture.
 
 An error in any of them stops the program, printing the file and the line.
+
+### Asking for a window
+
+`tlua play` is one way in. The other is for the program to say so itself, on
+its first line:
+
+```lua
+boot()                  -- this program wants a window and the console
+
+local w, h = screen()
+function _draw() cls(1) print("hi", 8, 8, 7) end
+```
+
+That file runs four ways without changing: `tlua game.lua`, `tlua play
+game.lua`, `tlua fuse -play`, and `tlua fuse` with no flag at all. It also
+works with a shebang, which `tlua play` cannot:
+
+```lua
+#!/usr/bin/env tlua
+boot()
+```
+
+`boot()` takes what `window{}` takes, so a program can say both at once:
+`boot{ title = "snake", scale = 3 }`.
+
+Two things follow from how it works. **It goes first**, because the console is
+not installed until it is called — `screen()` on the line above it is a call to
+nothing. And from that line on, `print` draws on the screen rather than writing
+to the terminal, as it does in any program run this way; `printh` is the one
+that writes to the terminal.
+
+The window opens once the file has finished running, which is why the callbacks
+can be written after the call rather than before it. In a program already being
+played, `boot()` is simply true.
 
 ### Running a loop of your own
 
@@ -741,7 +776,7 @@ gives the garbage collector to do is its own.
 ## Shipping a game
 
 `tlua fuse -play` attaches a program to a copy of the binary and marks it as one
-that wants a window. What comes out is a single executable with nothing beside
+that wants a window — or the program says `boot()` itself and needs no flag. What comes out is a single executable with nothing beside
 it: no interpreter to install, no files to keep together, no Lua on the machine
 it runs on.
 

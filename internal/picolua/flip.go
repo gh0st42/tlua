@@ -22,7 +22,7 @@ import (
 // kilobytes and ten microseconds, and this costs neither.
 const driverSource = `
 local main, args = ...
-main(unpack(args))
+if main then main(unpack(args)) end
 if _init then _init() end
 __ready()
 while true do
@@ -62,6 +62,11 @@ func (r *Runtime) installFlip() {
 //
 // It reports when the program has settled — either finished starting up, or
 // suspended in a loop of its own — and everything after that is Tick.
+//
+// A nil chunk starts at _init instead. That is for a program whose main chunk
+// has already run as an ordinary script and asked for a window part way
+// through with boot(): there is no chunk left to run, only the callbacks it
+// left behind.
 func (r *Runtime) Start(chunk *lua.LFunction, args []string) error {
 	driver, err := r.L.Load(strings.NewReader(driverSource), driverName)
 	if err != nil {
@@ -73,8 +78,13 @@ func (r *Runtime) Start(chunk *lua.LFunction, args []string) error {
 		list.Append(lua.LString(a))
 	}
 
+	var main lua.LValue = lua.LNil
+	if chunk != nil {
+		main = chunk
+	}
+
 	r.co, _ = r.L.NewThread()
-	return r.settle(r.L.Resume(r.co, driver, chunk, list))
+	return r.settle(r.L.Resume(r.co, driver, main, list))
 }
 
 // Tick takes in a frame of input and runs the program until it next gives the

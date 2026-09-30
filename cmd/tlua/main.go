@@ -9,6 +9,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"tlua/internal/editor"
@@ -80,7 +81,7 @@ func main() {
 			if p.Kind.Game() {
 				os.Exit(game.RunFused(p, exe))
 			}
-			os.Exit(interp.RunFused(p, exe))
+			os.Exit(runFused(p, exe))
 		}
 	}
 
@@ -190,6 +191,15 @@ func run(c *cli) int {
 	r := interp.New(opts)
 	defer r.Close()
 
+	// A script may ask for a window while it runs. Nothing of the console is
+	// built unless it does: most scripts are not games, and they expect
+	// print() to write to the terminal.
+	boot := game.Ready(r, game.Options{
+		Script: opts.Script,
+		Args:   opts.ScriptArgs,
+		ArgIdx: opts.ScriptArgIdx,
+	}, nil)
+
 	if !opts.NoEnv {
 		if err := r.RunInit(interp.InitChunk()); err != nil {
 			return r.Report(err)
@@ -216,6 +226,17 @@ func run(c *cli) int {
 			return r.Report(err)
 		}
 	}
+
+	// The program has finished saying what it is. If it asked for a window,
+	// that is the rest of its life — unless an interactive session was asked
+	// for as well, which then picks up where the window left off.
+	if boot.Wanted() {
+		status := boot.Show()
+		if !opts.Interactive {
+			return status
+		}
+	}
+	boot.TooLate()
 
 	if opts.Interactive {
 		r.REPL()
@@ -269,4 +290,30 @@ func isTerminal(f *os.File) bool {
 		return false
 	}
 	return st.Mode()&os.ModeCharDevice != 0
+}
+
+// runFused runs a program attached to this binary that was not built with
+// -play, giving it the chance to ask for a window with boot() anyway.
+//
+// That is what makes -play optional: a program that says boot() in its own text
+// does not also have to be told at the moment it is packed.
+func runFused(p *payload.Payload, exe string) int {
+	f, err := interp.OpenFused(p, exe)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", filepath.Base(exe), err)
+		return 1
+	}
+	defer f.Close()
+
+	args := os.Args[1:]
+	boot := game.Ready(f.Interp, game.Options{Title: filepath.Base(exe), Args: args},
+		game.Attached(p))
+
+	if err := f.Run(args); err != nil {
+		return f.Report(err)
+	}
+	if boot.Wanted() {
+		return boot.Show()
+	}
+	return 0
 }
