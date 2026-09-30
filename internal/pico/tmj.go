@@ -51,6 +51,7 @@ type mapJSON struct {
 }
 
 type objectJSON struct {
+	ID         int            `json:"id"`
 	Name       string         `json:"name"`
 	Type       string         `json:"type"`
 	Class      string         `json:"class"`
@@ -58,7 +59,19 @@ type objectJSON struct {
 	Y          float64        `json:"y"`
 	Width      float64        `json:"width"`
 	Height     float64        `json:"height"`
+	Rotation   float64        `json:"rotation"`
+	Visible    *bool          `json:"visible"`
+	GID        *uint32        `json:"gid"`
+	Ellipse    bool           `json:"ellipse"`
+	Point      bool           `json:"point"`
+	Polygon    []pointJSON    `json:"polygon"`
+	Polyline   []pointJSON    `json:"polyline"`
 	Properties []propertyJSON `json:"properties"`
+}
+
+type pointJSON struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
 }
 
 type propertyJSON struct {
@@ -96,15 +109,7 @@ func ReadTMJ(data []byte) (*Tilemap, error) {
 		case "objectgroup":
 			layer.Kind = ObjectLayer
 			for _, o := range l.Objects {
-				class := o.Class
-				if class == "" {
-					class = o.Type // what older files call it
-				}
-				layer.Objects = append(layer.Objects, Object{
-					Name: o.Name, Class: class,
-					X: o.X, Y: o.Y, W: o.Width, H: o.Height,
-					Props: properties(o.Properties),
-				})
+				layer.Objects = append(layer.Objects, m.objectOf(o))
 			}
 
 		case "tilelayer":
@@ -123,6 +128,49 @@ func ReadTMJ(data []byte) (*Tilemap, error) {
 		m.Layers = append(m.Layers, layer)
 	}
 	return m, nil
+}
+
+// objectOf reads one thing placed on a layer.
+func (m *Tilemap) objectOf(o objectJSON) Object {
+	class := o.Class
+	if class == "" {
+		class = o.Type // what older files call it
+	}
+
+	out := Object{
+		ID: o.ID, Name: o.Name, Class: class,
+		X: o.X, Y: o.Y, W: o.Width, H: o.Height,
+		Rotation: o.Rotation / 360, // the editor writes degrees; angles here are turns
+		Visible:  o.Visible == nil || *o.Visible,
+		Props:    properties(o.Properties),
+	}
+
+	switch {
+	case o.Point:
+		out.Shape = ShapePoint
+	case o.Ellipse:
+		out.Shape = ShapeEllipse
+	case len(o.Polygon) > 0:
+		out.Shape, out.Points = ShapePolygon, points(o.Polygon)
+	case len(o.Polyline) > 0:
+		out.Shape, out.Points = ShapePolyline, points(o.Polyline)
+	}
+
+	// An object given a tile carries the same number, flip bits and all, that
+	// a square of a tile layer does.
+	if o.GID != nil {
+		out.Tile, out.HasTile = m.cellOf(*o.GID), true
+	}
+	return out
+}
+
+// points turns an outline's corners into the console's own.
+func points(list []pointJSON) []Point {
+	out := make([]Point, len(list))
+	for i, p := range list {
+		out[i] = Point{X: p.X, Y: p.Y}
+	}
+	return out
 }
 
 // cellOf turns one of the map's tile numbers into a cell: which sheet it comes

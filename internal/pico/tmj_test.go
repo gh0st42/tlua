@@ -303,3 +303,88 @@ func TestDrawingOnlyTheSpritesCarryingAFlag(t *testing.T) {
 		11..
 		11..`)
 }
+
+func TestEverythingAnObjectWasGivenInTheEditor(t *testing.T) {
+	// Objects are more than boxes with names: an editor places points to stand
+	// at, rounded and outlined regions, and pieces of scenery that are a
+	// sprite. All of it is data a game was meant to be able to read.
+	const tmj = `{
+	  "width": 1, "height": 1, "tilewidth": 8, "tileheight": 8,
+	  "tilesets": [ { "firstgid": 1, "source": "t.tsj" } ],
+	  "layers": [
+	    { "type": "objectgroup", "name": "things", "objects": [
+	      { "id": 1, "name": "spawn", "type": "start", "x": 8, "y": 16,
+	        "point": true, "rotation": 0, "visible": true },
+	      { "id": 2, "name": "sign", "class": "prop", "x": 16, "y": 8,
+	        "width": 8, "height": 8, "rotation": 90, "visible": false },
+	      { "id": 3, "name": "pool", "class": "water", "x": 0, "y": 24,
+	        "width": 16, "height": 8, "ellipse": true },
+	      { "id": 4, "name": "path", "x": 4, "y": 4,
+	        "polygon": [ {"x":0,"y":0}, {"x":8,"y":0}, {"x":8,"y":8} ] },
+	      { "id": 5, "name": "edge", "x": 0, "y": 0,
+	        "polyline": [ {"x":0,"y":0}, {"x":4,"y":4} ] },
+	      { "id": 6, "name": "lamp", "class": "prop", "gid": 3,
+	        "x": 24, "y": 32, "width": 8, "height": 8 },
+	      { "id": 7, "name": "torch", "gid": 2147483651, "x": 0, "y": 8 }
+	    ] }
+	  ]
+	}`
+	m, err := ReadTMJ([]byte(tmj))
+	if err != nil {
+		t.Fatal(err)
+	}
+	things := m.Layer("things")
+	if things == nil || len(things.Objects) != 7 {
+		t.Fatalf("the layer read as %+v", things)
+	}
+	by := map[string]Object{}
+	for _, o := range things.Objects {
+		by[o.Name] = o
+	}
+
+	if got := by["spawn"]; got.ID != 1 || got.Shape != ShapePoint {
+		t.Errorf("the spawn is %+v", got)
+	}
+	// The editor writes degrees; every angle here is a turn.
+	if got := by["sign"]; got.Rotation != 0.25 || got.Visible {
+		t.Errorf("the sign is turned %v and visible=%v", got.Rotation, got.Visible)
+	}
+	// An object that says nothing about being visible is visible.
+	if !by["pool"].Visible {
+		t.Error("the pool should be visible")
+	}
+	if got := by["pool"].Shape; got != ShapeEllipse {
+		t.Errorf("the pool is a %v", got)
+	}
+	if got := by["path"]; got.Shape != ShapePolygon || len(got.Points) != 3 || got.Points[2] != (Point{8, 8}) {
+		t.Errorf("the path is %+v", got)
+	}
+	if got := by["edge"].Shape; got != ShapePolyline {
+		t.Errorf("the edge is a %v", got)
+	}
+
+	// A piece of scenery carries a sprite of the map's own sheet, numbered the
+	// way a square of a tile layer is.
+	lamp := by["lamp"]
+	if !lamp.HasTile || lamp.Tile.Sprite != 2 || lamp.Tile.Turn != Upright {
+		t.Errorf("the lamp is %+v", lamp)
+	}
+	// And it carries the flip bits with it: 2147483651 is sprite 2 flipped.
+	torch := by["torch"]
+	if !torch.HasTile || torch.Tile.Sprite != 2 || torch.Tile.Turn&FlipX == 0 {
+		t.Errorf("the torch is %+v", torch)
+	}
+	// A region is not scenery, and says so.
+	if by["pool"].HasTile {
+		t.Error("the pool was given no sprite")
+	}
+	// The names a shape goes by, since that is what reaches a program.
+	for shape, want := range map[Shape]string{
+		ShapeRect: "rect", ShapeEllipse: "ellipse", ShapePoint: "point",
+		ShapePolygon: "polygon", ShapePolyline: "polyline",
+	} {
+		if got := shape.String(); got != want {
+			t.Errorf("shape %d is called %q, want %q", shape, got, want)
+		}
+	}
+}

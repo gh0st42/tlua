@@ -78,6 +78,55 @@ func (r *Runtime) installSurfaceType() {
 			return 1
 		},
 
+		// props(n) is everything else the artwork said about a sprite — what a
+		// map editor lets you hang on a tile beyond its eight flags, such as a
+		// material, a name or a number of hit points. props() on its own is
+		// what the sheet says about every one of its sprites.
+		//
+		// A sprite's own beats the sheet's, and both are plain tables, so
+		//
+		//	if sheet:props(n).ice then slide() end
+		//
+		// works and so does walking them with pairs(). prop() is the same
+		// question about one key, without making a table to ask it.
+		"props": func(L *lua.LState) int {
+			s := checkSurface(L, 1)
+			if isNone(L, 2) {
+				L.Push(propsOf(L, s.SheetProps()))
+				return 1
+			}
+			L.Push(propsOf(L, s.Props(L.CheckInt(2))))
+			return 1
+		},
+
+		// prop(n, key, [missing]) is one property of a sprite, or what to say
+		// instead when it has none. prop(n, key, value) would be a setter, but
+		// a third argument reads better as the answer for a tile that never
+		// had one — set() does the writing:
+		//
+		//	sheet:prop(n, "material")            -- "ice", or nil
+		//	sheet:prop(n, "damage", 0)           -- a number either way
+		//	sheet:setprop(n, "material", "ice")  -- written onto the sprite
+		"prop": func(L *lua.LState) int {
+			s := checkSurface(L, 1)
+			v, ok := s.Prop(L.CheckInt(2), L.CheckString(3))
+			if !ok {
+				L.Push(L.Get(4))
+				return 1
+			}
+			L.Push(propValue(L, v))
+			return 1
+		},
+
+		// setprop(n, key, value) writes one, over whatever the artwork said.
+		// Giving nothing for the value puts the sheet's own answer back.
+		"setprop": func(L *lua.LState) int {
+			s := checkSurface(L, 1)
+			s.SetProp(L.CheckInt(2), L.CheckString(3), goValue(L.Get(4)))
+			L.Push(L.Get(1))
+			return 1
+		},
+
 		// sprite(n) is one cell of a sheet as a surface of its own.
 		//
 		// It is a copy, which is the simple thing: changing it does not change

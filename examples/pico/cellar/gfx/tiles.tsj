@@ -1,19 +1,74 @@
 {
-  "columns": 4,
+  "columns": 5,
   "image": "tiles.png",
   "imageheight": 8,
-  "imagewidth": 32,
+  "imagewidth": 40,
   "margin": 0,
   "name": "tiles",
   "spacing": 0,
-  "tilecount": 4,
+  "tilecount": 5,
   "tiledversion": "1.10.2",
   "tileheight": 8,
   "tilewidth": 8,
   "type": "tileset",
   "version": "1.10",
   "tiles": [
-    { "id": 1, "properties": [ { "name": "flag_0", "type": "bool", "value": true } ] },
-    { "id": 3, "properties": [ { "name": "flag_1", "type": "bool", "value": true } ] }
+    {
+      "id": 1,
+      "properties": [
+        {
+          "name": "flag_0",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "properties": [
+        {
+          "name": "material",
+          "type": "string",
+          "value": "earth"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "properties": [
+        {
+          "name": "flag_1",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "material",
+          "type": "string",
+          "value": "water"
+        },
+        {
+          "name": "slowdown",
+          "type": "float",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "properties": [
+        {
+          "name": "material",
+          "type": "string",
+          "value": "gold"
+        }
+      ]
+    }
+  ],
+  "properties": [
+    {
+      "name": "material",
+      "type": "string",
+      "value": "stone"
+    }
   ]
 }

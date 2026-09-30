@@ -13,26 +13,44 @@
 -- What makes it work without a table of tile numbers anywhere is sprite flags.
 -- The artwork says which tiles are solid and which are water; the program asks
 -- fget(mget(x, y), SOLID) and never learns that a wall is sprite 1.
+--
+-- The tileset says more than that. Each tile carries a material, and water
+-- carries how much it slows a walk, so how wading feels is set in the editor
+-- rather than here. Flags are the bit a loop tests; properties are the detail
+-- behind it.
 
 local SOLID, WATER = 0, 1
 
 local w, h = screen()
-local level, player, treasure
+local level, tiles, player, treasure
 local splash = 0
 
 function _init()
 	level = loadmap("level1")
 	usemap(level)
-	usesheet(loadpng("tiles"))
+	tiles = loadpng("tiles")
+	usesheet(tiles)
 
-	-- Where to start, and what to look for, both placed in the editor.
+	-- Where to start, and what to look for, both placed in the editor. The
+	-- treasure was placed as a tile, so it arrives with a sprite to draw it
+	-- with; anything placed as a plain box has no sprite field at all.
 	for thing in all(level:objects("things")) do
 		if thing.class == "start" then
 			player = { x = thing.x, y = thing.y, speed = thing.props.speed or 1 }
 		elseif thing.class == "pickup" then
-			treasure = { x = thing.x, y = thing.y, taken = false }
+			treasure = {
+				x = thing.x, y = thing.y - select(2, level:tile()), -- its foot is its y
+				sprite = thing.sprite, sheet = thing.sheet, taken = false,
+			}
 		end
 	end
+end
+
+-- underfoot reports the sprite the player is standing on, which is what the
+-- questions below are all really about.
+local function underfoot()
+	local tw, th = level:tile()
+	return mget(flr((player.x + 4) / tw), flr((player.y + 4) / th))
 end
 
 -- blocked reports whether a box of the world is inside anything solid.
@@ -48,14 +66,16 @@ end
 
 -- wading reports whether the player is standing in water, which slows them.
 local function wading()
-	local tw = select(1, level:tile())
-	return fget(mget(flr((player.x + 4) / tw), flr((player.y + 4) / tw)), WATER)
+	return fget(underfoot(), WATER)
 end
 
 function _update()
 	local speed = player.speed
 	if wading() then
-		speed = speed / 2
+		-- How much water slows a walk is the tileset's business, not this
+		-- program's: prop() asks the artwork, and 1 is for a tile that says
+		-- nothing about it.
+		speed = speed / tiles:prop(underfoot(), "slowdown", 1)
 		splash = splash + 1
 	end
 
@@ -98,8 +118,7 @@ function _draw()
 
 	if treasure and not treasure.taken then
 		local bob = sin(t()) * 2
-		circfill(treasure.x + 4, treasure.y + 4 + bob, 3, 10)
-		circ(treasure.x + 4, treasure.y + 4 + bob, 3, 9)
+		spr(level:sheet(treasure.sheet), treasure.sprite, treasure.x, treasure.y + bob)
 	end
 
 	-- The player: a box, as ever.
@@ -109,9 +128,10 @@ function _draw()
 
 	camera()
 	print(level:props().title or "somewhere", 6, 6, 7)
-	if wading() then
-		print("wading", 6, 16, 12)
-	end
+	-- What the player is standing on, as the tileset has it. The walls say
+	-- nothing of their own, so they answer with what the sheet says for
+	-- every sprite on it.
+	print(tiles:prop(underfoot(), "material", "nothing"), 6, 16, 12)
 	if treasure and treasure.taken then
 		print("you have the treasure", 6, h - 12, 10)
 	else

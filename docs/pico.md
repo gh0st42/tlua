@@ -336,6 +336,34 @@ a sprite only the tileset knows about keeps what it says. A cell size given to
 This is the shape [fz](https://github.com/gh0st42/fz) writes, whose `fz gfx`
 editor draws a sheet, sets its flags, and exports the tileset.
 
+### What else a tile carries
+
+Eight flags are enough for solid, water and deadly, and not enough for a word or
+a number. A Tiled tileset lets a tile carry properties of any kind, and those
+come along with the artwork as the flags do.
+
+| Call | What it does |
+| --- | --- |
+| `s:prop(n, key, [missing])` | One property of sprite `n`, or `missing` when it has none. |
+| `s:props(n)` | All of them, as a table. |
+| `s:props()` | What the sheet says for every sprite. |
+| `s:setprop(n, key, value)` | Writes one, over whatever the artwork said. |
+
+```lua
+local tiles = loadpng("tiles")   -- tiles.tsj beside it is read as well
+if tiles:prop(n, "material") == "ice" then slide() end
+if tiles:prop(n, "damage", 0) > 0 then hurt() end
+```
+
+A sprite's own properties beat the ones the tileset carries for the whole sheet,
+which is what makes a sheet-wide default worth setting. `flag_0` to `flag_7` are
+properties too, so a flag can be asked for by name as well as by bit — the bits
+are the ones a game loop should use.
+
+Properties are for what a tile *is*. Flags are a mask and a bit test; a property
+is a table lookup and a string compare, which is fine once for a tile the player
+is standing on and wasteful for every tile on the screen.
+
 ### The current sheet
 
 `usesheet()` puts one sheet in hand, and then `spr(n, x, y)` is Picotron's own
@@ -418,6 +446,7 @@ map(tx, ty, sx, sy, tw, th)    -- a window of it, put where you like
 | `m:layer(name_or_number)` | One of them; layers are numbered from one. |
 | `m:objects(name_or_number)` | What was placed on a layer, as plain tables. |
 | `m:props()` | What the map itself was labelled with. |
+| `m:sheet([n])`, `m:sheets()` | The artwork it draws with, counted from one. |
 | `m:draw(…)` | Draws it without making it current. |
 | `layer:draw(…)`, `layer:get/set`, `layer:visible(…)` | One layer on its own. |
 
@@ -426,12 +455,38 @@ carrying one of those flags are drawn. That is how one layer of artwork becomes
 two of scenery — everything solid drawn over everything else — without the map
 having to be split.
 
-An object is a plain table: `name`, `class`, `x`, `y`, `w`, `h` and `props`,
-each property keeping the kind of value the editor gave it.
+An object is a plain table, holding everything the editor knows about it:
+
+| Field | |
+| --- | --- |
+| `id` | The number the editor gave it, unique in the map. |
+| `name`, `class` | What it is called, and what kind of thing it is. |
+| `x`, `y`, `w`, `h` | Where it is and how big. |
+| `rotation` | In turns, like every other angle here. Tiled writes degrees. |
+| `visible` | Whether it was left switched on. |
+| `shape` | `"rect"`, `"ellipse"`, `"point"`, `"polygon"` or `"polyline"`. |
+| `points` | The corners of an outline, relative to `x`, `y`. Nothing otherwise. |
+| `props` | What it was labelled with, each value the kind the editor gave it. |
 
 ```lua
 for thing in all(level:objects("things")) do
 	if thing.class == "start" then player.x, player.y = thing.x, thing.y end
+end
+```
+
+An object that was given a **tile** in the editor — a lamp, a crate, scenery
+placed by hand rather than drawn into a layer — also carries `sprite`, the
+`sheet` it belongs to, and `flipx`, `flipy` and `flipd`. An object that is only
+a region has none of those fields, which is how to tell them apart. Tiled
+anchors such an object at its bottom left, so `y` is the foot of the sprite:
+
+```lua
+for thing in all(level:objects("things")) do
+	if thing.sprite then
+		local _, th = level:tile()
+		spr(level:sheet(thing.sheet), thing.sprite, thing.x, thing.y - th,
+			1, 1, thing.flipx, thing.flipy)
+	end
 end
 ```
 
@@ -445,15 +500,20 @@ if fget(mget(x, y), SOLID) then ... end
 What is read: CSV and base64 layers, packed with zlib, gzip or nothing; several
 tilesets in one map; tile layers and object layers; and the flip bits Tiled
 keeps in the top of a tile number, which between them make all eight ways of
-putting a tile down — mirrored either way, and turned. Zstandard compression is
-not read, and says so. `examples/pico/cellar` is a worked example, folder and
-all.
+putting a tile down — mirrored either way, and turned. `examples/pico/cellar` is
+a worked example, folder and all.
+
+What is not: Zstandard compression, a map saved as infinite, a group layer
+(which is skipped along with the layers inside it), and a tileset embedded in
+the map rather than saved beside it — in Tiled, *Map → Convert Tileset*, or
+untick "Embed in map" when the tileset is made. The first three say so; the last
+says the map names no tileset it can find.
 
 Inside a map, sprite 0 is nothing: it is what the editor means by an empty
 square and what this console means by the blank first cell of a sheet, which is
 why that cell is left blank.
 
-## Input## Input
+## Input
 
 | Call | What it does |
 | --- | --- |

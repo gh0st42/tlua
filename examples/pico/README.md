@@ -40,7 +40,7 @@ is three of them:
 
 | Example | What it is for |
 | --- | --- |
-| [cellar/](cellar/) | A Tiled map with its tileset and artwork: `loadmap`, `mget`, sprite flags for collision, and objects placed in the editor. Run it with `tlua play examples/pico/cellar`. |
+| [cellar/](cellar/) | A Tiled map with its tileset and artwork: `loadmap`, `mget`, sprite flags for collision, tile properties for what a tile is made of, and objects placed in the editor — including one that is a sprite. Run it with `tlua play examples/pico/cellar`. |
 
 Two of them are worth reading before writing anything: `hello.lua` for the
 shape of a program, and `sprites.lua` for how artwork is written without any

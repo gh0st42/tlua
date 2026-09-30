@@ -66,13 +66,64 @@ func (l *Layer) SetCell(x, y int, c Cell) {
 	l.Cells[y*l.W+x] = c
 }
 
+// Shape is what an object was drawn as in the editor. A rectangle is the usual
+// one; the others are for a spot to stand at, a round area, or an outline that
+// follows the scenery.
+type Shape uint8
+
+const (
+	ShapeRect Shape = iota
+	ShapeEllipse
+	ShapePoint    // a place with no size
+	ShapePolygon  // a closed outline
+	ShapePolyline // an open one
+)
+
+// String names a shape the way a program would ask for it.
+func (s Shape) String() string {
+	switch s {
+	case ShapeEllipse:
+		return "ellipse"
+	case ShapePoint:
+		return "point"
+	case ShapePolygon:
+		return "polygon"
+	case ShapePolyline:
+		return "polyline"
+	}
+	return "rect"
+}
+
+// Point is a corner of an outline, relative to the object's own place.
+type Point struct{ X, Y float64 }
+
 // Object is something placed on the map rather than drawn into it: where a
-// player starts, a door, a trigger.
+// player starts, a door, a trigger, a lamp to draw.
 type Object struct {
+	ID    int // the number the editor gave it, unique in the map
 	Name  string
 	Class string // Tiled calls this the type
 	X, Y  float64
 	W, H  float64
+
+	// Rotation is in turns, like every other angle here, clockwise from
+	// upright. Tiled writes degrees; this is those over three hundred and
+	// sixty.
+	Rotation float64
+	Visible  bool
+
+	Shape  Shape
+	Points []Point // the corners of a polygon or polyline, and nothing otherwise
+
+	// Tile is the sprite an object was given in the editor, for the kind of
+	// object that is a piece of scenery rather than a region. HasTile says
+	// whether it was given one at all, since sprite 0 is a real sprite.
+	//
+	// Tiled anchors such an object at its bottom left, so Y is the foot of the
+	// sprite rather than its top.
+	Tile    Cell
+	HasTile bool
+
 	Props map[string]any
 }
 

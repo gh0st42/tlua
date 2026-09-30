@@ -65,6 +65,25 @@ func (r *Runtime) installMaps() {
 			return 1
 		},
 
+		// sheet(n) is one of the sheets the map draws with, counted from one,
+		// which is what an object's sprite is numbered against.
+		"sheet": func(L *lua.LState) int {
+			m := checkMap(L, 1)
+			n := L.OptInt(2, 1)
+			if n < 1 || n > len(m.Tilesets) || m.Tilesets[n-1].Sheet == nil {
+				L.Push(lua.LNil)
+				return 1
+			}
+			L.Push(r.newSurface(m.Tilesets[n-1].Sheet))
+			return 1
+		},
+
+		// sheets() is how many of them there are.
+		"sheets": func(L *lua.LState) int {
+			L.Push(lua.LNumber(len(checkMap(L, 1).Tilesets)))
+			return 1
+		},
+
 		// props() is what the map itself was labelled with in the editor.
 		"props": func(L *lua.LState) int {
 			L.Push(propsOf(L, checkMap(L, 1).Props))
@@ -264,12 +283,37 @@ func objectsOf(L *lua.LState, l *pico.Layer) *lua.LTable {
 	}
 	for _, o := range l.Objects {
 		t := L.NewTable()
+		L.SetField(t, "id", lua.LNumber(o.ID))
 		L.SetField(t, "name", lua.LString(o.Name))
 		L.SetField(t, "class", lua.LString(o.Class))
 		L.SetField(t, "x", lua.LNumber(o.X))
 		L.SetField(t, "y", lua.LNumber(o.Y))
 		L.SetField(t, "w", lua.LNumber(o.W))
 		L.SetField(t, "h", lua.LNumber(o.H))
+		L.SetField(t, "rotation", lua.LNumber(o.Rotation))
+		L.SetField(t, "visible", lua.LBool(o.Visible))
+		L.SetField(t, "shape", lua.LString(o.Shape.String()))
+		if len(o.Points) > 0 {
+			corners := L.NewTable()
+			for _, p := range o.Points {
+				corner := L.NewTable()
+				L.SetField(corner, "x", lua.LNumber(p.X))
+				L.SetField(corner, "y", lua.LNumber(p.Y))
+				corners.Append(corner)
+			}
+			L.SetField(t, "points", corners)
+		}
+		// A piece of scenery placed as an object carries a sprite, and the
+		// sheet it belongs to, so that it can be drawn: spr(m:sheet(o.sheet),
+		// o.sprite, o.x, o.y - h). An object that is only a region has none of
+		// these fields at all, which is how a program tells them apart.
+		if o.HasTile {
+			L.SetField(t, "sprite", lua.LNumber(o.Tile.Sprite))
+			L.SetField(t, "sheet", lua.LNumber(int(o.Tile.Sheet)+1))
+			L.SetField(t, "flipx", lua.LBool(o.Tile.Turn&pico.FlipX != 0))
+			L.SetField(t, "flipy", lua.LBool(o.Tile.Turn&pico.FlipY != 0))
+			L.SetField(t, "flipd", lua.LBool(o.Tile.Turn&pico.Turn != 0))
+		}
 		L.SetField(t, "props", propsOf(L, o.Props))
 		out.Append(t)
 	}
@@ -281,16 +325,47 @@ func objectsOf(L *lua.LState, l *pico.Layer) *lua.LTable {
 func propsOf(L *lua.LState, props map[string]any) *lua.LTable {
 	out := L.NewTable()
 	for name, v := range props {
-		switch v := v.(type) {
-		case string:
-			L.SetField(out, name, lua.LString(v))
-		case float64:
-			L.SetField(out, name, lua.LNumber(v))
-		case bool:
-			L.SetField(out, name, lua.LBool(v))
-		}
+		L.SetField(out, name, propValue(L, v))
 	}
 	return out
+}
+
+// propValue turns one value from a file into a Lua one. An editor writes
+// strings, numbers and truths; a grouped property is a table of them, and a
+// list is a table too, so both go through whole rather than disappearing.
+func propValue(L *lua.LState, v any) lua.LValue {
+	switch v := v.(type) {
+	case string:
+		return lua.LString(v)
+	case float64:
+		return lua.LNumber(v)
+	case bool:
+		return lua.LBool(v)
+	case map[string]any:
+		return propsOf(L, v)
+	case []any:
+		out := L.NewTable()
+		for _, item := range v {
+			out.Append(propValue(L, item))
+		}
+		return out
+	}
+	return lua.LNil
+}
+
+// goValue is propValue the other way about, for a property a program sets
+// itself. Only the three kinds an editor writes are kept: a table would have to
+// be copied, and a property is meant to be a label rather than a structure.
+func goValue(v lua.LValue) any {
+	switch v := v.(type) {
+	case lua.LString:
+		return string(v)
+	case lua.LNumber:
+		return float64(v)
+	case lua.LBool:
+		return bool(v)
+	}
+	return nil
 }
 
 /* --- drawing --- */

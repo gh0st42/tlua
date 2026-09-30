@@ -181,3 +181,103 @@ func TestFlagsOfASprite(t *testing.T) {
 		t.Errorf("a copy has flags %d", got)
 	}
 }
+
+func TestATilesetSaysMoreAboutATileThanItsFlags(t *testing.T) {
+	// A map editor lets a tile carry anything, and a game may well want the
+	// name of a material or a number of hit points rather than a bit.
+	const tsj = `{
+	  "image": "tiles.png", "tilewidth": 8, "tileheight": 8, "columns": 4,
+	  "properties": [
+	    { "name": "material", "type": "string", "value": "stone" },
+	    { "name": "solid", "type": "bool", "value": true } ],
+	  "tiles": [
+	    { "id": 1, "properties": [
+	        { "name": "flag_0", "type": "bool", "value": true },
+	        { "name": "material", "type": "string", "value": "ice" },
+	        { "name": "damage", "type": "int", "value": 3 } ] },
+	    { "id": 2, "properties": [
+	        { "name": "spawns", "type": "class",
+	          "value": { "what": "bat", "many": 2 } } ] }
+	  ]
+	}`
+
+	m, err := ReadTSJ([]byte(tsj))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Sheet["material"]; got != "stone" {
+		t.Errorf("the tileset's own material is %v", got)
+	}
+	if got := m.Props[1]["material"]; got != "ice" {
+		t.Errorf("sprite 1 is made of %v", got)
+	}
+	if got := m.Props[1]["damage"]; got != float64(3) {
+		t.Errorf("sprite 1 does %v damage", got)
+	}
+	// A flag is a property in the file, and stays one here as well as becoming
+	// a bit, since a game may prefer to ask for it by name.
+	if got := m.Props[1]["flag_0"]; got != true {
+		t.Errorf("flag_0 as a property is %v", got)
+	}
+	if got := m.Flags[1]; got != 1 {
+		t.Errorf("flag_0 as a bit is %d", got)
+	}
+	// A grouped property arrives as the table it is.
+	group, ok := m.Props[2]["spawns"].(map[string]any)
+	if !ok || group["what"] != "bat" {
+		t.Errorf("the grouped property is %#v", m.Props[2]["spawns"])
+	}
+
+	s := NewSurface(32, 8)
+	s.Apply(m)
+	if v, ok := s.Prop(1, "material"); !ok || v != "ice" {
+		t.Errorf("the sprite's own material is %v", v)
+	}
+	if v, ok := s.Prop(2, "material"); !ok || v != "stone" {
+		t.Errorf("a sprite with none of its own should fall back to the sheet's, got %v", v)
+	}
+	if _, ok := s.Prop(3, "nothing"); ok {
+		t.Error("that property is nowhere")
+	}
+	if got := s.Props(1)["solid"]; got != true {
+		t.Errorf("the sheet's own properties are inherited too: %v", got)
+	}
+}
+
+func TestPropertiesOfASpriteCanBeWrittenAndTravelWithTheArtwork(t *testing.T) {
+	s := NewSurface(16, 16)
+	s.SetGrid(8, 8)
+	if s.AnyProps() {
+		t.Error("fresh artwork carries nothing")
+	}
+
+	s.SetSheetProp("material", "stone")
+	s.SetProp(1, "material", "ice")
+	s.SetProp(1, "damage", 3)
+	if !s.AnyProps() {
+		t.Error("something was set")
+	}
+	if v, _ := s.Prop(1, "material"); v != "ice" {
+		t.Errorf("sprite 1 is made of %v", v)
+	}
+	if v, _ := s.Prop(0, "material"); v != "stone" {
+		t.Errorf("sprite 0 falls back to %v", v)
+	}
+
+	// A copy carries them, and changing the copy leaves the original alone.
+	c := s.Clone()
+	if v, _ := c.Prop(1, "damage"); v != 3 {
+		t.Errorf("the copy lost a property: %v", v)
+	}
+	c.SetProp(1, "damage", 9)
+	if v, _ := s.Prop(1, "damage"); v != 3 {
+		t.Errorf("writing on the copy changed the original: %v", v)
+	}
+
+	// Props hands out a table of its own, so keeping it is safe.
+	got := s.Props(1)
+	got["material"] = "lava"
+	if v, _ := s.Prop(1, "material"); v != "ice" {
+		t.Errorf("the sheet followed the table it handed out: %v", v)
+	}
+}

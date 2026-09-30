@@ -8,8 +8,8 @@ import (
 	"strconv"
 )
 
-// Meta is what a sheet's artwork says about itself: how big its sprites are and
-// which flags they carry.
+// Meta is what a sheet's artwork says about itself: how big its sprites are,
+// which flags they carry, and whatever else the editor labelled them with.
 //
 // Sprite flags are eight bits a sprite that mean whatever a game decides —
 // solid, water, deadly, collectable. They belong with the artwork rather than
@@ -18,10 +18,19 @@ import (
 type Meta struct {
 	TileW, TileH int
 	Flags        map[int]uint8
+
+	// Props is what a tileset said about each sprite beyond its flags, and
+	// Sheet is what it said about itself for every sprite to inherit. A PNG
+	// carries neither: they come from a .tsj, where an editor can give a tile
+	// a material, a name or a number.
+	Props map[int]map[string]any
+	Sheet map[string]any
 }
 
 // Empty reports whether the metadata says anything at all.
-func (m Meta) Empty() bool { return m.TileW <= 0 && len(m.Flags) == 0 }
+func (m Meta) Empty() bool {
+	return m.TileW <= 0 && len(m.Flags) == 0 && len(m.Props) == 0 && len(m.Sheet) == 0
+}
 
 /* --- what a PNG carries --- */
 
@@ -101,15 +110,12 @@ func pngTextChunk(data []byte, key string) (string, bool) {
 // tilesetJSON is the part of a Tiled .tsj that matters here: how big the tiles
 // are, and the properties hung on each of them.
 type tilesetJSON struct {
-	TileWidth  int `json:"tilewidth"`
-	TileHeight int `json:"tileheight"`
+	TileWidth  int            `json:"tilewidth"`
+	TileHeight int            `json:"tileheight"`
+	Properties []propertyJSON `json:"properties"`
 	Tiles      []struct {
-		ID         int `json:"id"`
-		Properties []struct {
-			Name  string          `json:"name"`
-			Type  string          `json:"type"`
-			Value json.RawMessage `json:"value"`
-		} `json:"properties"`
+		ID         int            `json:"id"`
+		Properties []propertyJSON `json:"properties"`
 	} `json:"tiles"`
 }
 
@@ -128,7 +134,7 @@ func ReadTSJ(data []byte) (Meta, error) {
 		return Meta{}, fmt.Errorf("not a Tiled tileset: %w", err)
 	}
 
-	out := Meta{TileW: ts.TileWidth, TileH: ts.TileHeight}
+	out := Meta{TileW: ts.TileWidth, TileH: ts.TileHeight, Sheet: properties(ts.Properties)}
 	for _, tile := range ts.Tiles {
 		var mask uint8
 		for _, p := range tile.Properties {
@@ -136,8 +142,7 @@ func ReadTSJ(data []byte) (Meta, error) {
 			if !ok {
 				continue
 			}
-			var on bool
-			if json.Unmarshal(p.Value, &on) == nil && on {
+			if on, ok := p.Value.(bool); ok && on {
 				mask |= 1 << uint(bit)
 			}
 		}
@@ -146,6 +151,14 @@ func ReadTSJ(data []byte) (Meta, error) {
 				out.Flags = map[int]uint8{}
 			}
 			out.Flags[tile.ID] = mask
+		}
+		// The flags are kept as properties as well as a mask, since that is
+		// how the file has them and a game may prefer to ask by name.
+		if props := properties(tile.Properties); props != nil {
+			if out.Props == nil {
+				out.Props = map[int]map[string]any{}
+			}
+			out.Props[tile.ID] = props
 		}
 	}
 	return out, nil
@@ -164,12 +177,21 @@ func flagBit(name string) (int, bool) {
 }
 
 // Apply puts metadata onto a surface: the grid, unless it already has one that
-// was asked for outright, and the flags on top of whatever is there.
+// was asked for outright, and the flags and properties on top of whatever is
+// there.
 func (s *Surface) Apply(m Meta) {
 	if !s.Gridded() && m.TileW > 0 && m.TileH > 0 {
 		s.SetGrid(m.TileW, m.TileH)
 	}
 	for n, mask := range m.Flags {
 		s.SetFlags(n, mask)
+	}
+	for key, v := range m.Sheet {
+		s.SetSheetProp(key, v)
+	}
+	for n, props := range m.Props {
+		for key, v := range props {
+			s.SetProp(n, key, v)
+		}
 	}
 }

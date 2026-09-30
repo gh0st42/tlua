@@ -1,21 +1,86 @@
-{ "compressionlevel":-1,
-  "height":12, "width":20, "tileheight":8, "tilewidth":8,
-  "infinite":false, "nextlayerid":3, "nextobjectid":2,
-  "orientation":"orthogonal", "renderorder":"right-down",
-  "tiledversion":"1.10.2", "type":"map", "version":"1.10",
-  "properties":[ { "name":"title", "type":"string", "value":"the cellar" } ],
-  "tilesets":[ { "firstgid":1, "source":"../gfx/tiles.tsj" } ],
-  "layers":[
-    { "compression":"zlib", "encoding":"base64", "data":"eJxiYmBgoDZmphLGZh4TDnFi1OASYyESD4R52PBgUjfYw48JhzgxarCJUYJh5lETAwYA/MQCpQ==",
-      "height":12, "width":20, "id":1, "name":"ground", "opacity":1,
-      "type":"tilelayer", "visible":true, "x":0, "y":0 },
-    { "draworder":"topdown", "id":2, "name":"things", "opacity":1,
-      "type":"objectgroup", "visible":true, "x":0, "y":0, "objects":[
-      { "id":1, "name":"player", "type":"start", "rotation":0, "visible":true,
-        "x":24, "y":24, "width":8, "height":8,
-        "properties":[ { "name":"speed", "type":"float", "value":0.75 } ] },
-      { "id":2, "name":"treasure", "type":"pickup", "rotation":0, "visible":true,
-        "x":128, "y":72, "width":8, "height":8 }
-    ] }
-  ]
+{
+ "compressionlevel": -1,
+ "height": 12,
+ "width": 20,
+ "tileheight": 8,
+ "tilewidth": 8,
+ "infinite": false,
+ "nextlayerid": 3,
+ "nextobjectid": 2,
+ "orientation": "orthogonal",
+ "renderorder": "right-down",
+ "tiledversion": "1.10.2",
+ "type": "map",
+ "version": "1.10",
+ "properties": [
+  {
+   "name": "title",
+   "type": "string",
+   "value": "the cellar"
+  }
+ ],
+ "tilesets": [
+  {
+   "firstgid": 1,
+   "source": "../gfx/tiles.tsj"
+  }
+ ],
+ "layers": [
+  {
+   "compression": "zlib",
+   "encoding": "base64",
+   "data": "eJxiYmBgoDZmphLGZh4TDnFi1OASYyESD4R52PBgUjfYw48JhzgxarCJUYJh5lETAwYA/MQCpQ==",
+   "height": 12,
+   "width": 20,
+   "id": 1,
+   "name": "ground",
+   "opacity": 1,
+   "type": "tilelayer",
+   "visible": true,
+   "x": 0,
+   "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 2,
+   "name": "things",
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0,
+   "objects": [
+    {
+     "id": 1,
+     "name": "player",
+     "type": "start",
+     "rotation": 0,
+     "visible": true,
+     "x": 24,
+     "y": 24,
+     "width": 8,
+     "height": 8,
+     "properties": [
+      {
+       "name": "speed",
+       "type": "float",
+       "value": 0.75
+      }
+     ]
+    },
+    {
+     "id": 2,
+     "name": "treasure",
+     "type": "pickup",
+     "rotation": 0,
+     "visible": true,
+     "x": 128,
+     "y": 80,
+     "width": 8,
+     "height": 8,
+     "gid": 5
+    }
+   ]
+  }
+ ]
 }

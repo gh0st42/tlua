@@ -54,8 +54,30 @@ const (
 
 	levelTSJ = `{
 	  "image": "tiles.png", "tilewidth": 2, "tileheight": 2, "columns": 3,
+	  "properties": [ { "name": "material", "type": "string", "value": "stone" } ],
 	  "tiles": [ { "id": 1, "properties": [
-	    { "name": "flag_0", "type": "bool", "value": true } ] } ]
+	    { "name": "flag_0", "type": "bool", "value": true },
+	    { "name": "material", "type": "string", "value": "ice" },
+	    { "name": "damage", "type": "int", "value": 3 } ] } ]
+	}`
+
+	// A second map, for the things an editor can place that are not boxes.
+	thingsTMJ = `{
+	  "width": 3, "height": 2, "tilewidth": 2, "tileheight": 2,
+	  "tilesets": [ { "firstgid": 1, "source": "tiles.tsj" } ],
+	  "layers": [
+	    { "type": "tilelayer", "name": "ground", "width": 3, "height": 2,
+	      "data": [2, 2, 2, 2, 2, 2] },
+	    { "type": "objectgroup", "name": "things", "objects": [
+	      { "id": 4, "name": "spawn", "class": "start", "x": 2, "y": 4,
+	        "point": true },
+	      { "id": 7, "name": "lamp", "class": "prop", "gid": 2147483651,
+	        "x": 4, "y": 4, "width": 2, "height": 2, "rotation": 90,
+	        "visible": false },
+	      { "id": 9, "name": "path", "x": 0, "y": 0,
+	        "polygon": [ {"x":0,"y":0}, {"x":4,"y":0} ] }
+	    ] }
+	  ]
 	}`
 )
 
@@ -68,6 +90,8 @@ func level(t *testing.T, src string) *fixture {
 			switch name {
 			case "maps/level1.tmj":
 				return []byte(levelTMJ), nil
+			case "maps/things.tmj":
+				return []byte(thingsTMJ), nil
 			case "maps/tiles.tsj", "gfx/tiles.tsj":
 				return []byte(levelTSJ), nil
 			case "gfx/tiles.png", "maps/tiles.png":
@@ -297,5 +321,79 @@ func TestAMapWhoseArtworkIsMissing(t *testing.T) {
 	got := f.str(`select(2, loadmap("level1"))`)
 	if !strings.Contains(got, "tiles.tsj") {
 		t.Errorf("the error should name the tileset it could not find: %q", got)
+	}
+}
+
+func TestEverythingAnObjectCarriesReachesLua(t *testing.T) {
+	f := level(t, `
+		level = loadmap("things")
+		things = level:objects("things")
+		spawn, lamp, path = things[1], things[2], things[3]`)
+
+	cases := []struct{ expr, want string }{
+		{`#things`, "3"},
+		{`spawn.id`, "4"},
+		{`spawn.shape`, "point"},
+		{`spawn.visible`, "true"}, // nothing said means visible
+		{`spawn.sprite == nil`, "true"},
+
+		{`lamp.id, lamp.name, lamp.class`, "7,lamp,prop"},
+		{`lamp.rotation`, "0.25"}, // the editor's 90 degrees, in turns
+		{`lamp.visible`, "false"},
+		{`lamp.sprite`, "2"},
+		{`lamp.sheet`, "1"},
+		{`lamp.flipx, lamp.flipy, lamp.flipd`, "true,false,false"},
+
+		{`path.shape`, "polygon"},
+		{`#path.points`, "2"},
+		{`path.points[2].x, path.points[2].y`, "4,0"},
+
+		{`level:sheets()`, "1"},
+		{`level:sheet():width()`, "6"},
+		{`level:sheet(2) == nil`, "true"},
+	}
+	for _, c := range cases {
+		if got := f.str(c.expr); got != c.want {
+			t.Errorf("%s = %q, want %q", c.expr, got, c.want)
+		}
+	}
+}
+
+// TestWhatATilesetSaysAboutATileBeyondItsFlags is the properties a map editor
+// lets you hang on a tile: a material, a number. Flags are eight bits and a
+// game often wants a word.
+func TestWhatATilesetSaysAboutATileBeyondItsFlags(t *testing.T) {
+	f := level(t, `
+		sheet = loadpng("tiles")
+		level = loadmap("level1")`)
+
+	cases := []struct{ expr, want string }{
+		{`sheet:prop(1, "material")`, "ice"},
+		{`sheet:prop(1, "damage")`, "3"},
+		{`sheet:prop(0, "material")`, "stone"},     // the sheet's own, inherited
+		{`sheet:prop(0, "damage") == nil`, "true"}, // nobody said
+		{`sheet:prop(0, "damage", 0)`, "0"},        // unless asked to say something
+		{`sheet:props(1).material`, "ice"},
+		{`sheet:props(1).flag_0`, "true"}, // a flag is a property as well as a bit
+		{`sheet:props().material`, "stone"},
+		{`sheet:props(9).material`, "stone"},
+
+		// The map's own sheet carries them too, which is the point: the
+		// artwork a level draws with brought them along.
+		{`level:sheet():prop(1, "material")`, "ice"},
+	}
+	for _, c := range cases {
+		if got := f.str(c.expr); got != c.want {
+			t.Errorf("%s = %q, want %q", c.expr, got, c.want)
+		}
+	}
+
+	// And a program can write one, over what the artwork said.
+	f = level(t, `
+		sheet = loadpng("tiles")
+		sheet:setprop(1, "material", "moss")
+		sheet:setprop(2, "damage", 7)`)
+	if got := f.str(`sheet:prop(1, "material"), sheet:prop(2, "damage")`); got != "moss,7" {
+		t.Errorf("after writing: %q", got)
 	}
 }

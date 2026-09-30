@@ -59,6 +59,30 @@ function Surface:sprite(n, w, h) end
 ---@return integer|Surface
 function Surface:flags(n, mask) end
 
+--- One property of a sprite: what a Tiled tileset said about that tile beyond
+--- its eight flags, or failing that what it said about the whole sheet, or the
+--- answer given here for a tile that carries none.
+---@param n integer counted from zero
+---@param key string
+---@param missing? any what to say when nothing does
+---@return any
+function Surface:prop(n, key, missing) end
+
+--- Everything a sprite carries, as a table: what the sheet says for every
+--- sprite, with the sprite's own over the top. With no sprite number, the
+--- sheet's own.
+---@param n? integer
+---@return table
+function Surface:props(n) end
+
+--- Writes one property of a sprite, over whatever the artwork said, and hands
+--- the surface back.
+---@param n integer
+---@param key string
+---@param value string|number|boolean|nil nothing puts the sheet's answer back
+---@return Surface
+function Surface:setprop(n, key, value) end
+
 --- Called once before the first frame.
 function _init() end
 
@@ -387,15 +411,44 @@ function Tilemap:layers() end
 ---@return MapLayer|nil
 function Tilemap:layer(which) end
 
---- What was placed on a layer, as plain tables with name, class, x, y, w, h
---- and props.
+--- What was placed on a layer, as plain MapObject tables.
 ---@param which string|integer
----@return table[]
+---@return MapObject[]
 function Tilemap:objects(which) end
 
 --- What the map itself was labelled with in the editor.
 ---@return table
 function Tilemap:props() end
+
+--- One of the sheets the map draws with, counted from one, which is what an
+--- object's sprite is numbered against.
+---@param n? integer 1 by default
+---@return Surface|nil
+function Tilemap:sheet(n) end
+
+--- How many sheets it draws with.
+---@return integer
+function Tilemap:sheets() end
+
+---@class MapObject Something placed on a map rather than drawn into it.
+---@field id integer the number the editor gave it
+---@field name string
+---@field class string what Tiled calls the type
+---@field x number
+---@field y number
+---@field w number
+---@field h number
+---@field rotation number in turns, clockwise; the editor writes degrees
+---@field visible boolean
+---@field shape "rect"|"ellipse"|"point"|"polygon"|"polyline"
+---@field points? {x: number, y: number}[] the corners of an outline, relative to x and y
+---@field sprite? integer the tile it was given, for a piece of scenery
+---@field sheet? integer which of the map's sheets that sprite is on
+---@field flipx? boolean
+---@field flipy? boolean
+---@field flipd? boolean turned as well as mirrored
+---@field props table what it was labelled with
+local MapObject = {}
 
 --- Draws a window of it without making it the current map.
 function Tilemap:draw(tx, ty, sx, sy, tw, th, flags) end
@@ -414,7 +467,7 @@ function MapLayer:size() end
 ---@return boolean
 function MapLayer:visible(on) end
 
----@return table[]
+---@return MapObject[]
 function MapLayer:objects() end
 
 ---@param x integer

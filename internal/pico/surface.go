@@ -28,7 +28,82 @@ type Surface struct {
 	// mean. It is kept beside the pixels because that is where the artwork
 	// says it: whoever drew the tile is who knows whether it can be walked on.
 	flags []uint8
+
+	// props is what a tileset said about a sprite beyond its eight flags: a
+	// material, a name, a number of hit points. Flags are the fast path a game
+	// loop wants; these are for everything that does not fit in a bit.
+	props map[int]map[string]any
+
+	// sheetProps is what the tileset said about itself, which every sprite on
+	// it inherits.
+	sheetProps map[string]any
 }
+
+/* --- what a tileset said about a sprite --- */
+
+// Prop reports a property of a sprite: the sprite's own, or failing that the
+// one the whole sheet carries.
+func (s *Surface) Prop(n int, key string) (any, bool) {
+	if own, ok := s.props[n]; ok {
+		if v, ok := own[key]; ok {
+			return v, true
+		}
+	}
+	v, ok := s.sheetProps[key]
+	return v, ok
+}
+
+// SetProp puts a property on a sprite, where it takes precedence over any the
+// sheet carries.
+func (s *Surface) SetProp(n int, key string, v any) {
+	if n < 0 || n > maxSprites || key == "" {
+		return
+	}
+	if s.props == nil {
+		s.props = map[int]map[string]any{}
+	}
+	if s.props[n] == nil {
+		s.props[n] = map[string]any{}
+	}
+	s.props[n][key] = v
+}
+
+// Props reports everything a sprite carries: what the sheet says, with the
+// sprite's own over the top. The map is freshly made, so a caller may keep it.
+func (s *Surface) Props(n int) map[string]any {
+	out := make(map[string]any, len(s.sheetProps)+len(s.props[n]))
+	for k, v := range s.sheetProps {
+		out[k] = v
+	}
+	for k, v := range s.props[n] {
+		out[k] = v
+	}
+	return out
+}
+
+// SheetProps reports what the tileset said about itself, which is what a
+// sprite falls back on.
+func (s *Surface) SheetProps() map[string]any {
+	out := make(map[string]any, len(s.sheetProps))
+	for k, v := range s.sheetProps {
+		out[k] = v
+	}
+	return out
+}
+
+// SetSheetProp puts a property on the sheet, for every sprite to inherit.
+func (s *Surface) SetSheetProp(key string, v any) {
+	if key == "" {
+		return
+	}
+	if s.sheetProps == nil {
+		s.sheetProps = map[string]any{}
+	}
+	s.sheetProps[key] = v
+}
+
+// AnyProps reports whether the artwork came with any properties at all.
+func (s *Surface) AnyProps() bool { return len(s.props) > 0 || len(s.sheetProps) > 0 }
 
 // Flags reports the eight flags of a sprite, all off for one that has none.
 func (s *Surface) Flags(n int) uint8 {
@@ -131,6 +206,14 @@ func (s *Surface) Clone() *Surface {
 	copy(out.Pix, s.Pix)
 	out.CellW, out.CellH = s.CellW, s.CellH
 	out.flags = append([]uint8(nil), s.flags...)
+	for n, own := range s.props {
+		for key, v := range own {
+			out.SetProp(n, key, v)
+		}
+	}
+	for key, v := range s.sheetProps {
+		out.SetSheetProp(key, v)
+	}
 	return out
 }
 
@@ -194,6 +277,7 @@ func (s *Surface) Resize(w, h int) {
 	next := NewSurface(w, h)
 	next.CellW, next.CellH = s.CellW, s.CellH
 	next.flags = s.flags
+	next.props, next.sheetProps = s.props, s.sheetProps
 	for y := 0; y < h && y < s.H; y++ {
 		copy(next.Pix[y*w:y*w+min(w, s.W)], s.Pix[y*s.W:])
 	}
