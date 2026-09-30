@@ -81,6 +81,14 @@ what was drawn before it is what is shown. The two ways of writing a program
 mix freely — `_update` and `_draw` are called every tick as ever, and either
 may go off and run its own loop for a while.
 
+Because a flip is a tick, it is also what paces the loop: `flip()` waits, so a
+loop of nothing but `flip()` runs at the frame rate — sixty times a second by
+default, or whatever `setfps` was last given (see [Time, and the
+window](#time-and-the-window)). There is no need to sleep, and no way to run
+faster by flipping harder. A loop that does more work
+in a tick than a tick lasts simply runs slower, the same as an `_update` that
+takes too long.
+
 Underneath, the program runs inside a coroutine of its own for its whole life,
 which is what lets it be suspended mid-call and picked up again. One
 consequence: `flip()` cannot be called from inside a coroutine the program made
@@ -496,6 +504,7 @@ window is, and a pointer off the picture reads as a negative number.
 | `t()`, `time()` | Seconds since the program started. |
 | `frame()` | How many ticks have run. |
 | `fps()` | What the window is managing. |
+| `setfps(n)` | How many times a second to run the program. 60 unless set. |
 | `printh(...)` | Writes to the terminal. |
 | `exit([status])` | Closes the window. |
 | `window{...}` | `title`, `scale`, `fullscreen`, `width`, `height`. |
