@@ -44,6 +44,10 @@ type Engine struct {
 	fade      fade
 
 	volume float64
+
+	// tps is how many times a second the game is run, which is what a fade
+	// measured in milliseconds is counted against.
+	tps int
 }
 
 // New starts the sound engine. Ebitengine's audio only works inside a running
@@ -57,6 +61,7 @@ func New() *Engine {
 		ctx:    ctx,
 		clips:  map[string][]byte{},
 		volume: 1,
+		tps:    picolua.DefaultTPS,
 	}
 }
 
@@ -150,8 +155,8 @@ func (e *Engine) Music(name string, data []byte, volume float64, fadeMS int) err
 	}
 	e.music, e.musicName = player, name
 
-	e.fade.start(0, volume, fadeMS, false)
-	player.SetVolume(e.fade.current * e.volume)
+	e.fade.start(0, volume, fadeMS, e.tps, false)
+	player.SetVolume(e.fade.volume() * e.volume)
 	player.Play()
 	return nil
 }
@@ -165,7 +170,7 @@ func (e *Engine) StopMusic(fadeMS int) {
 		e.silenceMusic()
 		return
 	}
-	e.fade.start(e.fade.current, 0, fadeMS, true)
+	e.fade.start(e.fade.volume(), 0, fadeMS, e.tps, true)
 }
 
 // Update moves a fade along by one frame. The host calls it once a tick.
@@ -193,41 +198,49 @@ func (e *Engine) silenceMusic() {
 //
 // Counting in frames rather than measuring the time is what makes a fade fit a
 // game loop: it moves when the game moves, and a game that is paused or busy
-// does not come back to find the music already silent.
+// does not come back to find the music already silent. The frames are counted
+// rather than the volume accumulated, so that a fade of thirty frames takes
+// thirty and not thirty-one.
 type fade struct {
-	current, target, step float64
-	stopAtEnd             bool
+	from, to  float64
+	at, of    int
+	stopAtEnd bool
 }
 
-// start sets a fade going between two volumes over a number of milliseconds.
-// Nothing to fade over means arriving at once.
-func (f *fade) start(from, to float64, ms int, stopAtEnd bool) {
-	f.current, f.target, f.stopAtEnd = from, to, stopAtEnd
-	if ms <= 0 {
-		f.current, f.step = to, 0
-		return
+// start sets a fade going between two volumes over a number of milliseconds,
+// counted in frames at the rate the game is being run. Nothing to fade over
+// means arriving at once.
+func (f *fade) start(from, to float64, ms, tps int, stopAtEnd bool) {
+	if tps <= 0 {
+		tps = picolua.DefaultTPS
 	}
-	frames := max(ms*framesPerSecond/1000, 1)
-	f.step = (to - from) / float64(frames)
+	*f = fade{from: from, to: to, of: max(ms*tps/1000, 0), stopAtEnd: stopAtEnd}
+}
+
+// volume reports where the fade has got to.
+func (f *fade) volume() float64 {
+	if f.of <= 0 {
+		return f.to
+	}
+	return f.from + (f.to-f.from)*float64(f.at)/float64(f.of)
 }
 
 // advance moves the fade on by a frame, reporting the volume now and whether
 // it has arrived.
 func (f *fade) advance() (volume float64, finished bool) {
-	if f.step == 0 {
-		return f.current, true
+	if f.at < f.of {
+		f.at++
 	}
-	f.current += f.step
-	if (f.step > 0 && f.current >= f.target) || (f.step < 0 && f.current <= f.target) {
-		f.current, f.step = f.target, 0
-		return f.current, true
-	}
-	return f.current, false
+	return f.volume(), f.at >= f.of
 }
 
-// framesPerSecond is the rate the console runs at, which is what a fade
-// measured in milliseconds is counted against.
-const framesPerSecond = 60
+// SetTPS says how often the game is being run, so that a fade of so many
+// milliseconds lasts that long however fast that is.
+func (e *Engine) SetTPS(rate int) {
+	if rate > 0 {
+		e.tps = rate
+	}
+}
 
 // NowPlaying reports the music, or nothing.
 func (e *Engine) NowPlaying() string { return e.musicName }
@@ -239,7 +252,7 @@ func (e *Engine) Volume() float64 { return e.volume }
 func (e *Engine) SetVolume(v float64) {
 	e.volume = v
 	if e.music != nil {
-		e.music.SetVolume(e.fade.current * v)
+		e.music.SetVolume(e.fade.volume() * v)
 	}
 }
 

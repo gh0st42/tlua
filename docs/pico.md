@@ -451,8 +451,13 @@ window is, and a pointer off the picture reads as a negative number.
 | `window{...}` | `title`, `scale`, `fullscreen`, `width`, `height`. |
 | `fullscreen([on])` | On or off. |
 
-`t()` counts ticks at sixty a second rather than reading a clock, so motion
-stays in step with what is drawn, however the machine is behaving.
+`t()` counts ticks rather than reading a clock, so motion stays in step with
+what is drawn however the machine is behaving. `setfps(n)` changes how often
+the program is run — `_update` and `_draw` are called that often, and `t()`
+counts seconds by it, so half a second is half a second at any rate.
+`setfps(-1)` runs once for every refresh of the screen, whatever that turns out
+to be. How often the window itself is refreshed is the screen's business, and
+`fps()` is what that turned out to be.
 
 While a program runs, the window keeps three keys for itself:
 

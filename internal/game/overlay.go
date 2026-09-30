@@ -68,6 +68,10 @@ func overlayLines(fps, tps float64, w, h, scale int) []string {
 // of it. Keeping this apart from the blitting below is what lets it be looked
 // at without opening a window.
 func (o *overlay) render(fps, tps float64, w, h, scale int) *pico.Surface {
+	want := tps
+	if want <= 0 {
+		want = fps
+	}
 	lines := overlayLines(fps, tps, w, h, scale)
 
 	width := 0
@@ -91,7 +95,7 @@ func (o *overlay) render(fps, tps float64, w, h, scale int) *pico.Surface {
 	// The rate itself is coloured by how well it is holding up; the rest of the
 	// line is only there to say what the number means.
 	rate := fmt.Sprintf("%3.0f", fps)
-	o.con.Print(rate, overlayPad, overlayPad, rateColor(fps, float64(TPS)))
+	o.con.Print(rate, overlayPad, overlayPad, rateColor(tps, want))
 	o.con.Print(lines[0][len(rate):], overlayPad+pico.TextWidth(rate), overlayPad, overlayDim)
 	o.con.Print(lines[1], overlayPad, overlayPad+pico.LineHeight, overlayInk)
 

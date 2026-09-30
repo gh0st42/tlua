@@ -26,6 +26,32 @@ func (r *Runtime) installSystem() {
 		// is measuring it.
 		"fps": func(L *lua.LState) int { L.Push(lua.LNumber(r.fps())); return 1 },
 
+		// setfps(n) asks to run n times a second instead of sixty, and reports
+		// the rate it replaced. setfps(-1) runs once for every refresh of the
+		// screen, whatever that turns out to be.
+		//
+		// It is the rate the program moves at: _update and _draw are called
+		// that often, and t() counts seconds by it. How often the window
+		// itself is refreshed is the screen's business, and fps() is what that
+		// turned out to be.
+		"setfps": func(L *lua.LState) int {
+			was := r.tps
+			if !isNone(L, 1) {
+				rate := L.CheckInt(1)
+				if rate != SyncWithDisplay && (rate < 1 || rate > maxTPS) {
+					L.ArgError(1, fmt.Sprintf(
+						"a rate of %d is not one anything can run at; 1 to %d, or -1 for the screen's own",
+						rate, maxTPS))
+				}
+				r.tps = rate
+				if r.setTPS != nil {
+					r.setTPS(rate)
+				}
+			}
+			L.Push(lua.LNumber(was))
+			return 1
+		},
+
 		// printh() writes to the terminal the program was started from. print()
 		// draws on the screen, so this is the one to reach for while working
 		// something out.
@@ -127,3 +153,7 @@ func modeList() string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// maxTPS is as fast as a program may ask to be run. Past this it is not a frame
+// rate, it is a busy loop with a drawing call in it.
+const maxTPS = 1000

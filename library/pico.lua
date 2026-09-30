@@ -579,6 +579,13 @@ function frame() end
 ---@return number
 function fps() end
 
+--- Asks to run n times a second instead of sixty, and reports the rate it
+--- replaced. _update and _draw are called that often and t() counts seconds by
+--- it. -1 runs once for every refresh of the screen.
+---@param n? integer 1 to 1000, or -1
+---@return integer previous
+function setfps(n) end
+
 --- Writes to the terminal the program was started from; print() draws on the
 --- screen instead.
 function printh(...) end

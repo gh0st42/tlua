@@ -6,6 +6,8 @@ import (
 	"math"
 	"strings"
 	"testing"
+
+	"tlua/internal/picolua"
 )
 
 // wavOf builds a real WAV file: sixteen bits, one channel, at a rate that is
@@ -77,7 +79,7 @@ func TestDecodingSomethingThatIsNotASound(t *testing.T) {
 
 func TestAFadeWalksToItsTarget(t *testing.T) {
 	var f fade
-	f.start(0, 1, 100, false) // six frames at sixty a second
+	f.start(0, 1, 100, 60, false) // six frames at sixty a second
 
 	seen := []float64{}
 	for i := 0; i < 20; i++ {
@@ -104,7 +106,7 @@ func TestAFadeWalksToItsTarget(t *testing.T) {
 
 func TestAFadeDownEndsAtSilence(t *testing.T) {
 	var f fade
-	f.start(1, 0, 50, true)
+	f.start(1, 0, 50, 60, true)
 	for i := 0; i < 100; i++ {
 		v, done := f.advance()
 		if done {
@@ -125,9 +127,9 @@ func TestAFadeDownEndsAtSilence(t *testing.T) {
 
 func TestNoTimeToFadeMeansArrivingAtOnce(t *testing.T) {
 	var f fade
-	f.start(0, 0.5, 0, false)
-	if f.current != 0.5 {
-		t.Errorf("the volume is %v, want 0.5 straight away", f.current)
+	f.start(0, 0.5, 0, 60, false)
+	if f.volume() != 0.5 {
+		t.Errorf("the volume is %v, want 0.5 straight away", f.volume())
 	}
 	v, done := f.advance()
 	if !done || v != 0.5 {
@@ -143,5 +145,31 @@ func TestHowLongSomeSoundLasts(t *testing.T) {
 	}
 	if got := Silence(pcm, 0); got != 0 {
 		t.Errorf("at no rate at all it measured %v", got)
+	}
+}
+
+func TestAFadeIsCountedAtTheRateTheGameRuns(t *testing.T) {
+	// Half a second is half a second whether the game runs at sixty a second
+	// or at thirty; what changes is how many frames that is.
+	for _, tps := range []int{60, 30, 120} {
+		var f fade
+		f.start(0, 1, 500, tps, false)
+		frames := 0
+		for i := 0; i < 1000; i++ {
+			frames++
+			if _, done := f.advance(); done {
+				break
+			}
+		}
+		if want := tps / 2; frames != want {
+			t.Errorf("at %d a second, a half-second fade took %d frames, want %d", tps, frames, want)
+		}
+	}
+
+	// A rate that makes no sense falls back to the usual one.
+	var f fade
+	f.start(0, 1, 500, 0, false)
+	if f.of != picolua.DefaultTPS/2 {
+		t.Errorf("a fade at no rate at all runs for %d frames", f.of)
 	}
 }

@@ -209,6 +209,7 @@ func load(opts Options) (*session, error) {
 		Title:       title,
 		Out:         os.Stdout,
 		FPS:         ebiten.ActualFPS,
+		SetTPS:      s.setRate,
 		ButtonLabel: buttonLabel,
 		ReadFile:    besideProgram(filepath.Dir(script)),
 		Sound:       s.sound,
@@ -239,6 +240,7 @@ func RunFused(p *payload.Payload, exe string) int {
 		Title:       titleFor(exe),
 		Out:         os.Stdout,
 		FPS:         ebiten.ActualFPS,
+		SetTPS:      s.setRate,
 		ButtonLabel: buttonLabel,
 		ReadFile:    attachedFirst(p),
 		Sound:       s.sound,
@@ -335,7 +337,7 @@ func (s *session) show() int {
 	ebiten.SetWindowSize(screen.W*scale, screen.H*scale)
 	ebiten.SetWindowSizeLimits(screen.W/2, screen.H/2, -1, -1)
 	ebiten.SetWindowResizingMode(ebiten.WindowResizingModeEnabled)
-	ebiten.SetTPS(TPS)
+	s.setRate(s.rt.TPS())
 	if s.opts.Fullscreen || win.Fullscreen {
 		ebiten.SetFullscreen(true)
 	}
@@ -346,9 +348,21 @@ func (s *session) show() int {
 	return a.status
 }
 
-// TPS is how many times a second _update runs, which is what Picotron does and
-// what the counted clock behind t() assumes.
-const TPS = 60
+// setRate carries out a program's setfps(): how often it is run, and how fast
+// a music fade counted in frames therefore goes.
+//
+// Everything that measures time in frames has to be told, or a program running
+// at thirty would find its seconds twice as long as everyone else's.
+func (s *session) setRate(rate int) {
+	if rate == picolua.SyncWithDisplay {
+		ebiten.SetTPS(ebiten.SyncWithFPS)
+	} else {
+		ebiten.SetTPS(rate)
+	}
+	if s.sound != nil {
+		s.sound.SetTPS(rate)
+	}
+}
 
 // monitorSize reports the monitor to size the first window against, and zeroes
 // when there is no telling.

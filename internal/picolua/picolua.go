@@ -24,6 +24,14 @@ import (
 	"tlua/internal/pico"
 )
 
+// DefaultTPS is how many times a second a program runs when it does not ask
+// for anything else: sixty, as these consoles have always run.
+const DefaultTPS = 60
+
+// SyncWithDisplay, given to setfps(), runs the program once for every time the
+// screen is refreshed, whatever rate that turns out to be.
+const SyncWithDisplay = -1
+
 // Callbacks the program defines and the runtime calls.
 const (
 	CallbackInit   = "_init"
@@ -51,6 +59,12 @@ type Options struct {
 
 	// FPS reports the frame rate for fps(); zero when the host has no idea.
 	FPS func() float64
+
+	// TPS is how many times a second the program is to be run, and SetTPS is
+	// how the host is told when the program asks for another rate. Without
+	// them a runtime counts sixty and tells nobody, which is what a test wants.
+	TPS    int
+	SetTPS func(rate int)
 
 	// ReadFile reads a file the program asks for by name. The default reads
 	// the disk, beside the program; a game fused into one executable reads
@@ -90,13 +104,15 @@ type Runtime struct {
 	Vid *pico.Console
 	In  *pico.Input
 
-	out   io.Writer
-	clock func() float64
-	fps   func() float64
-	label func(player, button int) string
-	read  func(name string) ([]byte, error)
-	sound Sound
-	rng   *rand.Rand
+	out    io.Writer
+	clock  func() float64
+	fps    func() float64
+	label  func(player, button int) string
+	read   func(name string) ([]byte, error)
+	tps    int
+	setTPS func(rate int)
+	sound  Sound
+	rng    *rand.Rand
 
 	// found remembers where a resource turned out to be, so that asking for
 	// it again costs one read rather than a search.
@@ -160,10 +176,18 @@ func New(L *lua.LState, opts Options) *Runtime {
 		currentValue:    lua.LNil,
 		currentMapValue: lua.LNil,
 	}
+	r.tps = opts.TPS
+	if r.tps <= 0 {
+		r.tps = DefaultTPS
+	}
+	r.setTPS = opts.SetTPS
+
 	r.clock = opts.Clock
 	if r.clock == nil {
-		// Sixty ticks to the second, counted rather than measured.
-		r.clock = func() float64 { return float64(r.frame) / 60 }
+		// Ticks counted rather than measured, at whatever rate the program is
+		// being run at: a game that asks to run at thirty still sees a second
+		// go by in a second.
+		r.clock = func() float64 { return float64(r.frame) / float64(r.tps) }
 	}
 	if r.fps == nil {
 		r.fps = func() float64 { return 0 }
@@ -196,6 +220,9 @@ func (r *Runtime) Screen() *pico.Surface { return r.Vid.Screen }
 
 // Frame reports how many ticks have run.
 func (r *Runtime) Frame() int { return r.frame }
+
+// TPS reports how many times a second the program has asked to run.
+func (r *Runtime) TPS() int { return r.tps }
 
 // Has reports whether the program defined one of the callbacks.
 func (r *Runtime) Has(callback string) bool {

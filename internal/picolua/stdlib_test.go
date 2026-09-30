@@ -274,7 +274,7 @@ func TestEveryDocumentedNameIsThere(t *testing.T) {
 		spr sspr target map usesheet sget sset fget fset
 		loadmap usemap mget mset
 		btn btnp held key keyp mouse mousebtn btnkey typed
-		t time frame fps printh exit window fullscreen vid
+		t time frame fps setfps printh exit window fullscreen vid
 		sfx music volume
 		flr ceil abs sqrt sgn sin cos atan2 min max mid clamp rnd srand
 		add del deli all foreach count sub split tostr tonum chr ord`)
@@ -352,5 +352,67 @@ func TestTostrTakesASecondResultInItsStride(t *testing.T) {
 		if got := f.str(c.expr); got != c.want {
 			t.Errorf("%s = %q, want %q", c.expr, got, c.want)
 		}
+	}
+}
+
+func TestAskingToRunAtAnotherRate(t *testing.T) {
+	asked := []int{}
+	f := startWith(t, Options{
+		Width: 2, Height: 1,
+		SetTPS: func(rate int) { asked = append(asked, rate) },
+	}, `function _update() end`)
+
+	if got := f.str(`setfps()`); got != "60" {
+		t.Errorf("a program runs at %q a second to begin with", got)
+	}
+
+	if got := f.str(`setfps(30)`); got != "60" {
+		t.Errorf("setfps reported %q as the rate it replaced", got)
+	}
+	if len(asked) != 1 || asked[0] != 30 {
+		t.Errorf("the host was asked for %v", asked)
+	}
+
+	// Seconds are counted at the rate the program runs at, so half a second is
+	// half a second whatever that rate is.
+	for i := 0; i < 15; i++ {
+		f.tick(pico.Frame{})
+	}
+	if got := f.str(`t()`); got != "0.5" {
+		t.Errorf("after 15 ticks at 30 a second, t() is %q, want 0.5", got)
+	}
+
+	// Running with the screen, whatever it manages.
+	if got := f.str(`setfps(-1)`); got != "30" {
+		t.Errorf("setfps reported %q", got)
+	}
+	if asked[len(asked)-1] != -1 {
+		t.Errorf("the host was asked for %v", asked)
+	}
+}
+
+func TestARateNothingCanRunAt(t *testing.T) {
+	f := start(t, 2, 1, "")
+	for _, expr := range []string{`setfps(0)`, `setfps(-2)`, `setfps(100000)`} {
+		err := f.L.DoString(expr)
+		if err == nil {
+			t.Errorf("%s should be refused", expr)
+			continue
+		}
+		if !strings.Contains(err.Error(), "-1") {
+			t.Errorf("%s said %q; it should say what would work", expr, err)
+		}
+	}
+}
+
+func TestAProgramWithNoHostStillCountsItsSeconds(t *testing.T) {
+	// No host to tell, but the clock still follows what was asked for.
+	f := start(t, 2, 1, `function _update() end`)
+	f.eval(`setfps(120)`)
+	for i := 0; i < 60; i++ {
+		f.tick(pico.Frame{})
+	}
+	if got := f.str(`t()`); got != "0.5" {
+		t.Errorf("after 60 ticks at 120 a second, t() is %q, want 0.5", got)
 	}
 }
