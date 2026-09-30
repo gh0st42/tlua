@@ -579,6 +579,14 @@ function frame() end
 ---@return number
 function fps() end
 
+--- Shows what has been drawn and waits for the next tick, carrying on from
+--- here with fresh input. It is what lets a loop live somewhere other than
+--- _update: a modal dialog, a cutscene, or the whole game written as one loop.
+---
+--- A flip is a tick, so t() and frame() move on. It cannot be called from
+--- inside a coroutine the program made itself.
+function flip() end
+
 --- Asks to run n times a second instead of sixty, and reports the rate it
 --- replaced. _update and _draw are called that often and t() counts seconds by
 --- it. -1 runs once for every refresh of the screen.

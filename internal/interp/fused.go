@@ -55,6 +55,12 @@ func OpenFused(p *payload.Payload, exe string) (*Fused, error) {
 	return f, nil
 }
 
+// Chunk hands back the attached program, ready to be called but not called
+// yet, for a host that will run it its own way.
+func (f *Fused) Chunk() (*lua.LFunction, error) {
+	return f.L.Load(bytes.NewReader(stripShebang(f.src)), f.chunk)
+}
+
 // Run calls the attached program's main chunk, handing it the arguments the
 // executable was started with.
 func (f *Fused) Run(args []string) error {

@@ -22,7 +22,6 @@ func benchExample(b *testing.B, name string) {
 	// Let it get going, so the benchmark is not measuring an empty world.
 	for i := 0; i < 120; i++ {
 		s.rt.Tick(playing(i))
-		s.rt.Draw()
 	}
 
 	pixels := make([]byte, s.rt.Screen().W*s.rt.Screen().H*4)
@@ -30,9 +29,6 @@ func benchExample(b *testing.B, name string) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := s.rt.Tick(playing(i)); err != nil {
-			b.Fatal(err)
-		}
-		if err := s.rt.Draw(); err != nil {
 			b.Fatal(err)
 		}
 		// What the window does with the result, every frame, whatever the

@@ -53,21 +53,18 @@ func startWith(t *testing.T, opts Options, src string) *fixture {
 	if err != nil {
 		t.Fatalf("loading the program: %v", err)
 	}
-	L.Push(fn)
-	if err := L.PCall(0, lua.MultRet, nil); err != nil {
+	if err := rt.Start(fn, nil); err != nil {
 		t.Fatalf("running the program: %v", err)
 	}
 	return &fixture{Runtime: rt, t: t, log: log}
 }
 
-// tick runs one frame: input, _update, then _draw.
+// tick runs one frame of the program: input, and then everything it does with
+// it, which is _update and _draw unless it has taken the loop over itself.
 func (f *fixture) tick(frame pico.Frame) {
 	f.t.Helper()
 	if err := f.Tick(frame); err != nil {
-		f.t.Fatalf("_update: %v", err)
-	}
-	if err := f.Draw(); err != nil {
-		f.t.Fatalf("_draw: %v", err)
+		f.t.Fatalf("tick: %v", err)
 	}
 }
 
@@ -166,9 +163,7 @@ func TestCallbacksRunWhenTheyShould(t *testing.T) {
 		function _update() order[#order+1] = "update" end
 		function _draw() order[#order+1] = "draw" end`)
 
-	if err := f.Init(); err != nil {
-		t.Fatal(err)
-	}
+	// _init has already run: starting the program is what runs it.
 	f.tick(pico.Frame{})
 	f.tick(pico.Frame{})
 
@@ -182,14 +177,13 @@ func TestCallbacksRunWhenTheyShould(t *testing.T) {
 
 func TestAMissingCallbackIsNotAnError(t *testing.T) {
 	f := start(t, 2, 1, `x = 1`)
-	if err := f.Init(); err != nil {
-		t.Errorf("Init: %v", err)
+	for i := 0; i < 3; i++ {
+		if err := f.Tick(pico.Frame{}); err != nil {
+			t.Errorf("tick %d: %v", i, err)
+		}
 	}
-	if err := f.Tick(pico.Frame{}); err != nil {
-		t.Errorf("Tick: %v", err)
-	}
-	if err := f.Draw(); err != nil {
-		t.Errorf("Draw: %v", err)
+	if !f.Running() {
+		t.Error("a program with no callbacks is still running, doing nothing")
 	}
 }
 
@@ -208,8 +202,11 @@ func TestAnErrorInUpdateIsReportedWithWhereItHappened(t *testing.T) {
 
 func TestSomethingThatIsNotAFunctionIsAnErrorRatherThanACrash(t *testing.T) {
 	f := start(t, 2, 1, `_draw = 3`)
-	if err := f.Draw(); err == nil {
+	if err := f.Tick(pico.Frame{}); err == nil {
 		t.Error("calling a number should be an error")
+	}
+	if f.Running() {
+		t.Error("a program that failed is not still running")
 	}
 }
 

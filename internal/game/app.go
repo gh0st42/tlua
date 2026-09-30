@@ -144,12 +144,10 @@ func (a *app) Draw(screen *ebiten.Image) {
 	if a.failed || a.stopping {
 		return
 	}
-	if err := a.rt.Draw(); err != nil {
-		a.failed = true
-		a.status = a.s.report(err)
-		return
-	}
 
+	// The program has already drawn: it does that in its own tick, so that it
+	// can also draw from inside a loop of its own. Here the picture only has
+	// to reach the window.
 	frame := a.rt.Screen()
 	if a.picture == nil || a.picture.Bounds().Dx() != frame.W || a.picture.Bounds().Dy() != frame.H {
 		// The program can change the resolution, so the texture follows it.

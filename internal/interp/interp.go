@@ -307,6 +307,25 @@ func (r *Interp) DoScript(path string, args []string) error {
 	})
 }
 
+// LoadScript reads a script and hands back the chunk, ready to be called but
+// not called yet.
+//
+// Running it is somebody else's business: a program written for the console is
+// run inside a coroutine, so that it can suspend itself, and that is a thing
+// only the console knows how to do. The search path is set up here all the
+// same, so the modules it requires are found the way they always are.
+func (r *Interp) LoadScript(path string) (*lua.LFunction, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	if st, err := os.Stat(abs); err == nil && st.IsDir() {
+		return nil, fmt.Errorf("cannot run '%s': is a directory", path)
+	}
+	r.prependPath(filepath.Dir(abs))
+	return r.L.LoadFile(path)
+}
+
 // report prints a Lua error the way the reference interpreter does and gives
 // back the process exit status.
 func (r *Interp) Report(err error) int {

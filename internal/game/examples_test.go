@@ -42,10 +42,7 @@ func TestEveryExampleRuns(t *testing.T) {
 			const frames = 120
 			for i := 0; i < frames; i++ {
 				if err := s.rt.Tick(playing(i)); err != nil {
-					t.Fatalf("frame %d, _update: %v", i, err)
-				}
-				if err := s.rt.Draw(); err != nil {
-					t.Fatalf("frame %d, _draw: %v", i, err)
+					t.Fatalf("frame %d: %v", i, err)
 				}
 				if quit, _ := s.rt.Quitting(); quit {
 					t.Fatalf("frame %d: the example asked to exit", i)
@@ -131,9 +128,6 @@ func TestTheJumpButtonIsNotMissedNearTheGround(t *testing.T) {
 
 	step := func(f pico.Frame) int {
 		if err := s.rt.Tick(f); err != nil {
-			t.Fatal(err)
-		}
-		if err := s.rt.Draw(); err != nil {
 			t.Fatal(err)
 		}
 		return playerTop(s.rt.Screen())
@@ -230,10 +224,7 @@ func TestTheProjectExamplesRun(t *testing.T) {
 
 			for i := 0; i < 120; i++ {
 				if err := s.rt.Tick(playing(i)); err != nil {
-					t.Fatalf("frame %d, _update: %v", i, err)
-				}
-				if err := s.rt.Draw(); err != nil {
-					t.Fatalf("frame %d, _draw: %v", i, err)
+					t.Fatalf("frame %d: %v", i, err)
 				}
 			}
 			if blank(s.rt.Screen()) {

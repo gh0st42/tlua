@@ -39,6 +39,56 @@ screen, which is enough for something that only wants to show a picture.
 
 An error in any of them stops the program, printing the file and the line.
 
+### Running a loop of your own
+
+`flip()` shows what has been drawn and waits for the next tick. The program
+carries on from exactly where it was, with a tick's worth of fresh input — so a
+loop can live anywhere, and the whole game can be written as one:
+
+```lua
+while true do
+	cls(1)
+	if btn("left") then x = x - 1 end
+	spr(ship, x, y)
+	flip()
+end
+```
+
+The reason to want that is usually a modal dialog: branch out of the game, loop
+until the question is answered, and carry on. No state machine, no "am I in a
+dialog" flag threaded through everything — the answer is what the function
+returns.
+
+```lua
+local function ask(question)
+	while true do
+		draw_the_box(question)
+		if btnp("x") then return true end
+		if btnp("o") then return false end
+		flip()
+	end
+end
+
+function _update()
+	if btnp("x") and standing_at_the_door then
+		if ask("go inside?") then enter() end   -- many frames may pass here
+	end
+end
+```
+
+A flip is a tick: `t()` and `frame()` move on, input is fresh afterwards, and
+what was drawn before it is what is shown. The two ways of writing a program
+mix freely — `_update` and `_draw` are called every tick as ever, and either
+may go off and run its own loop for a while.
+
+Underneath, the program runs inside a coroutine of its own for its whole life,
+which is what lets it be suspended mid-call and picked up again. One
+consequence: `flip()` cannot be called from inside a coroutine the program made
+itself, because that would hand control to whoever resumed that one rather than
+to the loop. It says so if you try.
+
+`examples/pico/dialog.lua` is a worked example.
+
 ## The screen
 
 480 by 270 pixels, one byte a pixel, so 256 colours at the very most and 64 to

@@ -274,7 +274,7 @@ func TestEveryDocumentedNameIsThere(t *testing.T) {
 		spr sspr target map usesheet sget sset fget fset
 		loadmap usemap mget mset
 		btn btnp held key keyp mouse mousebtn btnkey typed
-		t time frame fps setfps printh exit window fullscreen vid
+		t time frame fps setfps flip printh exit window fullscreen vid
 		sfx music volume
 		flr ceil abs sqrt sgn sin cos atan2 min max mid clamp rnd srand
 		add del deli all foreach count sub split tostr tonum chr ord`)

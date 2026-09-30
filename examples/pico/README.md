@@ -33,6 +33,7 @@ tlua fuse -play -o snake examples/pico/snake.lua   # one executable, no tlua
 | [paint.lua](paint.lua) | Drawing with the mouse onto an offscreen surface with `target()`. |
 | [modes.lua](modes.lua) | `vid()`: the same picture at each of the six resolutions. |
 | [sound.lua](sound.lua) | `sfx()` and `music()`, and where they look for what you ask for. |
+| [dialog.lua](dialog.lua) | `flip()`: a modal dialog that runs its own loop, and the game waiting where it stood. |
 
 And one that is a folder rather than a file, because a level drawn in an editor
 is three of them:

@@ -204,7 +204,13 @@ func load(opts Options) (*session, error) {
 	})
 
 	s := &session{opts: opts, interp: in, sound: sound.New()}
-	s.start = func() error { return in.DoScript(script, opts.Args) }
+	s.start = func() error {
+		chunk, err := in.LoadScript(script)
+		if err != nil {
+			return err
+		}
+		return s.rt.Start(chunk, opts.Args)
+	}
 	s.rt = picolua.New(in.L, picolua.Options{
 		Title:       title,
 		Out:         os.Stdout,
@@ -235,7 +241,13 @@ func RunFused(p *payload.Payload, exe string) int {
 	// A fused program is handed the whole command line, as a .love executable
 	// is, so there are no options of ours to read here.
 	args := os.Args[1:]
-	s.start = func() error { return f.Run(args) }
+	s.start = func() error {
+		chunk, err := f.Chunk()
+		if err != nil {
+			return err
+		}
+		return s.rt.Start(chunk, args)
+	}
 	s.rt = picolua.New(f.L, picolua.Options{
 		Title:       titleFor(exe),
 		Out:         os.Stdout,
@@ -270,12 +282,10 @@ func (s *session) close() {
 	s.interp.Close()
 }
 
-// runMain runs the program's top level, then its _init.
+// runMain runs the program's top level and its _init, which happen inside the
+// coroutine the whole program runs in.
 func (s *session) runMain() error {
-	if err := s.start(); err != nil {
-		return err
-	}
-	return s.rt.Init()
+	return s.start()
 }
 
 // report prints a Lua error the way the interpreter does and gives back an exit

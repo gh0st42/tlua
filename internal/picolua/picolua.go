@@ -32,7 +32,9 @@ const DefaultTPS = 60
 // screen is refreshed, whatever rate that turns out to be.
 const SyncWithDisplay = -1
 
-// Callbacks the program defines and the runtime calls.
+// Callbacks a program may define. The loop in flip.go is what calls them;
+// these are here so that a test can ask about them by name rather than by
+// spelling.
 const (
 	CallbackInit   = "_init"
 	CallbackUpdate = "_update"
@@ -140,6 +142,11 @@ type Runtime struct {
 	currentMap      *pico.Tilemap
 	currentMapValue lua.LValue
 
+	// co is the coroutine the whole program runs in, and done says it has
+	// finished or failed. See flip.go.
+	co   *lua.LState
+	done bool
+
 	surfaceMeta *lua.LTable
 	mapMeta     *lua.LTable
 	layerMeta   *lua.LTable
@@ -212,6 +219,7 @@ func New(L *lua.LState, opts Options) *Runtime {
 	r.installSound()
 	r.installSystem()
 	r.installStdlib()
+	r.installFlip()
 	return r
 }
 
@@ -224,34 +232,12 @@ func (r *Runtime) Frame() int { return r.frame }
 // TPS reports how many times a second the program has asked to run.
 func (r *Runtime) TPS() int { return r.tps }
 
-// Has reports whether the program defined one of the callbacks.
+// Has reports whether the program has defined one of the callbacks. They are
+// looked up every tick, so a program may define one later and it will be
+// called from then on.
 func (r *Runtime) Has(callback string) bool {
 	_, ok := r.L.GetGlobal(callback).(*lua.LFunction)
 	return ok
-}
-
-// Init runs the program's _init, if it has one.
-func (r *Runtime) Init() error { return r.call(CallbackInit) }
-
-// Tick takes in a frame of input and runs the program's _update.
-func (r *Runtime) Tick(f pico.Frame) error {
-	r.In.Update(f)
-	err := r.call(CallbackUpdate)
-	r.frame++
-	return err
-}
-
-// Draw runs the program's _draw.
-func (r *Runtime) Draw() error { return r.call(CallbackDraw) }
-
-// call runs one of the program's callbacks under protection, so that an error
-// in it stops the game with a message rather than taking the process down.
-func (r *Runtime) call(name string) error {
-	fn := r.L.GetGlobal(name)
-	if fn == lua.LNil {
-		return nil
-	}
-	return r.L.CallByParam(lua.P{Fn: fn, NRet: 0, Protect: true})
 }
 
 // Quitting reports whether the program called exit(), and with what status.
