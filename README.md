@@ -116,11 +116,12 @@ local coin = sprite[[
 ```
 
 [docs/pico.md](docs/pico.md) is the whole API, and
-[examples/pico](examples/pico) has twelve programs written against it — from
-`hello.lua` up to a snake game, a platformer with a tile map, and a painting
-program. [library/pico.lua](library/pico.lua) declares it for
-lua-language-server, so an editor completes these names and shows what they
-take; the `.luarc.json` at the root points at it.
+[examples/pico](examples/pico) has sixteen programs written against it — from
+`hello.lua` up to a snake game, a platformer with a tile map, a painting
+program and a level drawn in Tiled. [library/pico.lua](library/pico.lua)
+declares it for lua-language-server, so an editor completes these names and
+shows what they take; the `.luarc.json` at the root points at it.
+[docs/future.md](docs/future.md) is what is not there yet.
 
 Drawing happens on an indexed framebuffer, one byte a pixel, which is scaled to
 the window by a whole number with nearest-neighbour, so pixels stay square.
@@ -567,6 +568,7 @@ internal/pico/     the fantasy console: framebuffer, palette, drawing, font
 internal/picolua/  that console's Lua API
 internal/game/     the window: Ebitengine, the frame loop, input
 docs/pico.md       the console API, written out
+docs/future.md     what is not here yet, and where it would go
 library/pico.lua   the same API declared for lua-language-server
 examples/          hello.lua, app/ to fuse, and pico/ for the console
 bin/               build output (git-ignored)
