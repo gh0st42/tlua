@@ -660,16 +660,16 @@ gives the garbage collector to do is its own.
   is no tracker, no sfx editor, and no instruments.
 - **No cartridge**, no sprite or map editor, and no `poke`/`peek`: there is no
   memory layout to poke at, and artwork is written as text in the program.
-- **No `flip()`.** A program is built from `_update` and `_draw`; it cannot
-  draw from inside a loop of its own.
 - **Colours 32 to 63 are not Picotron's**, as above. The video modes are, apart
   from `vid(13)`.
 - `color(c, c2)` takes the fill pattern's second colour as its own argument
   rather than packing two colours into one number, because 64 colours do not
   fit in a nibble each.
 - Triangles, `held()`, `typed()`, `textwidth()`, `clamp()`, `loadpng()`,
-  `fetch()`, `volume()`, `usesheet()`, the whole of `palette()`, and looking a
-  resource up by name are additions.
+  `fetch()`, `volume()`, `usesheet()`, `setfps()`, the whole of `palette()`,
+  and looking a resource up by name are additions.
+- **Nothing is saved.** `fetch()` reads a file the game was shipped with; there
+  is no `store()`, so a high score or a save file has nowhere to go yet.
 - A sheet's cells are a uniform grid. Picotron's sprites can each have their own
   size, which is a property of its `.gfx` files rather than of a PNG.
 
