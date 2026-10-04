@@ -87,6 +87,45 @@ parameters and `assets/bgm/*.json` is its song format. A game plays the `.wav`
 fz renders beside them, which is enough; reading the sources means porting a
 synthesiser and a sequencer, which is a project rather than a gap.
 
+## The interpreter underneath — worth a look, not a plan
+
+tlua runs on [gopher-lua](https://github.com/yuin/gopher-lua), which is Lua 5.1.
+Picotron, which this console is shaped after, runs a slightly extended Lua 5.4.
+So a cart written there using integers, `//`, `goto`, `<close>` or the bitwise
+operators will not run here — and bit work is not incidental to a fantasy
+console: sprite flags, fill patterns and palette arithmetic are all bits, and
+`fget(n, bit)` exists partly because 5.1 has no `&`.
+
+There are now pure-Go implementations past 5.1, which there were not when this
+started. As of October 2026:
+
+| | | |
+| --- | --- | --- |
+| [arnodel/golua](https://github.com/arnodel/golua) | 5.5 on main, 5.4 on a branch | compiler and runtime complete, coroutines included; `runtime.UserData`; can run code under a CPU and memory budget |
+| [speedata/go-lua](https://pkg.go.dev/github.com/speedata/go-lua) | 5.4 | Shopify's 5.3 port brought forward; full coroutines; no weak references; the C stack API rather than a value API |
+| [iceisfun/golua](https://pkg.go.dev/github.com/iceisfun/golua) | 5.4, some 5.5 | sandbox-first, no dependencies, newest and least proven |
+
+**What it would cost.** `internal/picolua` is six and a half thousand lines, and
+the non-test code names gopher-lua's API 556 times — `lua.LState` alone 170 of
+them. It is not a rename: gopher-lua hands out values and methods, while
+speedata's is the stack API from C, which is a different way of writing the same
+thing. `flip()` leans on `NewThread`, `Resume` and `Yield` in particular, and
+the single long-lived driver coroutine would have to be proved again on whatever
+replaced them.
+
+**The part nobody knows.** Per-pixel Lua is bounded by the VM: about 80% of
+frame time and 73% of allocations, mostly boxing numbers. Lua 5.3 and after have
+a real integer subtype, so there is a plausible story where `pset(x, y, c)`
+stops boxing floats — but no one has published a comparison against gopher-lua,
+and a plausible story is not a measurement.
+
+**So measure before deciding.** Stand `examples/pico/plasma.lua` — which is
+nothing but per-pixel Lua — on one of these behind a thin shim and compare
+against the benchmarks in `internal/pico/bench_test.go`. If 5.4 is meaningfully
+faster, the rewrite buys speed *and* the Picotron alignment and pays for itself.
+If it is not, it buys bitwise operators for six thousand lines, which is not a
+trade worth making.
+
 ## Smaller things
 
 - **`s:sprite(n)` is a copy.** A window onto the sheet's own pixels would save
