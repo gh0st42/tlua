@@ -1474,3 +1474,80 @@ func TestTheCoroutineCallsAreTheOnesThisLineageUses(t *testing.T) {
 		t.Errorf("they should be the language's own: %q", got)
 	}
 }
+
+func TestChoosingAFont(t *testing.T) {
+	f := start(t, 60, 20, `
+		name, w, h = font()
+		was = font("unscii")
+		big_name, big_w, big_h = font()
+		wide = textwidth("hello")
+		put_back = font(was)
+		narrow = textwidth("hello")`)
+
+	cases := []struct{ expr, want string }{
+		{`name, w, h`, "small,3,5"},
+		{`was`, "small"},
+		{`big_name, big_w, big_h`, "unscii,8,8"},
+		{`wide`, "40"},         // five characters of eight
+		{`narrow`, "20"},       // five of four
+		{`put_back`, "unscii"}, // what font(was) replaced
+		{`font()`, "small,3,5"},
+	}
+	for _, c := range cases {
+		if got := f.str(c.expr); got != c.want {
+			t.Errorf("%s = %q, want %q", c.expr, got, c.want)
+		}
+	}
+}
+
+func TestAFontOfYourOwn(t *testing.T) {
+	// A sheet of lettering is a font: one cell a character, drawn in whatever
+	// colour print() is given rather than the colour it was drawn in.
+	f := start(t, 16, 8, `
+		letters = sprite([[
+			.77.
+			7..7
+			7777
+			7..7
+			7..7
+		]], 4, 5)
+		font(letters, 65)   -- the first cell is "A"
+		print("A", 0, 0, 12)
+		handed_back = font()`)
+
+	f.want(`
+		.cc.............
+		c..c............
+		cccc............
+		c..c............
+		c..c............
+		................
+		................
+		................`)
+
+	if got := f.str(`handed_back == letters`); got != "true" {
+		t.Errorf("font() handed back %q, want the sheet it was given", got)
+	}
+	if got := f.str(`select(2, font()), select(3, font())`); got != "4,5" {
+		t.Errorf("the font measures %q", got)
+	}
+}
+
+func TestAFontThatIsNotOne(t *testing.T) {
+	f := start(t, 8, 8, ``)
+
+	for _, c := range []struct{ src, says string }{
+		{`font("comic sans")`, "no font called"},
+		{`font(surface(8, 8))`, "not a sheet of characters"},
+		{`font(7)`, "font name or a sheet"},
+	} {
+		err := f.L.DoString(c.src)
+		if err == nil {
+			t.Errorf("%s was allowed", c.src)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.says) {
+			t.Errorf("%s said %q, want something about %q", c.src, err, c.says)
+		}
+	}
+}

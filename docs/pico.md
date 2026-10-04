@@ -15,7 +15,7 @@ There are no cartridges and no editor of sprites or maps: artwork is written
 out as text in the program, or drawn elsewhere and loaded from a PNG, and a
 level comes out of a map editor.
 
-- [examples/pico](../examples/pico) has fifteen programs written against this,
+- [examples/pico](../examples/pico) has sixteen programs written against this,
   and one folder with its artwork and level beside it.
 - [library/pico.lua](../library/pico.lua) declares it all for
   lua-language-server, so an editor can complete these names and show what they
@@ -243,15 +243,60 @@ pixels across at the poles and nine across the middle, as it is there.
 | --- | --- |
 | `print(text, [x], [y], [c])` | Draws text, and reports the x it ended at. |
 | `cursor([x], [y], [c])` | Moves the cursor a bare `print` draws at. |
-| `textwidth(text)`, `textheight(text)` | How big it will be. |
-
-Characters are three pixels wide and five tall, on a grid of four by six.
-Lower case is drawn as small capitals, four rows tall, as PICO-8's font does:
-three pixels is not enough to tell `a` from `A` any other way.
+| `textwidth(text)`, `textheight(text)` | How big it will be, in the font in hand. |
+| `font([which], [first])` | Which font to draw with; reports the one it replaced. |
 
 `print` with no position draws at the cursor and moves it down a line, so
 several in a row stack up. `\n` inside the text starts a new line under the
 first.
+
+#### Fonts
+
+Two come with the console, and a program can bring its own.
+
+| | |
+| --- | --- |
+| `"small"` | Three pixels by five, on a grid of four by six. What a console starts with. |
+| `"unscii"` | Eight by eight, with most of Unicode in it. |
+
+```lua
+font("unscii")
+print("héllo ▲ ╔═╗ Привет", 8, 8, 7)
+```
+
+The small font draws lower case as small capitals, four rows tall, as PICO-8's
+does: three pixels is not enough to tell `a` from `A` any other way. Unscii has
+room for real lower case, and for accented letters, Greek, Cyrillic, arrows,
+box drawing and the block characters old machines drew their graphics with. It
+is [Viznut's unscii-8](http://viznut.fi/unscii/), which is in the public
+domain, embedded as the bitmaps it is rather than as a TrueType file: the
+outlines in that file are squares drawn around these very pixels, and this
+screen has no shade of grey to rasterise one into.
+
+**A font of your own** is a sheet of lettering, one cell a character:
+
+```lua
+local letters = loadpng("font", 8, 8)   -- or sprite[[ … ]] with a grid
+font(letters, 65)                        -- its first cell is "A"
+```
+
+The second argument is the character the first cell stands for, a space unless
+said otherwise, since that is where a character set usually starts. Every pixel
+that is not colour 0 is ink, and it is drawn in the colour `print` is given —
+so one sheet of lettering serves every colour, and `palette()` reaches it like
+anything else.
+
+`font()` reports what it replaced, in the form it would be given back, so a
+routine can borrow a font and put the one it found back afterwards:
+
+```lua
+local was = font("unscii")
+print("BIG", 8, 8, 7)
+font(was)
+```
+
+With no arguments it says the name of the font in hand and the size of one
+character. `textwidth` and `textheight` follow whichever font that is.
 
 `print` draws on the screen. **`printh` is the one that writes to the terminal**
 the program was started from.

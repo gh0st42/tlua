@@ -223,7 +223,7 @@ func TestTheCounterDrawsItself(t *testing.T) {
 	if picture.H != 2*pico.LineHeight+overlayPad*2-1 {
 		t.Errorf("the box is %d tall", picture.H)
 	}
-	if picture.W < pico.TextWidth("480x270  x3") {
+	if picture.W < pico.Small.Width("480x270  x3") {
 		t.Errorf("the box is %d wide, too narrow for what it says", picture.W)
 	}
 

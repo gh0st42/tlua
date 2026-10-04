@@ -320,6 +320,19 @@ function loadpng(path, cell_w, cell_h) end
 ---@return any|nil value, string? err
 function fetch(name) end
 
+--- Which font print() draws with. With nothing, reports the font in hand and
+--- the size of one of its characters. With a name, switches to a built-in:
+--- "small" (3x5) or "unscii" (8x8, most of Unicode). With a sheet, uses that
+--- artwork as lettering, one cell a character, the first standing for `first`
+--- (a space by default); every pixel that is not colour 0 is ink, drawn in the
+--- colour print() is given.
+---
+--- Reports what it replaced, in the form it would be given back.
+---@param which? string|Surface
+---@param first? integer the character the sheet's first cell stands for
+---@return string|Surface was, integer? width, integer? height
+function font(which, first) end
+
 --- Says that this program wants a window and the console API, for a program run
 --- as an ordinary script: `tlua game.lua`, a shebang line, or one fused without
 --- -play. Call it first, before anything else of the console: nothing of it

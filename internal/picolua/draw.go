@@ -111,7 +111,7 @@ func (r *Runtime) installDrawing() {
 				r.Vid.Print(text, optCoord(L, 2, cx), optCoord(L, 3, cy), r.penArg(L, 4))
 			}
 			x, _ := r.Vid.CursorAt()
-			L.Push(lua.LNumber(x + pico.TextWidth(text)))
+			L.Push(lua.LNumber(x + r.Vid.TextWidth(text)))
 			return 1
 		},
 
@@ -126,13 +126,67 @@ func (r *Runtime) installDrawing() {
 			return 2
 		},
 
+		// font() is which font print() draws with.
+		//
+		//	font()                 -- its name, and the size of one character
+		//	font("unscii")         -- a built-in: "small" or "unscii"
+		//	font(sheet, [first])   -- artwork, one cell a character
+		//
+		// It reports what it replaced, in the form it would be given back, so
+		// a routine can borrow a font and put the old one back:
+		//
+		//	local was = font("unscii")
+		//	print("big", 8, 8, 7)
+		//	font(was)
+		//
+		// A font made of artwork is a sheet whose cells are characters, the
+		// first standing for first — a space, unless said otherwise, since
+		// that is where a character set usually starts. Every pixel that is
+		// not colour 0 is ink, and it is drawn in the colour print() is given,
+		// so one sheet of lettering serves every colour.
+		"font": func(L *lua.LState) int {
+			was := r.fontValue(L)
+			if isNone(L, 1) {
+				f := r.Vid.Font()
+				L.Push(was)
+				L.Push(lua.LNumber(f.W))
+				L.Push(lua.LNumber(f.H))
+				return 3
+			}
+
+			switch v := L.Get(1).(type) {
+			case lua.LString:
+				f, ok := pico.FontByName(string(v))
+				if !ok {
+					L.ArgError(1, fmt.Sprintf("there is no font called %q; there is %s",
+						string(v), strings.Join(pico.Fonts(), " and ")))
+				}
+				r.Vid.SetFont(f)
+				r.fontSheet = lua.LNil
+
+			case *lua.LUserData:
+				sheet := checkSurface(L, 1)
+				if !sheet.Gridded() {
+					L.ArgError(1, "this surface is a picture, not a sheet of characters: give it a grid first")
+				}
+				first := rune(L.OptInt(2, ' '))
+				r.Vid.SetFont(pico.FromSheet(sheet, first))
+				r.fontSheet = L.Get(1)
+
+			default:
+				L.ArgError(1, "a font name or a sheet of characters expected")
+			}
+			L.Push(was)
+			return 1
+		},
+
 		"textwidth": func(L *lua.LState) int {
-			L.Push(lua.LNumber(pico.TextWidth(tostr(L.CheckAny(1)))))
+			L.Push(lua.LNumber(r.Vid.TextWidth(tostr(L.CheckAny(1)))))
 			return 1
 		},
 
 		"textheight": func(L *lua.LState) int {
-			L.Push(lua.LNumber(pico.TextHeight(tostr(L.CheckAny(1)))))
+			L.Push(lua.LNumber(r.Vid.TextHeight(tostr(L.CheckAny(1)))))
 			return 1
 		},
 
@@ -296,4 +350,18 @@ func paletteOf(L *lua.LState, tbl *lua.LTable) *pico.Palette {
 		L.ArgError(1, "a palette needs at least one colour in it")
 	}
 	return pico.NewPalette("custom", colors)
+}
+
+// fontValue reports the current font the way font() takes one: the name of a
+// built-in, or the surface a font made of artwork was built from.
+func (r *Runtime) fontValue(L *lua.LState) lua.LValue {
+	if f := r.Vid.Font(); f.Sheet() != nil {
+		if r.fontSheet != nil {
+			return r.fontSheet
+		}
+		return lua.LNil
+	} else if f.Name != "" {
+		return lua.LString(f.Name)
+	}
+	return lua.LNil
 }

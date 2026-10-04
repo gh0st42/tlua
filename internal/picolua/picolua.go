@@ -151,6 +151,10 @@ type Runtime struct {
 	current      *pico.Surface
 	currentValue lua.LValue
 
+	// fontSheet is the surface a font made of artwork came from, as Lua handed
+	// it over, so that font() can give it back the way it was given.
+	fontSheet lua.LValue
+
 	// currentMap is the map that map(), mget() and mset() mean.
 	currentMap      *pico.Tilemap
 	currentMapValue lua.LValue

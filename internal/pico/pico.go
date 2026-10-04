@@ -74,6 +74,9 @@ type Console struct {
 
 	// The text cursor print() advances when it is called without a position.
 	cursorX, cursorY int
+
+	// font is what print() draws with. Nothing means the small built-in one.
+	font *Font
 }
 
 // New creates a console with a screen of the given size, ready to draw on: pen
@@ -96,6 +99,7 @@ func (c *Console) Reset() {
 	c.fill, c.fillTransparent = 0, false
 	c.ResetPal()
 	c.cursorX, c.cursorY = 0, 0
+	c.font = Small
 	c.ClipReset()
 }
 

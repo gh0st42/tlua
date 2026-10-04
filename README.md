@@ -125,7 +125,7 @@ local coin = sprite[[
 ```
 
 [docs/pico.md](docs/pico.md) is the whole API, and
-[examples/pico](examples/pico) has sixteen programs written against it — from
+[examples/pico](examples/pico) has seventeen programs written against it — from
 `hello.lua` up to a snake game, a platformer with a tile map, a painting
 program and a level drawn in Tiled. [library/pico.lua](library/pico.lua)
 declares it for lua-language-server, so an editor completes these names and

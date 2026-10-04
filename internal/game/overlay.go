@@ -74,20 +74,27 @@ func (o *overlay) render(fps, tps float64, w, h, scale int) *pico.Surface {
 	}
 	lines := overlayLines(fps, tps, w, h, scale)
 
+	// The overlay is always in the small font, whatever the program is drawing
+	// its own text with: it belongs to the window rather than to the game.
+	font := pico.Small
+
 	width := 0
 	for _, line := range lines {
-		width = max(width, pico.TextWidth(line))
+		width = max(width, font.Width(line))
 	}
 	// The text measures a blank column after its last character, which is the
 	// padding on that side already.
 	width += overlayPad*2 - 1
-	height := len(lines)*pico.LineHeight + overlayPad*2 - 1
+	height := len(lines)*font.Line + overlayPad*2 - 1
 
 	if o.con == nil {
 		o.con = pico.New(width, height)
 	} else if o.con.Screen.W != width || o.con.Screen.H != height {
 		o.con.Resize(width, height)
 	}
+	// Drawn in the font it was measured in, whatever else has been done to
+	// this console since.
+	o.con.SetFont(font)
 
 	o.con.Cls(overlayGround)
 	o.con.Rect(0, 0, width-1, height-1, overlayEdge)
@@ -96,8 +103,8 @@ func (o *overlay) render(fps, tps float64, w, h, scale int) *pico.Surface {
 	// line is only there to say what the number means.
 	rate := fmt.Sprintf("%3.0f", fps)
 	o.con.Print(rate, overlayPad, overlayPad, rateColor(tps, want))
-	o.con.Print(lines[0][len(rate):], overlayPad+pico.TextWidth(rate), overlayPad, overlayDim)
-	o.con.Print(lines[1], overlayPad, overlayPad+pico.LineHeight, overlayInk)
+	o.con.Print(lines[0][len(rate):], overlayPad+font.Width(rate), overlayPad, overlayDim)
+	o.con.Print(lines[1], overlayPad, overlayPad+font.Line, overlayInk)
 
 	return o.con.Screen
 }
