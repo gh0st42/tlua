@@ -19,6 +19,8 @@
 -- rather than here. Flags are the bit a loop tests; properties are the detail
 -- behind it.
 
+boot()
+
 local SOLID, WATER = 0, 1
 
 local w, h = screen()

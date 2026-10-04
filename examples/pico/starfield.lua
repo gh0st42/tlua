@@ -3,6 +3,8 @@
 -- Up and down change the speed. The stars are kept in three dimensions and
 -- divided by their distance, which is the whole of perspective.
 
+boot()
+
 local w, h = screen()
 local cx, cy = w / 2, h / 2
 local stars = {}

@@ -7,6 +7,8 @@
 -- given up to fit. A fantasy console gets to choose its own limits, and this is
 -- how.
 
+boot()
+
 vid(4)
 local w, h = screen()
 

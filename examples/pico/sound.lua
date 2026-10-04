@@ -12,6 +12,8 @@
 -- there comes back as nil and a message saying where it looked, which is what
 -- the bottom of this screen shows.
 
+boot()
+
 local w, h = screen()
 local wanted = { "jump", "coin", "hit", "theme" }
 local last = "nothing yet"

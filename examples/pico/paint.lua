@@ -7,6 +7,8 @@
 -- Left button paints, right button rubs out, the wheel changes the brush, C
 -- clears, and the number keys 1 to 9 pick a colour without the mouse.
 
+boot()
+
 local w, h = screen()
 local swatch = 14
 local barWidth = swatch + 6

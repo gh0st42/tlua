@@ -296,7 +296,12 @@ font(was)
 ```
 
 With no arguments it says the name of the font in hand and the size of one
-character. `textwidth` and `textheight` follow whichever font that is.
+character. `textwidth` and `textheight` follow whichever font that is, so
+centring text needs no arithmetic of its own when the font changes.
+
+`examples/pico/fonts.lua` shows all three kinds side by side. `snake.lua` and
+`dialog.lua` show the usual arrangement in a game: the bigger font for a
+sentence meant to be read, the small one for the numbers around the edge.
 
 `print` draws on the screen. **`printh` is the one that writes to the terminal**
 the program was started from.

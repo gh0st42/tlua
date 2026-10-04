@@ -7,6 +7,8 @@
 -- so it lays itself out to whatever it is given, and the window scales the
 -- result up by a whole number either way.
 
+boot()
+
 local modes = { 0, 1, 2, 3, 4, 13 }
 local chosen = 1
 local spin = 0

@@ -4,6 +4,8 @@
 -- That grid is both what map() draws and what the collision reads, so what is
 -- solid is always what can be seen.
 
+boot()
+
 local w, h = screen()
 local tile = 8
 

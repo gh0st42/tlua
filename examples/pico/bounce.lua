@@ -3,6 +3,8 @@
 -- The shape of nearly every game here: a list of things, _update() moves them,
 -- _draw() draws them. add() and all() are the two calls that make that short.
 
+boot()
+
 local w, h = screen()
 local balls = {}
 local gravity = 0.25

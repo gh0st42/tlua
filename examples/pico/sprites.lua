@@ -4,6 +4,8 @@
 -- colours 0 to 15, a dot or a space for the transparent parts. No file to load
 -- and nothing to install, which is why every example here is one file.
 
+boot()
+
 local w, h = screen()
 
 local ship = sprite[[

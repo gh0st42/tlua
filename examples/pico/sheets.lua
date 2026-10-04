@@ -13,6 +13,8 @@
 -- otherwise, so leaving the first cell blank is what makes a dot in a level
 -- mean empty sky.
 
+boot()
+
 local w, h = screen()
 
 -- Four cells of eight pixels: nothing, a ball, a box, a spark.

@@ -4,6 +4,8 @@
 -- second player, and from any game pads plugged in. key() reads the keyboard
 -- directly for anything a console never had.
 
+boot()
+
 local w, h = screen()
 local names = { "left", "right", "up", "down", "o", "x" }
 local watched = { "space", "shift", "ctrl", "alt", "enter", "escape", "tab", "a", "1" }

@@ -6,6 +6,8 @@
 -- The best score outlives the game: store() keeps it where the person's other
 -- saved games go, and fetch() reads it back the next time this is run.
 
+boot()
+
 local w, h = screen()
 local cell = 10
 local cols, rows = flr(w / cell) - 2, flr((h - 20) / cell)
@@ -148,19 +150,25 @@ function _draw()
 	print("best " .. best, w - 60, 8, 6)
 
 	-- The panels sit above the middle, so that the snake waiting underneath can
-	-- be seen behind them.
+	-- be seen behind them. They are set in the bigger font — the score above is
+	-- a number in the corner and the small one suits it, but a sentence meant
+	-- to be read across the room is not.
+	if state ~= "playing" then font("unscii") end
+
 	if state == "title" then
-		local top = h / 3 - 18
-		rectfill(0, top, w, top + 34, 0)
-		rect(0, top, w - 1, top + 34, 5)
-		centred("snake", top + 4, 10)
-		centred("arrow keys to turn", top + 15, 7)
-		centred("press " .. btnkey("x") .. " to start", top + 25, 12)
+		local top = h / 3 - 24
+		rectfill(0, top, w, top + 48, 0)
+		rect(0, top, w - 1, top + 48, 5)
+		centred("▓ SNAKE ▓", top + 6, 10)
+		centred("arrow keys to turn", top + 22, 7)
+		centred("press " .. btnkey("x") .. " to start", top + 34, 12)
 	elseif state == "over" then
-		local top = h / 3 - 12
-		rectfill(0, top, w, top + 24, 0)
-		rect(0, top, w - 1, top + 24, 5)
-		centred("caught yourself out", top + 5, 8)
-		centred(btnkey("x") .. " to go again", top + 15, 12)
+		local top = h / 3 - 16
+		rectfill(0, top, w, top + 36, 0)
+		rect(0, top, w - 1, top + 36, 5)
+		centred("caught yourself out", top + 8, 8)
+		centred(btnkey("x") .. " to go again", top + 22, 12)
 	end
+
+	font("small")
 end

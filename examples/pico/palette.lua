@@ -3,6 +3,8 @@
 -- X switches between the palettes the console comes with; O fades the whole
 -- picture by changing what the colours are, not by redrawing anything.
 
+boot()
+
 local w, h = screen()
 local builtin = { "default", "vga" }
 local chosen = 1

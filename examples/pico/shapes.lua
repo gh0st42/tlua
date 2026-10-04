@@ -3,6 +3,8 @@
 -- Press X to step through the dither patterns; the shapes below the line are
 -- drawn with whichever is showing.
 
+boot()
+
 local w, h = screen()
 
 -- A 4x4 dither is sixteen bits, the top left pixel being the highest one.

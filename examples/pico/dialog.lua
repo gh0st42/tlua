@@ -12,6 +12,8 @@
 -- X answers, left and right choose. Two of the boxes below ask a question the
 -- ordinary way, from inside _update, and the third hands the whole loop over.
 
+boot()
+
 local w, h = screen()
 local answers = { "not asked yet", "not asked yet", "not asked yet" }
 local chosen = 1
@@ -22,32 +24,46 @@ local chosen = 1
 local function ask(question)
 	local pick = 1
 	while true do
+		-- A question deserves the bigger font. Taking it for the dialog and
+		-- putting back whatever was in hand is what font() reporting the one
+		-- it replaced is for: this routine does not know, or need to know,
+		-- what the rest of the program draws with.
+		local was = font("unscii")
 		-- Whatever was on the screen when we were called is still there, so
 		-- the dialog sits over the game rather than replacing it.
 		fillp(0xa5a5, true)
 		rectfill(0, 0, w, h, 0)
 		fillp()
 
-		local bw, bh = 180, 56
+		local bw, bh = 230, 70
 		local bx, by = (w - bw) / 2, (h - bh) / 2
 		rrectfill(bx, by, bw, bh, 6, 1)
 		rrect(bx, by, bw, bh, 6, 12)
+		-- textwidth() follows the font in hand, so centring needs no arithmetic
+		-- of its own when the font changes.
 		print(question, (w - textwidth(question)) / 2, by + 14, 7)
 
 		for i, word in ipairs({ "yes", "no" }) do
-			local x = bx + 40 + (i - 1) * 70
+			local x = bx + 56 + (i - 1) * 86
 			if i == pick then
-				rrectfill(x - 6, by + 30, 34, 13, 4, 12)
+				rrectfill(x - 8, by + 36, 42, 16, 5, 12)
 			end
-			print(word, x, by + 34, i == pick and 1 or 6)
+			print(word, x, by + 40, i == pick and 1 or 6)
 		end
-		print(btnkey("x") .. " to answer", (w - textwidth(btnkey("x") .. " to answer")) / 2, by + bh - 10, 13)
+		local how = btnkey("x") .. " to answer"
+		print(how, (w - textwidth(how)) / 2, by + bh - 14, 13)
+
+		font(was) -- the game behind this is drawn in its own font
+
+		-- Show it, wait a tick, and carry on from here. Reading the buttons
+		-- afterwards rather than before matters: the press that opened this
+		-- dialog is still "just pressed" on the tick it opened, and would
+		-- answer the question as well as ask it.
+		flip()
 
 		if btnp("left") then pick = 1 end
 		if btnp("right") then pick = 2 end
 		if btnp("x") then return pick == 1 end
-
-		flip() -- show it, wait a tick, and carry on from here
 	end
 end
 
