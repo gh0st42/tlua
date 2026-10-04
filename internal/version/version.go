@@ -3,4 +3,4 @@
 package version
 
 // Number is the release, as major.minor.patch.
-const Number = "0.3.0"
+const Number = "0.3.1"
