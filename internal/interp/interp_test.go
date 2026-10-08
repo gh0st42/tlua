@@ -52,3 +52,51 @@ func TestExpandDefault(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// The two fixes tlua carries in third_party/gopher-lua; PATCHES.md there has
+// the whole story. Both broke ordinary programs without a word.
+func TestGopherLuaPatches(t *testing.T) {
+	r := New(&Options{})
+	defer r.Close()
+	for name, src := range map[string]string{
+		"generic for over a call in an operand": `
+			local function lines(text)
+				local out = {}
+				for line in (tostring(text) .. "\n"):gmatch("(.-)\n") do out[#out + 1] = line end
+				return out
+			end
+			assert(#lines("a\nb") == 2)`,
+		"generic for with two expressions": `
+			local function f()
+				do local a, b, c = 1, 2, "stale" end
+				local n = 0
+				for k in next, { x = 1, y = 2 } do n = n + 1 end
+				return n
+			end
+			assert(f() == 2)`,
+		"closures keep their upvalues after a caught error": `
+			local n = 0
+			local function inc() n = n + 1 end
+			pcall(error, "x")
+			inc()
+			pcall(function() error({}) end)
+			inc()
+			assert(n == 2, n)
+			local f
+			pcall(function() local x = 1; f = function() return x end; x = 2; error("e") end)
+			local junk = { 1, 2, 3 }
+			assert(f() == 2)`,
+		"string.format %q reads back": `
+			local s = "quote \" backslash \\ newline \n cr \r nul \0 byte \1 high \200"
+			assert(loadstring("return " .. string.format("%q", s))() == s)`,
+		"string.format checks its arguments": `
+			assert(not pcall(string.format, "%d"))
+			assert(not pcall(string.format, "%d", "x"))
+			assert(not pcall(string.format, "%y", 1))
+			assert(string.format("%u|%5.2s|%c|%g", 42, "abc", 65, math.pi) == "42|   ab|A|3.14159")`,
+	} {
+		if err := r.DoString(src, name); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

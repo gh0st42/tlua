@@ -22,3 +22,6 @@ require (
 	golang.org/x/term v0.28.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )
+
+// A patched copy; third_party/gopher-lua/PATCHES.md says what and why.
+replace github.com/yuin/gopher-lua => ./third_party/gopher-lua
