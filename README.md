@@ -569,9 +569,33 @@ tlua app.lua        # require("company.logging") just works
 reproducible run. Fused executables are ordinary tlua processes and honour
 these variables too, though their own embedded archive always wins.
 
+### C modules
+
 `package.cpath` is empty and stays that way. Loading C modules (`.so`/`.dll`)
 is the one thing a cgo-free interpreter cannot do; pure-Lua libraries work
 unchanged.
+
+The C modules that the common LuaRocks libraries are built on are the
+exception: tlua carries them, written in Go, and `require` finds them first.
+The Lua half of each library is used as LuaRocks installs it, so a `lib/`
+directory copied from a LuaRocks tree works with its `.so` files left behind.
+
+| Module | Is | So these work |
+| --- | --- | --- |
+| `lfs` | LuaFileSystem 1.9 | anything that walks directories |
+| `mime.core` | LuaSocket 3.1's MIME core | `mime`, `ltn12` filters |
+| `socket.core` | LuaSocket 3.1's core, Linux and macOS | `socket`, `socket.http`, `socket.smtp`, `socket.ftp`, `socket.tp`, `socket.url`, `socket.headers` |
+
+They give the same results as the C modules, error messages included: each
+was run against the C build side by side. What differs:
+
+- `lfs.lock` and `lfs.unlock` report that they are not supported; `lfs.lock_dir`
+  works.
+- `socket.core` is the LuaRocks build, which defines `LUASOCKET_DEBUG`: `_DEBUG`
+  is true, and `send` and `receive` also return how long they took. Names are
+  resolved by Go, from the same `/etc/hosts` and `resolv.conf`, and
+  `socket.dns.toip` and `tohostname` list no aliases. There is no
+  `socket.unix` or `socket.serial`, and no `socket.core` on Windows.
 
 ## Compatibility notes
 
@@ -586,13 +610,29 @@ indices walk back over tlua's own options.
 
 Ctrl-C aborts the running chunk rather than killing the process, so the REPL
 survives an interrupted loop; a script interrupted this way exits with
-status 1.
+status 1. A program waiting on a socket is interrupted the same way.
+
+`io.popen` runs its command with tlua's own stdin and stderr, as popen(3)
+does, so `io.popen("stty size")` sees the terminal; closing the handle gives
+back the command's exit status. Files `io.open` creates are readable by
+everyone the umask allows, as `fopen` makes them.
+
+gopher-lua is carried as a patched copy in `third_party/gopher-lua`, for
+three bugs that broke ordinary programs: a generic `for` over an expression
+containing a call could crash or skip its loop, closures lost track of their
+enclosing locals once any error had been caught, and `string.format` was Go's
+`Sprintf` (so `%q` wrote strings Lua could not read back). Its `PATCHES.md`
+has the details. What remains different from Lua 5.1: `tostring` writes large
+whole numbers out in full (`1e15` is `1000000000000000`) and infinity as
+`+Inf`, `pairs` visits keys in a different order, and errors raised by
+library functions carry the position of the Lua line that called them.
 
 ## Layout
 
 ```
 cmd/tlua/          the command: option parsing, usage, order of operations
 internal/interp/   the interpreter: state, search path, arg, REPL, fused apps
+internal/lualib/   repairs to the standard library, and lfs, mime.core and socket.core in Go
 internal/payload/  the format of a program attached to a binary, and its archive
 internal/fuse/     the fuse subcommand: packing a program onto the interpreter
 internal/editor/   the full-screen editor
@@ -604,6 +644,7 @@ docs/pico.md       the console API, written out
 docs/future.md     what is not here yet, and where it would go
 library/pico.lua   the same API declared for lua-language-server
 examples/          hello.lua, app/ to fuse, and pico/ for the console
+third_party/       gopher-lua, patched; PATCHES.md says how
 bin/               build output (git-ignored)
 ```
 
@@ -613,6 +654,8 @@ bin/               build output (git-ignored)
 | [internal/interp/interp.go](internal/interp/interp.go) | the Lua state: search path, `arg`, interrupts, error reporting |
 | [internal/interp/repl.go](internal/interp/repl.go) | interactive mode, including multi-line continuation |
 | [internal/interp/fused.go](internal/interp/fused.go) | running an attached program, and exposing its archive to Lua |
+| [internal/lualib/lualib.go](internal/lualib/lualib.go) | what tlua adds to gopher-lua's libraries: `io.popen` and `io.open` repaired, the C modules in Go |
+| [third_party/gopher-lua/PATCHES.md](third_party/gopher-lua/PATCHES.md) | the fixes tlua carries in its copy of gopher-lua |
 | [internal/payload/payload.go](internal/payload/payload.go) | detecting, reading and writing the attached-program format |
 | [internal/payload/archive.go](internal/payload/archive.go) | the read-only file system inside a fused zip |
 | [internal/fuse/fuse.go](internal/fuse/fuse.go) | the `fuse` subcommand that builds standalone executables |

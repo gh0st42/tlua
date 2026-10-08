@@ -12,6 +12,8 @@ import (
 	"syscall"
 
 	lua "github.com/yuin/gopher-lua"
+
+	"tlua/internal/lualib"
 )
 
 // Action is one -e / -l / -p option, kept in command line order.
@@ -53,6 +55,8 @@ func New(opts *Options) *Interp {
 		RegistryMaxSize:     1024 * 1024,
 		RegistryGrowStep:    512,
 	})
+
+	lualib.Open(L)
 
 	r := &Interp{L: L, opts: opts, name: "tlua"}
 	r.setupPath()
