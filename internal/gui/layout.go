@@ -42,8 +42,9 @@ var propSchema = map[string]propInfo{
 	"color": {typ: "color"}, "textColor": {typ: "color"}, "fontSize": {typ: "integer"},
 	"font":  {typ: "choice", choices: []string{"sans", "serif", "mono"}},
 	"align": {typ: "choice", choices: []string{"left", "center", "right"}},
-	"text":  {typ: "string"}, "path": {typ: "string"}, "file": {typ: "file"},
-	"multiLine": {typ: "boolean"}, "password": {typ: "boolean"}, "readOnly": {typ: "boolean"},
+	"text":  {typ: "string"}, "path": {typ: "string"}, "file": {typ: "file"}, "image": {typ: "file"},
+	"transparent": {typ: "boolean"},
+	"multiLine":   {typ: "boolean"}, "password": {typ: "boolean"}, "readOnly": {typ: "boolean"},
 	"default": {typ: "boolean"}, "vertical": {typ: "boolean"}, "resizable": {typ: "boolean"},
 	"checked": {typ: "boolean"}, "fit": {typ: "boolean"},
 	"selected": {typ: "integer"}, "min": {typ: "number"}, "max": {typ: "number"},
@@ -446,8 +447,8 @@ func dumpObject(L *lua.LState, o *guiObject) *lua.LTable {
 	t.RawSetString("kind", lua.LString(o.displayKind()))
 	for _, name := range dumpedProps(o) {
 		v := o.get(name)
-		if name == "file" && o.fileGiven != "" {
-			v = lua.LString(o.fileGiven) // as the script wrote it, not as found
+		if g, ok := o.given[name]; ok {
+			v = lua.LString(g) // as the script wrote it, not as found
 		}
 		if same(v, o.defaultFor(name)) {
 			continue
@@ -533,12 +534,17 @@ func copyData(L *lua.LState, v lua.LValue) lua.LValue {
 
 // ---------------------------------------------------------------- save
 
-// save is gui.save(obj, path): the layout of obj, written as a Lua file in
-// a steady order.
+// save is gui.save(obj or layout, path): the layout of obj, or a layout
+// table as it is, written as a Lua file in a steady order.
 func (a *app) save(L *lua.LState) int {
-	obj := checkObject(L, 1)
+	var layout *lua.LTable
+	if t, ok := L.Get(1).(*lua.LTable); ok {
+		layout = t
+	} else {
+		layout = dumpObject(L, checkObject(L, 1))
+	}
 	path := L.CheckString(2)
-	text := "-- A layout, written by gui.save: gui.load builds it.\nreturn " + formatLayout(dumpObject(L, obj), "") + "\n"
+	text := "-- A layout, written by gui.save: gui.load builds it.\nreturn " + formatLayout(layout, "") + "\n"
 	if err := os.WriteFile(path, []byte(text), 0o666); err != nil {
 		L.RaiseError("gui.save: %v", err)
 	}

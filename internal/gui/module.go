@@ -42,7 +42,7 @@ type kind struct {
 var controls = []string{
 	"Label", "Button", "TextBox", "CheckBox", "RadioButton", "ComboBox",
 	"ListBox", "Tree", "Table", "Slider", "Spinner", "ProgressBar", "Image",
-	"Canvas", "Frame", "Tabs",
+	"Canvas", "Frame", "Panel", "Scroll", "Splitter", "Tabs",
 }
 
 // commonEvents are the handlers every kind can raise: something dropped on
@@ -59,13 +59,13 @@ var kinds = map[string]*kind{
 	},
 	"Label": {
 		w: 120, h: 28,
-		props:   map[string]lua.LValue{"align": lua.LString("left")},
+		props:   map[string]lua.LValue{"align": lua.LString("left"), "image": lua.LString("")},
 		aliases: map[string]string{"text": "caption"},
 	},
 	"Button": {
 		w: 120, h: 28,
 		events: []string{"onClick"},
-		props:  map[string]lua.LValue{"default": lua.LFalse},
+		props:  map[string]lua.LValue{"default": lua.LFalse, "image": lua.LString("")},
 		fixed:  []string{"default"},
 	},
 	"TextBox": {
@@ -112,8 +112,9 @@ var kinds = map[string]*kind{
 	},
 	"Canvas": {
 		w: 200, h: 150,
-		events: []string{"onDraw", "onMouseDown", "onMouseUp", "onMouseMove", "onMouseDrag", "onMouseWheel", "onMouseEnter", "onMouseLeave"},
-		props:  map[string]lua.LValue{"color": lua.LString("#ffffff")},
+		events: []string{"onDraw", "onMouseDown", "onMouseUp", "onMouseMove", "onMouseDrag", "onMouseWheel", "onMouseEnter", "onMouseLeave", "onKey"},
+		props:  map[string]lua.LValue{"color": lua.LString("#ffffff"), "transparent": lua.LFalse},
+		fixed:  []string{"transparent"},
 	},
 	"Slider": {
 		w: 160, h: 28,
@@ -144,6 +145,22 @@ var kinds = map[string]*kind{
 	},
 	"Frame": {
 		w: 200, h: 120,
+		holds: controls,
+	},
+	// A Panel is a Frame with no border or caption: a group of controls.
+	"Panel": {
+		w: 200, h: 120,
+		holds: controls,
+	},
+	// A Scroll shows part of what it holds, with scrollbars for the rest.
+	"Scroll": {
+		w: 200, h: 120,
+		holds: controls,
+	},
+	// A Splitter's controls tile it edge to edge, and the user can drag the
+	// lines between them.
+	"Splitter": {
+		w: 400, h: 300,
 		holds: controls,
 	},
 	"Tabs": {
@@ -190,6 +207,9 @@ func init() {
 		"redraw":    guiRedraw,
 		"fire":      guiFire,
 		"find":      guiFind,
+		"remove":    guiRemove,
+		"raise":     guiRaise,
+		"lower":     guiLower,
 	}
 }
 
@@ -245,9 +265,10 @@ type guiObject struct {
 	extra  []string
 	// names are a Form's controls by name, for frm.<name> and find.
 	names map[string]*guiObject
-	// fileGiven is an Image's file as the script wrote it, for a layout;
-	// the file property itself is where it was found.
-	fileGiven string
+	// given are file properties (an Image's file, a Button's image) as the
+	// script wrote them, for a layout; the properties themselves are where
+	// the files were found.
+	given map[string]string
 }
 
 const guiObjectType = "tlua.gui.object"
@@ -286,10 +307,15 @@ func (a *app) open(L *lua.LState) int {
 		"dump":      a.dump,
 		"save":      a.save,
 		"kinds":     a.kindsTable,
+		"spawn":     a.spawn,
 		"after":     a.timerFunc(false),
 		"every":     a.timerFunc(true),
 	})
 	mod.RawSetString("define", L.NewClosure(a.define, mod))
+	if exe, err := os.Executable(); err == nil {
+		// The tlua running this, for running another program with it.
+		mod.RawSetString("interpreter", lua.LString(exe))
+	}
 	mod.RawSetString("_DESCRIPTION", lua.LString("Desktop GUI module for tlua"))
 
 	mt := L.NewTypeMetatable(guiObjectType)
@@ -531,6 +557,9 @@ func (o *guiObject) set(L *lua.LState, name string, value lua.LValue) error {
 	if o.kind == "Form" && o.names[name] != nil {
 		return fmt.Errorf("gui: %s is a control on this form", name)
 	}
+	if name == "parent" {
+		return fmt.Errorf("gui: parent can only be given when a control is made; add() moves it")
+	}
 	switch name {
 	case "name":
 		s, ok := value.(lua.LString)
@@ -545,8 +574,11 @@ func (o *guiObject) set(L *lua.LState, name string, value lua.LValue) error {
 			return err
 		}
 		value = s
-	case "file":
-		o.fileGiven = lua.LVAsString(value)
+	case "file", "image":
+		if o.given == nil {
+			o.given = map[string]string{}
+		}
+		o.given[name] = lua.LVAsString(value)
 	}
 	if o.widget != nil {
 		for _, f := range o.spec.fixed {
@@ -622,7 +654,7 @@ func (a *app) checkProp(L *lua.LState, name string, value lua.LValue) (lua.LValu
 		default:
 			return nil, fmt.Errorf("gui: align must be \"left\", \"center\" or \"right\", not %q", lua.LVAsString(value))
 		}
-	case "file":
+	case "file", "image":
 		return lua.LString(a.besideCaller(L, lua.LVAsString(value))), nil
 	}
 	return value, nil
@@ -727,6 +759,15 @@ func guiIndex(L *lua.LState) int {
 	}
 	if c, ok := obj.names[key]; ok {
 		L.Push(c.ud)
+		return 1
+	}
+	if key == "parent" {
+		// What holds it: read-only, since add() is how it moves.
+		if obj.parent != nil {
+			L.Push(obj.parent.ud)
+		} else {
+			L.Push(lua.LNil)
+		}
 		return 1
 	}
 	L.Push(obj.get(key))
@@ -864,6 +905,64 @@ func guiOn(L *lua.LState) int {
 
 func guiFocus(L *lua.LState) int {
 	focus(checkObject(L, 1))
+	return 0
+}
+
+// remove takes a control off whatever holds it, and frees its widgets. It
+// can be added somewhere again afterwards, and is built anew there.
+func guiRemove(L *lua.LState) int {
+	obj := checkObject(L, 1)
+	if obj.kind == "Form" {
+		L.RaiseError("gui: a Form is closed, not removed")
+	}
+	obj.detach()
+	return 0
+}
+
+func (o *guiObject) detach() {
+	p := o.parent
+	if p == nil {
+		return
+	}
+	unregister(o.form(), o)
+	for i, c := range p.children {
+		if c == o {
+			p.children = append(p.children[:i], p.children[i+1:]...)
+			break
+		}
+	}
+	if o.widget != nil {
+		settle(o)
+		destroyWidget(o) // while it still knows its form, to redraw it
+	}
+	o.parent = nil
+}
+
+// raise puts a control in front of the others in its container; lower puts
+// it behind them. The order is also the order a layout lists them in.
+func guiRaise(L *lua.LState) int { return restackTo(L, true) }
+func guiLower(L *lua.LState) int { return restackTo(L, false) }
+
+func restackTo(L *lua.LState, front bool) int {
+	obj := checkObject(L, 1)
+	p := obj.parent
+	if p == nil {
+		return 0
+	}
+	rest := make([]*guiObject, 0, len(p.children))
+	for _, c := range p.children {
+		if c != obj {
+			rest = append(rest, c)
+		}
+	}
+	if front {
+		p.children = append(rest, obj)
+	} else {
+		p.children = append([]*guiObject{obj}, rest...)
+	}
+	if p.widget != nil {
+		restack(p)
+	}
 	return 0
 }
 

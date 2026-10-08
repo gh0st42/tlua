@@ -108,6 +108,11 @@ func origin(p *guiObject) (int, int) {
 	if p == nil || p.kind == "Form" {
 		return 0, 0
 	}
+	if anchor, ok := p.state.(*fltk.Box); ok && p.kind == "Scroll" {
+		// What a Scroll holds is measured from its content's corner, which
+		// moves as it scrolls; the anchor sits there and moves with it.
+		return anchor.X(), anchor.Y()
+	}
 	if w, ok := p.widget.(geometry); ok {
 		return w.X(), w.Y()
 	}
@@ -138,10 +143,44 @@ func group(o *guiObject) *fltk.Group {
 		return &w.Group
 	case *fltk.Tabs:
 		return &w.Group
+	case *fltk.Scroll:
+		return &w.Group
+	case *fltk.Tile:
+		return &w.Group
 	case *fltk.Group:
 		return w
 	}
 	return nil
+}
+
+// destroyWidget frees what a removed control had on screen.
+func destroyWidget(o *guiObject) {
+	d, _ := o.widget.(interface{ Destroy() })
+	win := window(o.form())
+	canvas := o.kind == "Canvas" // forget destroys a Canvas itself
+	forget(o)
+	if d != nil && !canvas {
+		d.Destroy()
+	}
+	if win != nil {
+		win.Redraw()
+	}
+}
+
+// restack puts a container's widgets in the order of its children, which is
+// the order FLTK draws them in and offers them events, last on top.
+func restack(p *guiObject) {
+	g := group(p)
+	if g == nil {
+		return
+	}
+	for _, c := range p.children {
+		if w, ok := c.widget.(fltk.Widget); ok {
+			g.Remove(w)
+			g.Add(w)
+		}
+	}
+	g.Redraw()
 }
 
 // forget drops the widgets of an object and everything in it, freeing what
@@ -217,8 +256,11 @@ func buildChildren(o *guiObject, g *fltk.Group) error {
 			return err
 		}
 	}
-	if o.kind == "Tabs" {
-		return nil // pages always fill their Tabs
+	switch o.kind {
+	case "Tabs", "Scroll", "Splitter":
+		// Pages fill their Tabs; a Scroll scrolls rather than stretching
+		// what it holds; a Splitter's panes share it out among themselves.
+		return nil
 	}
 	// FLTK grows a group by growing its "resizable" child and moving the
 	// others out of its way. With the controls marked grow, that child is
@@ -362,11 +404,33 @@ func build(o *guiObject) error {
 		buildTable(o, x, y, w, h)
 	case "Canvas":
 		buildCanvas(o, x, y, w, h)
-	case "Frame", "Page":
+	case "Scroll":
+		sc := fltk.NewScroll(x, y, w, h)
+		o.widget = sc
+		// FLTK measures a Scroll's position from what it holds; a box of no
+		// size at its corner makes that the corner, and marks where it is.
+		o.state = fltk.NewBox(fltk.NO_BOX, x, y, 0, 0)
+		err := buildChildren(o, &sc.Group)
+		sc.End()
+		if err != nil {
+			return err
+		}
+	case "Splitter":
+		t := fltk.NewTile(x, y, w, h)
+		o.widget = t
+		err := buildChildren(o, &t.Group)
+		t.End()
+		if err != nil {
+			return err
+		}
+	case "Frame", "Page", "Panel":
 		g := fltk.NewGroup(x, y, w, h)
-		if o.kind == "Frame" {
+		switch o.kind {
+		case "Frame":
 			g.SetBox(fltk.ENGRAVED_FRAME)
 			g.SetAlign(fltk.ALIGN_TOP_LEFT | fltk.ALIGN_INSIDE)
+		case "Panel":
+			g.SetBox(fltk.FLAT_BOX)
 		}
 		o.widget = g
 		err := buildChildren(o, g)
@@ -526,10 +590,13 @@ func applyProp(o *guiObject, name string, value lua.LValue) error {
 		}
 		w.Redraw()
 	case "align":
-		if b, ok := o.widget.(*fltk.Box); ok && o.kind == "Label" {
-			a := map[string]fltk.Align{"left": fltk.ALIGN_LEFT, "center": fltk.ALIGN_CENTER, "right": fltk.ALIGN_RIGHT}[lua.LVAsString(value)]
-			b.SetAlign(a | fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP)
-			b.Redraw()
+		alignLabel(o)
+	case "image":
+		if o.kind == "Button" || o.kind == "Label" {
+			if err := setImage(o, lua.LVAsString(value)); err != nil {
+				return err
+			}
+			alignLabel(o)
 		}
 	case "text":
 		return setText(o, lua.LVAsString(value))
@@ -693,8 +760,40 @@ func setNumber(o *guiObject, name string, v float64) {
 	}
 }
 
+// alignLabel places a Label's caption, and a Button's or Label's image
+// beside its caption.
+func alignLabel(o *guiObject) {
+	w, ok := o.widget.(interface {
+		SetAlign(fltk.Align)
+		Redraw()
+	})
+	if !ok {
+		return
+	}
+	var a fltk.Align
+	switch o.kind {
+	case "Label":
+		a = map[string]fltk.Align{"left": fltk.ALIGN_LEFT, "center": fltk.ALIGN_CENTER, "right": fltk.ALIGN_RIGHT}[propString(o, "align")]
+		a |= fltk.ALIGN_INSIDE | fltk.ALIGN_WRAP
+	case "Button":
+		a = fltk.ALIGN_CENTER
+	default:
+		return
+	}
+	if propString(o, "image") != "" {
+		a |= fltk.ALIGN_IMAGE_NEXT_TO_TEXT
+	}
+	w.SetAlign(a)
+	w.Redraw()
+}
+
 func setImage(o *guiObject, path string) error {
-	b, ok := o.widget.(*fltk.Box)
+	b, ok := o.widget.(interface {
+		SetImage(fltk.Image)
+		W() int
+		H() int
+		Redraw()
+	})
 	if !ok {
 		return nil
 	}

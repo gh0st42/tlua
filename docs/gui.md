@@ -58,14 +58,18 @@ local ok = form:Button { caption = "OK", left = 16, top = 16, onClick = function
 - `left` and `top` are measured from the container's corner, so controls in
   a Frame or a Page are placed within it.
 
-Controls added after a form is shown appear straight away.
+Controls added after a form is shown appear straight away. `obj:remove()`
+takes a control off its container and frees what it had on screen; it can be
+added somewhere again. `obj:raise()` and `obj:lower()` put it in front of or
+behind its siblings, which is also the order a layout lists them in.
+`obj.parent` is what holds it.
 
 | Kind          | Own properties                                       | Events |
 |---------------|------------------------------------------------------|--------|
 | `Form`        | `resizable`                                          | `onClose`, `onUnload`, `onKey`, `onResize` |
 | `Menu`        | `items` (see below); Form only                       | — |
-| `Label`       | `align` (`"left"`, `"center"`, `"right"`); `text` is `caption` | — |
-| `Button`      | `default` (Enter presses it)                         | `onClick` |
+| `Label`       | `align` (`"left"`, `"center"`, `"right"`), `image`; `text` is `caption` | — |
+| `Button`      | `default` (Enter presses it), `image` beside the caption | `onClick` |
 | `TextBox`     | `text`, `multiLine`, `password`, `readOnly`          | `onChange` |
 | `CheckBox`    | `checked` (also `value`)                             | `onChange` |
 | `RadioButton` | `checked` (also `value`); one per parent is on       | `onChange` |
@@ -73,12 +77,15 @@ Controls added after a form is shown appear straight away.
 | `ListBox`     | `items`, `selected`, `text`                          | `onChange`, `onDoubleClick` |
 | `Tree`        | `items` (see below), `path`, `text`                  | `onChange`, `onDoubleClick`, `onToggle` |
 | `Table`       | `columns`, `rows`, `columnWidths`, `selected`        | `onChange`, `onDoubleClick` |
-| `Canvas`      | drawn by its `onDraw` (see below); `color` is the background | `onDraw`, `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseDrag`, `onMouseWheel`, `onMouseEnter`, `onMouseLeave` |
+| `Canvas`      | drawn by its `onDraw` (see below); `color` is the background; `transparent` shows what is under it | `onDraw`, `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseDrag`, `onMouseWheel`, `onMouseEnter`, `onMouseLeave`, `onKey` |
 | `Slider`      | `min`, `max`, `step`, `value`, `vertical`            | `onChange` |
 | `Spinner`     | `min`, `max`, `step`, `value`                        | `onChange` |
 | `ProgressBar` | `min`, `max`, `value`; `caption` is drawn on the bar | — |
 | `Image`       | `file` (PNG, JPEG, BMP, SVG, GIF), `fit`             | — |
 | `Frame`       | holds controls inside a captioned border             | — |
+| `Panel`       | holds controls, with no border or caption            | — |
+| `Scroll`      | holds controls, showing part of them with scrollbars; their positions are measured from its content's corner | — |
+| `Splitter`    | holds controls that tile it edge to edge; the user drags the lines between them | — |
 | `Tabs`        | holds Pages, made with `tabs:Page{caption = ...}`; `selected` | `onChange` |
 
 Every object also has `name` (see [Forms in files](#forms-in-files)), `caption`, `left`, `top`, `width`, `height`, `visible`,
@@ -220,13 +227,21 @@ works inside `onDraw`:
 | `g:image(file, x, y [, w, h])` | an image, scaled to w by h if given |
 
 Mouse handlers get positions in the same coordinates:
-- `onMouseDown(self, x, y, button)` and `onMouseUp(self, x, y, button)`;
-  button 1 is left, 2 middle, 3 right.
+- `onMouseDown(self, x, y, button, double)` and
+  `onMouseUp(self, x, y, button)`. Button 1 is left, 2 middle, 3 right;
+  `double` is true for the second click of a double click.
 - `onMouseDrag(self, x, y)` while a button is held down.
 - `onMouseMove(self, x, y)` when no button is held.
 - `onMouseWheel(self, dx, dy)`.
 - `onMouseEnter(self)` and `onMouseLeave(self)`. Entering also counts as a
   move.
+- `onKey(self, key, text)` gives a Canvas the keyboard. Clicking it takes the
+  focus, and keys are named as a Form's `onKey` names them. Returning true
+  keeps the key from going further.
+
+A `transparent = true` Canvas draws only what `onDraw` draws, over the
+controls under it, and takes the mouse before they do. That is how a
+designer puts handles over a form.
 
 ## Drag and drop
 
@@ -378,7 +393,8 @@ return frm
   - Only what differs from the defaults is written.
   - Handlers and fields of the script's own are left out; they are code.
   - An Image's `file` is written as the script gave it.
-- **`gui.save(obj, path)`** writes that layout as a Lua file, in a steady
+- **`gui.save(obj or layout, path)`** writes that layout, or a layout table
+  as it is, as a Lua file, in a steady
   order: kind, name, caption, position and size first, then the rest
   alphabetically. Saving what was loaded gives back the same file.
 
@@ -418,6 +434,19 @@ its controls stays readable: `name.text` is still what was typed. Showing the
 form again builds it afresh from those values. So a form made for one
 question, on each click, does not pile up. Replacing an Image's `file` frees
 the picture it showed.
+
+## Running another program
+
+`gui.spawn{command, args..., dir = ..., onOutput = fn, onExit = fn}` runs a
+program beside this one:
+- `onOutput(line, stream)` gets what it prints, a line at a time, with
+  `stream` saying `"stdout"` or `"stderr"`.
+- `onExit(code)` gets its exit code.
+- Both run on the GUI's thread, like any handler, while a form is up.
+- It returns a process with `kill()` and `running()`.
+
+`gui.interpreter` is the tlua that is running, for running another Lua
+program with it.
 
 ## Dialogs and timers
 

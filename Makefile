@@ -18,7 +18,7 @@ test:
 # are kept out of plain `make test`. Typing elsewhere while they run can
 # get in their way.
 test-gui:
-	TLUA_GUI_TESTS=1 go test -count=1 ./internal/gui
+	TLUA_GUI_TESTS=1 go test -count=1 ./internal/gui ./internal/design
 
 fmt:
 	gofmt -w .

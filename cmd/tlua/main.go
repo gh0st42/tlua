@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"tlua/internal/design"
 	"tlua/internal/editor"
 	"tlua/internal/fuse"
 	"tlua/internal/game"
@@ -27,6 +28,7 @@ const banner = "tlua " + version.Number + " (Lua 5.1 via gopher-lua, pure Go)"
 
 const usage = `usage: tlua [options] [script [args]]
        tlua edit [file...]
+       tlua design [directory]
        tlua play [script | directory] [args]
        tlua fuse [-o output] [-play] <main.lua | directory | archive.zip>
 
@@ -93,6 +95,8 @@ func main() {
 			os.Exit(fuse.Command(os.Args[2:]))
 		case "edit":
 			os.Exit(editCommand(os.Args[2:]))
+		case "design":
+			os.Exit(design.Command(os.Args[2:]))
 		case "play":
 			os.Exit(game.Command(os.Args[2:]))
 		}

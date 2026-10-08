@@ -37,6 +37,7 @@ be deleted there.
 ```
 usage: tlua [options] [script [args]]
        tlua edit [file...]
+       tlua design [directory]
        tlua play [script | directory] [args]
        tlua fuse [-o output] [-play] <main.lua | directory | archive.zip>
 
@@ -260,6 +261,11 @@ handlers. A composite one is a Frame holding other controls, wired together
 in `build`; the colour picker in `examples/gui/custom.lua` is one.
 `self:fire` raises the control's own events. Fields of its own hold its
 state, and functions among them serve as its methods.
+
+**`tlua design`** draws forms the way Visual Basic 6 did: a toolbox, the
+form with its real controls to drag about, a properties grid, and F5 to run.
+It writes the layout files, and leaves the code to you.
+[docs/design.md](docs/design.md) describes it.
 
 [docs/gui.md](docs/gui.md) describes all of it, and
 [library/gui.lua](library/gui.lua) declares it for lua-language-server, so an
@@ -738,8 +744,11 @@ internal/pico/     the fantasy console: framebuffer, palette, drawing, font
 internal/picolua/  that console's Lua API
 internal/game/     the window: Ebitengine, the frame loop, input
 internal/gui/      the desktop GUI: the gui module, and FLTK under it
+internal/design/   tlua design, the form designer, written in Lua on the gui module
 docs/pico.md       the console API, written out
 docs/gui.md        the gui module, written out
+docs/design.md     the form designer
+docs/rad-plan.md   the plan the form designer is being built to
 docs/gui-progress.md  what the GUI has, and what it does not yet
 docs/future.md     what is not here yet, and where it would go
 library/pico.lua   the same API declared for lua-language-server
@@ -799,6 +808,11 @@ bin/               build output (git-ignored)
 | [internal/gui/fltk_more.go](internal/gui/fltk_more.go) | events, drag and drop, Tree, Table and Canvas |
 | [internal/gui/nofltk.go](internal/gui/nofltk.go) | what stands in where tlua is built without FLTK |
 | [internal/gui/fltkinput/input.go](internal/gui/fltkinput/input.go) | synthetic input for the GUI tests |
+| [internal/gui/layout.go](internal/gui/layout.go) | names, and forms as layouts: `gui.load`, `gui.dump`, `gui.save`, `gui.kinds` |
+| [internal/gui/spawn.go](internal/gui/spawn.go) | `gui.spawn`: running a program beside this one |
+| [internal/design/design.go](internal/design/design.go) | the `design` subcommand: starting the designer |
+| [internal/design/lua/surface.lua](internal/design/lua/surface.lua) | the design surface: placing, moving and sizing controls |
+| [internal/design/lua/props.lua](internal/design/lua/props.lua) | the properties grid |
 
 Tests sit beside what they cover: unit tests in each `internal` package, and
 end-to-end tests in [cmd/tlua](cmd/tlua/) that build the binary and drive it as

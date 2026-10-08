@@ -147,6 +147,11 @@ func abs(n int) int {
 }
 
 func redraw(o *guiObject) {
+	// A transparent Canvas shows what is under it, which has to be drawn
+	// again first, or what it drew before stays.
+	if o.kind == "Canvas" && propBool(o, "transparent") && o.parent != nil {
+		o = o.parent
+	}
 	if w, ok := o.widget.(interface{ Redraw() }); ok {
 		w.Redraw()
 	}
@@ -444,7 +449,11 @@ func tableEvent(o *guiObject, e fltk.Event) bool {
 // ---------------------------------------------------------------- Canvas
 
 func buildCanvas(o *guiObject, x, y, w, h int) {
-	b := fltk.NewBox(fltk.FLAT_BOX, x, y, w, h)
+	box := fltk.FLAT_BOX
+	if propBool(o, "transparent") {
+		box = fltk.NO_BOX
+	}
+	b := fltk.NewBox(box, x, y, w, h)
 	b.SetDrawHandler(func(base func()) {
 		base()
 		drawCanvas(o, b)
@@ -491,11 +500,24 @@ func canvasEvent(o *guiObject, e fltk.Event) bool {
 	at := func() (lua.LValue, lua.LValue) {
 		return lua.LNumber(fltk.EventX() - b.X()), lua.LNumber(fltk.EventY() - b.Y())
 	}
+	keys := o.events["onKey"] != nil
 	switch e {
 	case fltk.PUSH:
+		if keys {
+			b.TakeFocus()
+		}
 		x, y := at()
-		a.fire(o, "onMouseDown", x, y, lua.LNumber(fltk.EventButton()))
+		a.fire(o, "onMouseDown", x, y, lua.LNumber(fltk.EventButton()), lua.LBool(fltk.EventClicks() > 0))
 		return true // so that the drag and the release come here too
+	case fltk.FOCUS, fltk.UNFOCUS:
+		// A Canvas with onKey can have the keyboard.
+		return keys
+	case fltk.KEY:
+		if !keys {
+			return false
+		}
+		name := keyName(fltk.EventKey(), fltk.EventState())
+		return lua.LVAsBool(a.fire(o, "onKey", lua.LString(name), lua.LString(fltk.EventText())))
 	case fltk.DRAG:
 		x, y := at()
 		a.fire(o, "onMouseDrag", x, y)

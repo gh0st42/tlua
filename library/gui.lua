@@ -25,6 +25,7 @@ function bootgui() end
 
 ---@class gui.Object
 ---@field name string what its form calls it: frm.<name>; unique on the form
+---@field parent? gui.Object what holds it; add() moves it
 ---@field caption string
 ---@field left integer measured from the container's corner
 ---@field top integer
@@ -59,6 +60,16 @@ function Object:fire(event, ...) end
 
 --- Gives it the keyboard.
 function Object:focus() end
+
+--- Takes it off its container and frees what it had on screen. It can be
+--- added somewhere again.
+function Object:remove() end
+
+--- Puts it in front of the others in its container.
+function Object:raise() end
+
+--- Puts it behind the others in its container.
+function Object:lower() end
 
 --- The control of that name on this object's form, or nil.
 ---@param name string
@@ -165,6 +176,21 @@ function Container:Frame(opts) end
 ---@return gui.Tabs
 function Container:Tabs(opts) end
 
+--- A group of controls with no border or caption.
+---@param opts? gui.Options
+---@return gui.Panel
+function Container:Panel(opts) end
+
+--- Shows part of what it holds, with scrollbars for the rest.
+---@param opts? gui.Options
+---@return gui.Scroll
+function Container:Scroll(opts) end
+
+--- Its controls tile it edge to edge, and the user drags the lines between.
+---@param opts? gui.Options
+---@return gui.Splitter
+function Container:Splitter(opts) end
+
 ----------------------------------------------------------------------------
 -- Forms.
 
@@ -219,17 +245,21 @@ function Form:Menu(items) end
 ---@class gui.Label: gui.Object
 ---@field text string the same as its caption
 ---@field align gui.Align
+---@field image string a picture beside the caption
 
 ---@class gui.LabelOptions: gui.Options
 ---@field text? string
 ---@field align? gui.Align
+---@field image? string
 
 ---@class gui.Button: gui.Object
 ---@field default boolean Enter presses it; given when it is made
+---@field image string a picture beside the caption
 ---@field onClick? fun(self: gui.Button)
 
 ---@class gui.ButtonOptions: gui.Options
 ---@field default? boolean
+---@field image? string
 ---@field onClick? fun(self: gui.Button)
 
 ---@class gui.TextBox: gui.Object
@@ -363,8 +393,10 @@ function Form:Menu(items) end
 ---@field fit? boolean
 
 ---@class gui.Canvas: gui.Object
+---@field transparent boolean draws only what onDraw draws, over what is under it; given when it is made
+---@field onKey? fun(self: gui.Canvas, key: string, text: string): boolean? clicking it takes the keyboard
 ---@field onDraw? fun(self: gui.Canvas, g: gui.Graphics)
----@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer) button 1 is left, 2 middle, 3 right
+---@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer, double: boolean) button 1 is left, 2 middle, 3 right; double for a double click
 ---@field onMouseUp? fun(self: gui.Canvas, x: integer, y: integer, button: integer)
 ---@field onMouseDrag? fun(self: gui.Canvas, x: integer, y: integer)
 ---@field onMouseMove? fun(self: gui.Canvas, x: integer, y: integer)
@@ -373,8 +405,10 @@ function Form:Menu(items) end
 ---@field onMouseLeave? fun(self: gui.Canvas)
 
 ---@class gui.CanvasOptions: gui.Options
+---@field transparent? boolean draws only what onDraw draws, over what is under it; given when it is made
+---@field onKey? fun(self: gui.Canvas, key: string, text: string): boolean? clicking it takes the keyboard
 ---@field onDraw? fun(self: gui.Canvas, g: gui.Graphics)
----@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer)
+---@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer, double: boolean)
 ---@field onMouseUp? fun(self: gui.Canvas, x: integer, y: integer, button: integer)
 ---@field onMouseDrag? fun(self: gui.Canvas, x: integer, y: integer)
 ---@field onMouseMove? fun(self: gui.Canvas, x: integer, y: integer)
@@ -383,6 +417,9 @@ function Form:Menu(items) end
 ---@field onMouseLeave? fun(self: gui.Canvas)
 
 ---@class gui.Frame: gui.Container
+---@class gui.Panel: gui.Container
+---@class gui.Scroll: gui.Container
+---@class gui.Splitter: gui.Container
 
 ---@class gui.Tabs: gui.Object
 ---@field selected integer 1 for the first page
@@ -618,6 +655,30 @@ function gui.choosedir(opts) end
 ---@return string
 function gui.clipboard() end
 
+--- The tlua that is running, for running another program with it.
+---@type string
+gui.interpreter = ""
+
+---@class gui.Process
+local Process = {}
+
+function Process.kill() end
+
+---@return boolean
+function Process.running() end
+
+---@class gui.SpawnOptions
+---@field [integer] string the command and its arguments
+---@field dir? string
+---@field onOutput? fun(line: string, stream: "stdout"|"stderr")
+---@field onExit? fun(code: integer)
+
+--- Runs a program beside this one, passing on what it prints a line at a
+--- time, on the GUI's thread, while a form is up.
+---@param opts gui.SpawnOptions
+---@return gui.Process
+function gui.spawn(opts) end
+
 ---@class gui.Timer
 local Timer = {}
 
@@ -679,8 +740,9 @@ function gui.load(layout, parent) end
 ---@return gui.Layout
 function gui.dump(obj) end
 
---- Writes an object's layout to a Lua file, in a steady order.
----@param obj gui.Object
+--- Writes an object's layout, or a layout table as it is, to a Lua file, in
+--- a steady order.
+---@param obj gui.Object|gui.Layout
 ---@param path string
 function gui.save(obj, path) end
 

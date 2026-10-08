@@ -1,8 +1,9 @@
 # A VB6-style form designer: plan
 
-Status: Phase 1 is built (2026-10-08): names, `gui.load`, `gui.dump`,
-`gui.save` and `gui.kinds`, described in docs/gui.md under "Forms in files".
-The rest is proposed.
+Status: phases 1 and 2 are built (2026-10-08). Phase 1 added names,
+`gui.load`, `gui.dump`, `gui.save` and `gui.kinds`, described in docs/gui.md
+under "Forms in files". Phase 2 is `tlua design`, described in
+docs/design.md. The rest is proposed.
 
 ## What it is
 
@@ -152,7 +153,27 @@ program's archive), so a form's code says `gui.load "Main"`.
   - name collisions are refused.
 - **Done when:** a hand-written two-form program runs from its layout files.
 
-### Phase 2: a designer that edits layouts (R4–R7, R11)
+### Phase 2: a designer that edits layouts (R4–R7, R11) — done
+
+Built with these changes to the plan:
+- **R10 moved into phase 2.** F5 needs `gui.spawn` here, not in phase 3.
+- **R11 (tab order) moved out.** Nothing uses it before phase 4's tab-order
+  editor, so it waits for that.
+- **Additions the designer needed:**
+  - `obj.parent`, to find a control's place in the window;
+  - `onKey` on a Canvas, so the surface takes Delete and the arrow keys;
+  - a `double` argument to `onMouseDown`, for the toolbox's double-click.
+- **The panes** are a Splitter of three Panels, and the surface is a Scroll,
+  so a form larger than the pane scrolls.
+- **Properties grid:** rows of Labels and editors in a Scroll, as the risks
+  section suggested.
+- **Phase 2 deliberately leaves out** the project tree's adding and
+  renaming, apart from File > Add Form.
+- **The measure** is a test that builds the layout example's form in the
+  designer, saves it, wires it up and runs it: `TestDesignerRebuildsTheLayoutExample`.
+
+The original phase 2 list follows.
+
 
 - **The window:** toolbox on the left, surface in the middle, properties on
   the right, and a project tree of forms.

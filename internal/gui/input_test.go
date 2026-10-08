@@ -612,3 +612,94 @@ frm:show()`, func(s *scene) {
 		s.expect(`gui.dump(frm)[1].text == "Ada"`)
 	})
 }
+
+func TestRemovingAndStackingOnScreen(t *testing.T) {
+	pic, _ := filepath.Abs("../../examples/pico/cellar/gfx/tiles.png")
+	onScreen(t, fmt.Sprintf(`
+form = gui.Form{width = 300, height = 200}
+under = form:Button{caption = "under", left = 10, top = 10, width = 100, onClick = function() hit = "under" end}
+over = form:Button{caption = "over", left = 10, top = 10, width = 100, onClick = function() hit = "over" end}
+icon = form:Button{caption = "icon", image = %q, left = 150, top = 10, width = 120, height = 40}
+form:show()`, pic), func(s *scene) {
+		in.Click(s.at("over", 20, 10))
+		s.expect(`hit == "over"`)
+		s.lua(`under:raise()`)
+		in.Click(s.at("over", 20, 10))
+		s.expect(`hit == "under"`)
+		s.lua(`under:remove()`)
+		s.pump()
+		if s.obj("under").widget != nil {
+			s.t.Error("a removed control keeps no widget")
+		}
+		in.Click(s.at("over", 20, 10))
+		s.expect(`hit == "over"`)
+		s.lua(`form:add(under); under:raise()`)
+		s.pump()
+		in.Click(s.at("under", 20, 10))
+		s.expect(`hit == "under" and under.caption == "under"`)
+		if _, ok := s.obj("icon").state.(scalable); !ok {
+			s.t.Error("a Button's image is its own")
+		}
+	})
+}
+
+func TestTransparentOverlayTakesTheMouse(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 300, height = 200}
+button = form:Button{caption = "b", left = 10, top = 10, onClick = function() clicked = true end}
+overlay = form:Canvas{transparent = true, left = 0, top = 0, width = 300, height = 200,
+  onMouseDown = function(self, x, y) down = x .. "," .. y end,
+  onDraw = function(self, g) draws = (draws or 0) + 1; g:rect(5, 5, 20, 20) end}
+form:show()`, func(s *scene) {
+		in.Click(s.at("button", 10, 10))
+		s.expect(`down == "20,20" and clicked == nil`)
+		s.lua(`before = draws; overlay:redraw()`)
+		s.expect(`draws > before`)
+	})
+}
+
+func TestScrollCoordinates(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 300, height = 200}
+scroll = form:Scroll{left = 10, top = 10, width = 200, height = 100}
+far = scroll:Label{caption = "far", left = 20, top = 300}
+form:show()`, func(s *scene) {
+		s.expect(`far.left == 20 and far.top == 300`)
+		s.obj("scroll").widget.(*fltk.Scroll).ScrollTo(0, 250)
+		s.pump()
+		s.expect(`far.left == 20 and far.top == 300`) // measured from the content, not the view
+	})
+}
+
+func TestSpawn(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("uses /bin/sh")
+	}
+	onScreen(t, `
+form = gui.Form{width = 100, height = 50}
+form:show()
+out, errs = {}, {}
+-- Under go test the interpreter is the test binary, so a shell stands in.
+proc = gui.spawn{"/bin/sh", "-c", "echo one; echo two; echo oops >&2; exit 3",
+  onOutput = function(line, stream) if stream == "stdout" then out[#out + 1] = line else errs[#errs + 1] = line end end,
+  onExit = function(code) exited = code end}`, func(s *scene) {
+		for i := 0; i < 100 && lua.LVAsBool(s.L.GetGlobal("exited")) == false && s.L.GetGlobal("exited") == lua.LNil; i++ {
+			fltk.Wait(0.05)
+		}
+		s.expect(`exited == 3 and table.concat(out, ",") == "one,two" and errs[1] == "oops" and not proc.running()`)
+	})
+}
+
+func TestCanvasKeys(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 300, height = 200}
+canvas = form:Canvas{left = 10, top = 10, width = 100, height = 100,
+  onKey = function(self, key) last = key; return key == "Delete" end}
+form:show()`, func(s *scene) {
+		in.Click(s.at("canvas", 10, 10))
+		in.Key(fltk.DELETE, "", 0)
+		s.expect(`last == "Delete" and canvas.parent == form`)
+		in.Key(fltk.LEFT, "", 0)
+		s.expect(`last == "Left"`)
+	})
+}
