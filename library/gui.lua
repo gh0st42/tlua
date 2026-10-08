@@ -268,13 +268,30 @@ function Form:Menu(items) end
 ---@field multiLine boolean given when it is made, like password and readOnly
 ---@field password boolean
 ---@field readOnly boolean
+---@field lineNumbers boolean given when it is made, like syntax and acceptsTab
+---@field syntax ""|"lua" colours the text as Lua
+---@field acceptsTab boolean Tab indents and Enter keeps the indentation
+---@field line integer the cursor's line, from 1; setting it moves there
+---@field cursor integer how many bytes come before the cursor
+---@field selectedText string what is selected
 ---@field onChange? fun(self: gui.TextBox)
+
+local TextBox = {}
+
+--- Selects bytes i to j, counted as string.sub counts them, and puts the
+--- cursor after them.
+---@param i integer
+---@param j? integer
+function TextBox:select(i, j) end
 
 ---@class gui.TextBoxOptions: gui.Options
 ---@field text? string
 ---@field multiLine? boolean
 ---@field password? boolean
 ---@field readOnly? boolean
+---@field lineNumbers? boolean
+---@field syntax? ""|"lua"
+---@field acceptsTab? boolean
 ---@field onChange? fun(self: gui.TextBox)
 
 ---@class gui.CheckBox: gui.Object

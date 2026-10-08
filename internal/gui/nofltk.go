@@ -29,6 +29,7 @@ func redraw(o *guiObject)                                         {}
 func releaseForm(f *guiObject, gone func())                       {}
 func destroyWidget(o *guiObject)                                  {}
 func restack(p *guiObject)                                        {}
+func selectText(o *guiObject, i, j int)                           {}
 func getClipboard() (string, error)                               { return "", errNoBackend }
 func setClipboard(text string) error                              { return errNoBackend }
 

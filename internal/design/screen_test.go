@@ -14,6 +14,7 @@ import (
 	goruntime "runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pwiecz/go-fltk"
 	lua "github.com/yuin/gopher-lua"
@@ -320,5 +321,123 @@ return frm
 			}
 		}
 		s.expect(`D.output.items[2] == "Hello, Ada!" and D.output.items[3] == "> finished"`)
+	})
+}
+
+// later answers a dialog: fn runs from inside its event loop.
+func later(fn func()) { fltk.AddTimeout(0.3, fn) }
+
+func TestDesignerDoubleClickWritesAHandler(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.pickTool("Button")
+		s.drag(20, 20, 120, 50)
+		ox, oy := s.at("D.surface.overlay", 60, 30)
+		in.Click(ox, oy)
+		in.DoubleClick(ox, oy)
+		s.pump()
+		s.expect(`D.views.selected == 2 and D.codeDirty`)
+		s.expect(`D.codeBox.text:find("function frm.Button1:onClick%(%)\n  \nend\n\nreturn frm")`)
+		in.Type(`print("hi")`)
+		s.expect(`D.codeBox.text:find('function frm.Button1:onClick%(%)\n  print%("hi"%)\nend')`)
+		s.expect(`D.objectBox.text == "Button1" and D.eventBox.items[1]:find("onClick") and D.eventBox.items[1]:find("•")`)
+		s.expect(`D.eventBox.text:find("onClick")`)
+
+		// Double-clicking again goes to the handler, and writes no second one.
+		s.lua(`D:showDesign()`)
+		s.pump()
+		in.Click(ox, oy)
+		in.DoubleClick(ox, oy)
+		s.expect(`select(2, D.codeBox.text:gsub("onClick", "")) == 1`)
+		s.expect(`D.codeBox.line == require("design.code").findHandler(D.codeBox.text, "frm", "Button1", "onClick") + 1`)
+
+		s.lua(`D:save()`)
+		data, _ := os.ReadFile(filepath.Join(s.dir, "forms/Form1.lua"))
+		if !strings.Contains(string(data), "function frm.Button1:onClick()\n  print(\"hi\")\nend") {
+			s.t.Errorf("code saved:\n%s", data)
+		}
+		s.expect(`not D.codeDirty and not D.dirty`)
+	})
+}
+
+func TestDesignerObjectAndEventBoxes(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.pickTool("Canvas")
+		s.drag(10, 10, 110, 80)
+		s.lua(`D:showCode()`)
+		s.expect(`D.objectBox.items[1] == "(Form1)" and D.objectBox.items[2] == "Canvas1" and D.objectBox.selected == 2`)
+		s.lua(`for i, e in ipairs(D.eventNames) do if e == "onDraw" then D:pickEvent(i) end end`)
+		s.expect(`D.codeBox.text:find("function frm.Canvas1:onDraw%(g%)")`)
+		s.lua(`D:pickObject(1); for i, e in ipairs(D.eventNames) do if e == "onClose" then D:pickEvent(i) end end`)
+		s.expect(`D.codeBox.text:find("function frm:onClose%(%)")`)
+	})
+}
+
+func TestDesignerOffersToRename(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.pickTool("Button")
+		s.drag(20, 20, 120, 50)
+		s.lua(`D:openHandler(D.doc[1], "onClick"); D.codeBox.text = D.codeBox.text .. "frm.Button1.caption = 'x'\n"; D:showDesign()`)
+		s.lua(`D.surface:selectNode(D.doc[1])`)
+		s.lua(`D.props.editors.name.obj.text = ""; D.props.editors.name.obj:focus()`)
+		in.Type("cmdGo")
+		s.expect(`D.doc[1].name == "cmdGo"`)
+		later(func() { in.Key(fltk.ENTER_KEY, "\r", 0) }) // Yes
+		s.click(400, 280)                                 // selecting the form ends the renaming
+		s.expect(`D.codeBox.text:find("function frm.cmdGo:onClick") and D.codeBox.text:find("frm.cmdGo.caption") and not D.codeBox.text:find("Button1")`)
+	})
+}
+
+func TestDesignerFindsAndGoesToLines(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.lua(`D:showCode(); D.codeBox.cursor = 0; D.lastFind = "gui.load"; D:find(true)`)
+		s.expect(`D.codeBox.selectedText == "gui.load"`)
+		s.lua(`D.lastFind = "no such thing"; D:find(true)`)
+		s.expect(`D.statusLine.caption:find("is not in the code")`)
+		later(func() {
+			in.Key(fltk.BACKSPACE, "", 0)
+			in.Type("2")
+			in.Key(fltk.ENTER_KEY, "\r", 0)
+		})
+		s.lua(`D:goToLine()`)
+		s.expect(`D.codeBox.line == 2`)
+	})
+}
+
+func TestDesignerReadsCodeChangedElsewhere(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		path := filepath.Join(s.dir, "forms/Form1.lua")
+		if err := os.WriteFile(path, []byte("-- written elsewhere\nlocal gui = require \"gui\"\nlocal frm = gui.load \"Form1\"\nreturn frm\n"), 0o644); err != nil {
+			s.t.Fatal(err)
+		}
+		future := time.Now().Add(5 * time.Second)
+		os.Chtimes(path, future, future)
+		s.lua(`D:showCode()`)
+		s.expect(`D.codeBox.text:find("written elsewhere") and not D.codeDirty`)
+	})
+}
+
+func TestDesignerJumpsToAnError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds tlua")
+	}
+	exe := filepath.Join(t.TempDir(), "tlua")
+	if out, err := exec.Command("go", "build", "-o", exe, "tlua/cmd/tlua").CombinedOutput(); err != nil {
+		t.Fatalf("building tlua: %v\n%s", err, out)
+	}
+	withDesigner(t, func(s *scene) {
+		s.lua(`D:showCode()
+D.codeBox.text = 'local gui = require "gui"\nlocal frm = gui.load "Form1"\n\nfrm.NoSuchControl.caption = "x"\n\nreturn frm\n'
+D:markCodeDirty()
+D:showDesign()`)
+		s.L.SetGlobal("exe", lua.LString(exe))
+		s.lua(`require("gui").interpreter = exe; D:run()`)
+		for i := 0; i < 200; i++ {
+			s.pump()
+			if err := s.L.DoString(`__done = D.output.items[#D.output.items]:find("^> exited")`); err == nil && lua.LVAsBool(s.L.GetGlobal("__done")) {
+				break
+			}
+		}
+		s.expect(`D.output.items[#D.output.items]:find("^> exited with")`)
+		s.expect(`D.views.selected == 2 and D.codeBox.line == 4`)
 	})
 }

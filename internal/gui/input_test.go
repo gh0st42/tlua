@@ -703,3 +703,62 @@ form:show()`, func(s *scene) {
 		s.expect(`last == "Left"`)
 	})
 }
+
+func TestCodeTextBox(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 400, height = 300}
+code = form:TextBox{multiLine = true, lineNumbers = true, syntax = "lua", acceptsTab = true,
+  left = 10, top = 10, width = 380, height = 200, text = "local x = 1\nfunction f()\nend",
+  onChange = function() changes = (changes or 0) + 1 end}
+plain = form:TextBox{left = 10, top = 220, width = 200, text = "hello world"}
+form:Menu{ {"&View", { {"&Wrap", function() end, shortcut = "F7", checked = false} }} }
+form:show()`, func(s *scene) {
+		s.expect(`code.line == 1 and code.cursor == 0`)
+		s.lua(`code.line = 2`)
+		s.expect(`code.cursor == 12 and code.line == 2`)
+		s.lua(`code.cursor = 24`) // the end of "function f()"
+		s.focus("code")
+		in.Key(fltk.ENTER_KEY, "\r", 0)
+		in.Key(fltk.TAB, "\t", 0)
+		in.Type("return 1")
+		s.expect(`code.text == "local x = 1\nfunction f()\n  return 1\nend" and changes >= 3`)
+		s.lua(`code:select(7, 7)`)
+		s.expect(`code.selectedText == "x" and code.cursor == 7`)
+		s.lua(`plain:select(7, 11)`)
+		s.expect(`plain.selectedText == "world"`)
+		in.Key(fltk.F7, "", 0)
+		s.expect(`gui.dump(form)[3].kind == "Menu" and gui.dump(form)[3].items[1][2][1].checked == true`)
+	})
+}
+
+// TestComboBoxesWithNothingSelected guards against go-fltk's FLTK, whose
+// Fl_Menu_::value(int) does not check its index: a ComboBox with nothing
+// selected was handed -1, FLTK then drew from before its items, and enough
+// ComboBoxes being filled and freed made that a crash.
+func TestComboBoxesWithNothingSelected(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 300, height = 300}
+empty = form:ComboBox{left = 200, top = 0, width = 90}
+holder = form:Scroll{left = 0, top = 0, width = 190, height = 300}
+rows = {}
+function churn(n)
+  empty.items = {"x", "y"}
+  empty.selected = 0
+  for _, r in ipairs(rows) do r:remove() end
+  rows = {}
+  for i = 1, n do
+    rows[#rows + 1] = holder:ComboBox{left = 10, top = i * 30, width = 150, items = {"", "a", "b"}, selected = i % 3}
+  end
+end
+form:show()`, func(s *scene) {
+		for i := 0; i < 60; i++ {
+			s.lua(`churn(3)`)
+			s.pump()
+		}
+		s.expect(`empty.selected == 0 and empty.text == "" and rows[1].selected == 1 and rows[3].selected == 0`)
+		s.lua(`empty.selected = 2`)
+		s.expect(`empty.text == "y"`)
+		s.lua(`empty.selected = 9`)
+		s.expect(`empty.selected == 0`)
+	})
+}

@@ -99,3 +99,41 @@ assert(project.read(dir, "Form1")[1].name == "cmdOK")`)
 	r2.L.SetGlobal("dir", lua.LString(dir))
 	run(t, r2.L, `local frm = dofile(dir .. "/forms/Form1.lua"); assert(frm.cmdOK.caption == "OK")`)
 }
+
+func TestCode(t *testing.T) {
+	r, _ := newLua(t)
+	run(t, r.L, `
+local code = require "design.code"
+local text = 'local gui = require "gui"\nlocal frm = gui.load "Form1"\n\nreturn frm\n'
+assert(code.formVar(text) == "frm")
+assert(code.formVar('local win = gui.load "Main"') == "win")
+assert(code.defaultEvent("Button") == "onClick" and code.defaultEvent("Label") == nil)
+
+local t2, line = code.addHandler(text, "frm", "Button1", "onClick")
+assert(t2 == 'local gui = require "gui"\nlocal frm = gui.load "Form1"\n\nfunction frm.Button1:onClick()\n  \nend\n\nreturn frm\n', t2)
+assert(line == 5, line)
+assert(code.findHandler(t2, "frm", "Button1", "onClick") == 4)
+assert(code.findHandler(t2, "frm", "Button1", "onChange") == nil)
+
+local t3, line3 = code.addHandler(t2, "frm", "Canvas1", "onMouseDown")
+assert(t3:find("function frm.Canvas1:onMouseDown%(x, y, button, double%)"), t3)
+assert(select(2, t3:gsub("return frm", "")) == 1 and t3:find("end\n\nfunction frm.Canvas1"), t3)
+assert(code.findHandler(t3, "frm", "Canvas1", "onMouseDown") + 1 == line3)
+
+local t4 = code.addHandler(text, "frm", nil, "onClose")
+assert(t4:find("function frm:onClose%(%)") and code.findHandler(t4, "frm", nil, "onClose"))
+assert(code.findHandler("frm.Button1.onClick = function() end", "frm", "Button1", "onClick") == 1)
+
+-- No return at the end: the handler goes at the end.
+local t5, line5 = code.addHandler("local frm = gui.load 'X'", "frm", "B", "onClick")
+assert(t5 == "local frm = gui.load 'X'\n\nfunction frm.B:onClick()\n  \nend\n" and line5 == 4, t5 .. line5)
+
+local src = "frm.Button1.caption = 1\nfrm.Button10.caption = 2\nfunction frm.Button1:onClick() end"
+assert(code.countRefs(src, "frm", "Button1") == 2)
+local renamed, n = code.renameRefs(src, "frm", "Button1", "cmdOK")
+assert(n == 2 and renamed == "frm.cmdOK.caption = 1\nfrm.Button10.caption = 2\nfunction frm.cmdOK:onClick() end", renamed)
+
+assert(select(1, code.errorAt("tlua: ./forms/Main.lua:12: attempt to call a nil value")) == "Main")
+assert(select(2, code.errorAt("/tmp/p/forms/Main.lua:12: boom")) == 12)
+assert(code.errorAt("main.lua:3: boom") == nil and code.errorAt("forms/Main.form.lua:3: x") == nil)`)
+}

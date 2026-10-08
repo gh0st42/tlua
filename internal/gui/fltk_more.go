@@ -72,6 +72,8 @@ func handle(o *guiObject, e fltk.Event) bool {
 		return tableEvent(o, e)
 	case "Tree":
 		return treeKey(o, e)
+	case "TextBox":
+		return codeKey(o, e)
 	case "Label", "Image", "ProgressBar":
 		// These take no presses of their own, and a drag starts with one.
 		return e == fltk.PUSH && has("onDrag")
@@ -695,4 +697,30 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 		return 0
 	})
 	return g
+}
+
+// codeKey makes Tab and Enter indent in a TextBox that acceptsTab: Tab puts
+// in two spaces rather than moving to the next control, and Enter starts
+// the new line as far in as the one it leaves.
+func codeKey(o *guiObject, e fltk.Event) bool {
+	ed, ok := o.widget.(*fltk.TextEditor)
+	if !ok || e != fltk.KEY || !propBool(o, "acceptsTab") {
+		return false
+	}
+	mods := fltk.EventState() & (fltk.CTRL | fltk.ALT | fltk.META | fltk.SHIFT)
+	switch {
+	case fltk.EventKey() == fltk.TAB && mods == 0:
+		ed.InsertText("  ")
+		o.app.fire(o, "onChange")
+		return true
+	case fltk.EventKey() == fltk.ENTER_KEY && mods == 0:
+		buf := ed.Buffer()
+		line := buf.LineText(ed.GetInsertPosition())
+		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		ed.InsertText("\n" + indent)
+		ed.ShowInsertPosition()
+		o.app.fire(o, "onChange")
+		return true
+	}
+	return false
 }

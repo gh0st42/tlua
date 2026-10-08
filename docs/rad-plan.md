@@ -1,9 +1,9 @@
 # A VB6-style form designer: plan
 
-Status: phases 1 and 2 are built (2026-10-08). Phase 1 added names,
+Status: phases 1 to 3 are built (2026-10-08). Phase 1 added names,
 `gui.load`, `gui.dump`, `gui.save` and `gui.kinds`, described in docs/gui.md
-under "Forms in files". Phase 2 is `tlua design`, described in
-docs/design.md. The rest is proposed.
+under "Forms in files". Phases 2 and 3 are `tlua design` with its code
+window, described in docs/design.md. The rest is proposed.
 
 ## What it is
 
@@ -195,7 +195,27 @@ The original phase 2 list follows.
 - **Done when:** the Phase 1 example can be rebuilt in the designer from
   nothing, saved, and run.
 
-### Phase 3: the code window (R8–R10)
+### Phase 3: the code window (R8–R10) — done
+
+Built as planned, with these notes:
+- **The highlighter** moved out of the terminal editor into
+  internal/luasyntax, which both use.
+- **R9 (menus)** turned out to be almost there already: a menu is changed
+  by changing its items table and assigning it again. All it lacked was
+  toggles writing `checked` back into their items.
+- **Renaming** is offered when the change is done with (selecting something
+  else, saving, or going to the code) rather than as each letter is typed.
+- **"Open in tlua edit"** became Open Code in Editor, which hands the file
+  to the system's editor for .lua. `tlua edit` is a terminal program, and
+  starting a terminal from a GUI is a different thing on every platform.
+- **A crash fixed on the way:** go-fltk's FLTK headers do not check the
+  index given to `Fl_Menu_::value(int)`. A ComboBox with nothing selected
+  pointed FLTK before its items, and enough ComboBoxes filled and freed (as
+  the properties grid does) crashed in drawing. The gui module now never
+  gives an index outside the items.
+
+The original phase 3 list follows.
+
 
 - **Event stubs:** double-click a control and the designer appends
   `function frm.<name>:<defaultEvent>()` to the form's code file, unless it is

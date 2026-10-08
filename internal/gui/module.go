@@ -74,8 +74,11 @@ var kinds = map[string]*kind{
 		props: map[string]lua.LValue{
 			"text": lua.LString(""), "multiLine": lua.LFalse,
 			"password": lua.LFalse, "readOnly": lua.LFalse,
+			// For editing code: a multi-line box with line numbers, Lua's
+			// colours, and Tab and Enter that indent.
+			"lineNumbers": lua.LFalse, "syntax": lua.LString(""), "acceptsTab": lua.LFalse,
 		},
-		fixed:   []string{"multiLine", "password", "readOnly"},
+		fixed:   []string{"multiLine", "password", "readOnly", "lineNumbers", "syntax", "acceptsTab"},
 		aliases: map[string]string{"value": "text"},
 	},
 	"CheckBox": {
@@ -205,6 +208,7 @@ func init() {
 		"on":        guiOn,
 		"focus":     guiFocus,
 		"redraw":    guiRedraw,
+		"select":    guiSelect,
 		"fire":      guiFire,
 		"find":      guiFind,
 		"remove":    guiRemove,
@@ -648,6 +652,12 @@ func (a *app) checkProp(L *lua.LState, name string, value lua.LValue) (lua.LValu
 		default:
 			return nil, fmt.Errorf("gui: font must be \"sans\", \"serif\" or \"mono\", not %q", lua.LVAsString(value))
 		}
+	case "syntax":
+		switch lua.LVAsString(value) {
+		case "", "lua":
+		default:
+			return nil, fmt.Errorf("gui: syntax is \"lua\" or nothing, not %q", lua.LVAsString(value))
+		}
 	case "align":
 		switch lua.LVAsString(value) {
 		case "left", "center", "right":
@@ -963,6 +973,18 @@ func restackTo(L *lua.LState, front bool) int {
 	if p.widget != nil {
 		restack(p)
 	}
+	return 0
+}
+
+// select is textBox:select(i, j): selects its text from byte i to byte j,
+// as string.sub counts them, and puts the cursor after it.
+func guiSelect(L *lua.LState) int {
+	obj := checkObject(L, 1)
+	if obj.kind != "TextBox" {
+		L.RaiseError("gui: only a TextBox has text to select, not a %s", obj.displayKind())
+	}
+	i, j := L.CheckInt(2), L.OptInt(3, L.CheckInt(2)-1)
+	selectText(obj, i, j)
 	return 0
 }
 

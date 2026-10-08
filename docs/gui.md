@@ -70,7 +70,7 @@ behind its siblings, which is also the order a layout lists them in.
 | `Menu`        | `items` (see below); Form only                       | — |
 | `Label`       | `align` (`"left"`, `"center"`, `"right"`), `image`; `text` is `caption` | — |
 | `Button`      | `default` (Enter presses it), `image` beside the caption | `onClick` |
-| `TextBox`     | `text`, `multiLine`, `password`, `readOnly`          | `onChange` |
+| `TextBox`     | `text`, `multiLine`, `password`, `readOnly`; for code `lineNumbers`, `syntax = "lua"`, `acceptsTab`; `line`, `cursor`, `selectedText`, and `select(i, j)` | `onChange` |
 | `CheckBox`    | `checked` (also `value`)                             | `onChange` |
 | `RadioButton` | `checked` (also `value`); one per parent is on       | `onChange` |
 | `ComboBox`    | `items`, `selected` (1-based, 0 for none), `text`    | `onChange` |
@@ -147,6 +147,25 @@ Forms do not resize unless they say so:
 - A form never shrinks below the size it opened at.
 - Inside a Frame or Page, the same rule applies to its children.
 
+## Text boxes for code
+
+A multi-line TextBox can be made for editing code. These are given when it
+is made:
+- `lineNumbers = true` shows line numbers.
+- `syntax = "lua"` colours keywords, the standard library's names, strings,
+  numbers and comments. The colours are the terminal editor's scanner, so the
+  two agree.
+- `acceptsTab = true` makes Tab put in two spaces rather than move to the
+  next control, and Enter start the new line as far in as the one before.
+
+Any TextBox, code or not, has these:
+- `line` is the line the cursor is on, from 1. Setting it moves there.
+- `cursor` is how many bytes come before the cursor. Setting it moves there
+  and shows it.
+- `selectedText` is what is selected.
+- `box:select(i, j)` selects bytes `i` to `j`, counted as `string.sub` counts
+  them, so `box:select(text:find("needle", 1, true))` finds and selects.
+
 ## Menu
 
 ```lua
@@ -162,6 +181,10 @@ form:Menu {
   } },
 }
 ```
+
+A toggle writes `checked` back into its item as the user changes it. So a
+menu changed after it is made (renamed, enabled, checked) is the items
+table changed and assigned again, and it keeps what the user left it as.
 
 An `&` marks the letter to underline. `Cmd` is Command on a Mac and Ctrl
 elsewhere. The menu sits along the top of the form, so leave it 25 pixels.

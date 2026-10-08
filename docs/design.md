@@ -18,8 +18,9 @@ myapp/
 - **The layout** (`Form1.form.lua`) is the designer's. It is rewritten
   whole on every save, as data that `gui.load` builds.
 - **The code** (`Form1.lua`) is yours. The designer writes it once, to load
-  the layout, and never touches it again. Handlers go there, by the names the
-  layout gives the controls:
+  the layout. After that it only adds an empty handler where you ask for
+  one, and renames a control in it when you agree to. Handlers go there, by
+  the names the layout gives the controls:
 
 ```lua
 local gui = require "gui"
@@ -39,7 +40,8 @@ new project there.
 
 - **Left:** the project's forms (double-click one to open it), and the
   toolbox.
-- **Middle:** the form being designed, built with the real controls.
+- **Middle:** the form being designed, built with the real controls, on the
+  Design tab; its code on the Code tab.
 - **Right:** the properties of what is selected, with the form and its
   controls listed at the top.
 - **Below:** the output of the program when it runs.
@@ -71,10 +73,34 @@ new project there.
 - **Running:** F5 saves and runs `main.lua` in its own process, with what it
   prints below; Shift-F5 stops it.
 
+## Code
+
+- **Double-click to write a handler.** Double-clicking a control opens its
+  code at the event VB6 went to: `onClick` for a Button, `onChange` for a
+  TextBox and the other inputs, `onDraw` for a Canvas, `onClose` for the
+  form. If the handler isn't written yet, it is added, empty, just above the
+  `return frm` at the end, with the cursor inside it.
+- **The two boxes above the code** are VB6's: pick a control (or the form),
+  then one of its events, and the code goes to that handler, writing it if
+  needed. Events that have a handler already are marked •.
+- **Switching views:** F7 shows the code and Shift-F7 the form (View menu).
+- **The code box:** line numbers and Lua's colours. Tab indents, and Enter
+  keeps the indentation. Cmd-F finds, Cmd-G finds the next, Cmd-L goes to a
+  line (Ctrl elsewhere). Cmd-Z undoes.
+- **Saving:** Save writes the code with the layout. If the code was changed
+  in another editor and there is nothing unsaved here, it is read again; if
+  there is, you are asked before it is written over. View > Open Code in
+  Editor saves and hands the file to whatever opens `.lua` files.
+- **Errors take you there.** When the program stops with an error in a form's
+  code, the designer opens that code at the line. Double-clicking an error
+  in the output does the same.
+- **Renaming a control** in the properties offers, once you move on, to
+  rename `frm.OldName` to `frm.NewName` in its code, saying how many places
+  that is. It is a plain change of text, and nothing changes if you say no.
+
 ## Not yet
 
 These are later phases of the plan:
-- the code window, and double-clicking a control to write its event handler;
 - placing controls inside a Frame or on a Tabs page;
 - multiple selection, alignment and the grid;
 - undo;

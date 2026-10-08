@@ -12,6 +12,8 @@ import (
 
 	"github.com/pwiecz/go-fltk"
 	lua "github.com/yuin/gopher-lua"
+
+	"tlua/internal/luasyntax"
 )
 
 // The build constraint above is the list of platforms go-fltk ships prebuilt
@@ -454,6 +456,34 @@ func build(o *guiObject) error {
 	return o.applyStoredProps()
 }
 
+// The colours of Lua, a style a letter: text, keywords, the standard
+// library, strings, numbers, comments.
+var luaStyles = []fltk.StyleTableEntry{
+	{Color: fltk.ColorFromRgb(0, 0, 0), Font: fltk.COURIER, Size: 14},
+	{Color: fltk.ColorFromRgb(0, 0, 160), Font: fltk.COURIER_BOLD, Size: 14},
+	{Color: fltk.ColorFromRgb(0, 110, 60), Font: fltk.COURIER, Size: 14},
+	{Color: fltk.ColorFromRgb(160, 40, 0), Font: fltk.COURIER, Size: 14},
+	{Color: fltk.ColorFromRgb(0, 120, 140), Font: fltk.COURIER, Size: 14},
+	{Color: fltk.ColorFromRgb(120, 120, 120), Font: fltk.COURIER_ITALIC, Size: 14},
+}
+
+// colourLua colours an editor's text as Lua, again after every change. The
+// whole text is classified each time: the code of a form is short.
+func colourLua(e *fltk.TextEditor, buf *fltk.TextBuffer) {
+	style := fltk.NewTextBuffer()
+	restyle := func() {
+		classes := luasyntax.Classes(buf.Text())
+		b := make([]byte, len(classes))
+		for i, c := range classes {
+			b[i] = 'A' + byte(c)
+		}
+		style.SetText(string(b))
+	}
+	restyle()
+	e.SetHighlightData(style, luaStyles)
+	buf.AddModifyCallback(func(int, int, int, int, string) { restyle() })
+}
+
 func buildTextBox(o *guiObject, x, y, w, h int) {
 	a := o.app
 	readOnly := propBool(o, "readOnly")
@@ -468,7 +498,23 @@ func buildTextBox(o *guiObject, x, y, w, h int) {
 		}
 		e := fltk.NewTextEditor(x, y, w, h)
 		e.SetBuffer(buf)
-		e.SetWrapMode(fltk.WRAP_AT_BOUNDS)
+		code := propString(o, "syntax") != "" || propBool(o, "lineNumbers")
+		if code {
+			// Code is not wrapped: a long line scrolls.
+			e.SetWrapMode(fltk.WRAP_NONE)
+			e.SetTextFont(fltk.COURIER)
+		} else {
+			e.SetWrapMode(fltk.WRAP_AT_BOUNDS)
+		}
+		if propBool(o, "lineNumbers") {
+			e.SetLinenumberWidth(44)
+			e.SetLinenumberSize(12)
+			e.SetLinenumberFgcolor(fltk.ColorFromRgb(130, 130, 130))
+			e.SetLinenumberBgcolor(fltk.ColorFromRgb(238, 238, 238))
+		}
+		if propString(o, "syntax") == "lua" {
+			colourLua(e, buf)
+		}
 		e.SetCallbackCondition(fltk.WhenChanged)
 		e.SetCallback(func() { a.fire(o, "onChange") })
 		o.widget = e
@@ -623,6 +669,16 @@ func applyProp(o *guiObject, name string, value lua.LValue) error {
 		setSelected(o, int(lua.LVAsNumber(value)))
 	case "min", "max", "step", "value":
 		setNumber(o, name, float64(lua.LVAsNumber(value)))
+	case "cursor":
+		setCursor(o, int(lua.LVAsNumber(value)))
+	case "line":
+		if e, ok := o.widget.(*fltk.TextEditor); ok {
+			n := int(lua.LVAsNumber(value))
+			if n < 1 {
+				n = 1
+			}
+			setCursor(o, e.Buffer().SkipLines(0, n-1))
+		}
 	case "file":
 		return setImage(o, lua.LVAsString(value))
 	case "fit":
@@ -678,15 +734,72 @@ func setText(o *guiObject, text string) error {
 	return nil
 }
 
+// cursorOf is where a TextBox's cursor is: how many bytes come before it.
+func cursorOf(o *guiObject) (int, bool) {
+	switch w := o.widget.(type) {
+	case *fltk.TextEditor:
+		return w.GetInsertPosition(), true
+	case *fltk.TextDisplay:
+		return w.GetInsertPosition(), true
+	case *fltk.Input:
+		return w.InsertPosition(), true
+	}
+	return 0, false
+}
+
+func setCursor(o *guiObject, pos int) {
+	if pos < 0 {
+		pos = 0
+	}
+	switch w := o.widget.(type) {
+	case *fltk.TextEditor:
+		if n := w.Buffer().Length(); pos > n {
+			pos = n
+		}
+		w.Buffer().UnSelect()
+		w.SetInsertPosition(pos)
+		w.ShowInsertPosition()
+	case *fltk.Input:
+		if n := len(w.Value()); pos > n {
+			pos = n
+		}
+		w.SetInsertPosition(pos, pos)
+	}
+}
+
+// selectText selects bytes i to j of a TextBox, counted as string.sub
+// counts them, and leaves the cursor after them.
+func selectText(o *guiObject, i, j int) {
+	if i < 1 {
+		i = 1
+	}
+	from, to := i-1, j
+	switch w := o.widget.(type) {
+	case *fltk.TextEditor:
+		if n := w.Buffer().Length(); to > n {
+			to = n
+		}
+		if to < from {
+			to = from
+		}
+		w.Buffer().Select(from, to)
+		w.SetInsertPosition(to)
+		w.ShowInsertPosition()
+	case *fltk.Input:
+		if n := len(w.Value()); to > n {
+			to = n
+		}
+		if to < from {
+			to = from
+		}
+		w.SetInsertPosition(to, from)
+	}
+}
+
 func setItems(o *guiObject) error {
 	switch w := o.widget.(type) {
 	case *fltk.Choice:
-		w.Clear()
-		for _, it := range propItems(o) {
-			// Each entry has a callback of its own, which FLTK calls instead
-			// of the widget's.
-			w.Add(itemText(it), func() { o.app.fire(o, "onChange") })
-		}
+		fillChoice(o, w)
 		setSelected(o, propInt(o, "selected", 0))
 	case *fltk.HoldBrowser:
 		w.Clear()
@@ -705,10 +818,28 @@ func setItems(o *guiObject) error {
 	return nil
 }
 
+// fillChoice puts a ComboBox's items in it, with none of them selected.
+func fillChoice(o *guiObject, w *fltk.Choice) {
+	w.Clear()
+	for _, it := range propItems(o) {
+		// Each entry has a callback of its own, which FLTK calls instead
+		// of the widget's.
+		w.Add(itemText(it), func() { o.app.fire(o, "onChange") })
+	}
+}
+
 func setSelected(o *guiObject, i int) {
 	switch w := o.widget.(type) {
 	case *fltk.Choice:
-		w.SetValue(i - 1)
+		// The FLTK go-fltk carries takes any index, and an index outside the
+		// items points FLTK at memory that is not an item, which it draws.
+		// Nothing selected is what a ComboBox is just after it is filled.
+		if i >= 1 && i <= len(propItems(o)) {
+			w.SetValue(i - 1)
+		} else if w.Value() >= 0 {
+			fillChoice(o, w)
+		}
+		w.Redraw()
 	case *fltk.HoldBrowser:
 		w.SetValue(i)
 	case *fltk.Tabs:
@@ -929,6 +1060,29 @@ func readProp(o *guiObject, name string) (lua.LValue, bool) {
 			row, _ := treeRowAt(o, o.widget.(*fltk.HoldBrowser).Value())
 			return lua.LString(row.path), true
 		}
+	case "line", "cursor":
+		pos, ok := cursorOf(o)
+		if !ok {
+			return nil, false
+		}
+		if name == "cursor" {
+			return lua.LNumber(pos), true
+		}
+		if e, ok := o.widget.(*fltk.TextEditor); ok {
+			return lua.LNumber(e.Buffer().CountLines(0, pos) + 1), true
+		}
+		return lua.LNumber(1), true
+	case "selectedText":
+		switch w := o.widget.(type) {
+		case *fltk.TextEditor:
+			return lua.LString(w.Buffer().GetSelectionText()), true
+		case *fltk.Input:
+			a, b := w.Mark(), w.InsertPosition()
+			if a > b {
+				a, b = b, a
+			}
+			return lua.LString(w.Value()[a:b]), true
+		}
 	case "text":
 		if o.kind == "Tree" {
 			row, _ := treeRowAt(o, o.widget.(*fltk.HoldBrowser).Value())
@@ -1019,6 +1173,11 @@ func addMenu(o *guiObject, mb *fltk.MenuBar, prefix string, items *lua.LTable) e
 		}
 		mb.AddEx(path, shortcut, func() {
 			on := mb.Mode(mb.Value())&fltk.MENU_VALUE != 0
+			if flags&fltk.MENU_TOGGLE != 0 {
+				// Kept in the script's table, so that assigning the items
+				// again leaves it as the user left it.
+				item.RawSetString("checked", lua.LBool(on))
+			}
 			if fn != nil {
 				o.app.call(fn, lua.LString(text), lua.LBool(on))
 			}

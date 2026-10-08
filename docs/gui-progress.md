@@ -41,6 +41,16 @@ Done
 - [x] docs/gui.md; examples README.
 - [x] library/gui.lua declares the module for lua-language-server, as library/pico.lua does the console; the examples check clean against it. Unknown keys in the table a control is made from are not flagged; lua-language-server does not check table literals for those.
 - [x] Forms in files (phase 1 of docs/rad-plan.md): control names reached as `frm.<name>` and `find`, unique per form; `gui.load` from a table or a sandboxed layout file (beside the calling script, or in a fused archive); `gui.dump` from what is on screen, defaults left out; `gui.save` in a steady order that round-trips; `gui.kinds()` with property types, defaults, fixed flags and choices; `gui.define` takes `props`. `examples/gui/layout` is two forms written this way.
+- [x] The code window, phase 3 of docs/rad-plan.md:
+  - double-clicking a control writes or finds its handler;
+  - VB6's object and event boxes;
+  - a code TextBox (`lineNumbers`, `syntax = "lua"`, `acceptsTab`, `line`, `cursor`, `selectedText`, `select`), coloured by internal/luasyntax, which the terminal editor now shares;
+  - find and go to line;
+  - jumping to a run error;
+  - renaming a control in the code too;
+  - reading code changed elsewhere;
+  - menu toggles keep `checked`.
+- [x] A crash: go-fltk's FLTK does not bounds-check `Fl_Menu_::value(int)`, so a ComboBox with nothing selected pointed before its items. Out-of-range selections are no longer passed, and a regression test churns ComboBoxes.
 - [x] `tlua design`, phase 2 of docs/rad-plan.md: a form designer written in Lua on the gui module, embedded in the binary (internal/design). The runtime gained `remove`, `raise`, `lower`, `parent`, Panel, Scroll and Splitter, `image` on Button and Label, transparent Canvases with `onKey`, and `gui.spawn`. `make test-gui` drives the designer: placing, moving, sizing, deleting, the property grid, saving, and running a program it made.
 - [x] Fused GUI programs: `runFused` installs `bootgui()` and runs the GUI loop, and images (Image and `g:image`) are read from the archive before the disk.
 

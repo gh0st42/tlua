@@ -46,7 +46,7 @@ function M.new(area, d)
     left = MARGIN, top = MARGIN + TITLE, width = 100, height = 100,
   }
   s.overlay.onDraw = function(_, g) s:draw(g) end
-  s.overlay.onMouseDown = function(_, x, y, button, double) s:down(x, y) end
+  s.overlay.onMouseDown = function(_, x, y, button, double) s:down(x, y, double) end
   s.overlay.onMouseDrag = function(_, x, y) s:dragTo(x, y) end
   s.overlay.onMouseUp = function(_, x, y) s:up(x, y) end
   s.overlay.onKey = function(_, key) return s:key(key) end
@@ -142,8 +142,16 @@ function M:draw(g)
   end
 end
 
-function M:down(x, y)
+function M:down(x, y, double)
   local tool = self.d:tool()
+  if double and not tool then
+    -- To the code, at the default event of what was double-clicked.
+    local e = self:hit(x, y)
+    if e ~= self.sel then self:select(e) end
+    self.drag = nil
+    self.d:doubleClicked(e and e.node or self.doc)
+    return
+  end
   if tool then
     self.drag = { mode = "place", kind = tool, x0 = x, y0 = y, x1 = x, y1 = y }
     return

@@ -1,6 +1,7 @@
 -- tlua design: the window that puts the designer together. The project
--- tree and toolbox are on the left, the form being designed in the middle,
--- its properties on the right, and the output of a run below.
+-- tree and toolbox are on the left; the form being designed in the middle,
+-- with its code on a second tab; its properties on the right; and the output
+-- of a run below.
 
 local gui = require "gui"
 local lfs = require "lfs"
@@ -9,6 +10,7 @@ local project = require "design.project"
 local surface = require "design.surface"
 local props = require "design.props"
 local toolbox = require "design.toolbox"
+local code = require "design.code"
 
 local M = {}
 
@@ -43,13 +45,40 @@ function M.start(opts)
     onPlace = function(kind) if d.doc then d.surface:place(kind) end end,
   })
 
-  d.area = center:Scroll { left = 0, top = 0, width = W - LEFT - RIGHT, height = splitH, grow = true, color = "#8a8f99" }
+  -- The middle: the form on one tab, its code on the other.
+  local CW = W - LEFT - RIGHT
+  d.views = center:Tabs {
+    left = 0, top = 0, width = CW, height = splitH, grow = true,
+    onChange = function(self) if self.selected == 2 then d:showCode() end end,
+  }
+  local designPage = d.views:Page { caption = "Design" }
+  local codePage = d.views:Page { caption = "Code" }
+  local pageH = splitH - 25
+  d.area = designPage:Scroll { left = 0, top = 0, width = CW, height = pageH, grow = true, color = "#8a8f99" }
   d.surface = surface.new(d.area, d)
+
+  -- VB6's two boxes over the code: an object, then one of its events.
+  d.objectBox = codePage:ComboBox {
+    left = 4, top = 4, width = CW / 2 - 6,
+    onChange = function(self) d:pickObject(self.selected) end,
+  }
+  d.eventBox = codePage:ComboBox {
+    left = CW / 2 + 2, top = 4, width = CW / 2 - 6,
+    onChange = function(self) d:pickEvent(self.selected) end,
+  }
+  d.codeBox = codePage:TextBox {
+    multiLine = true, lineNumbers = true, syntax = "lua", acceptsTab = true,
+    left = 0, top = 34, width = CW, height = pageH - 34, grow = true,
+    onChange = function() d:markCodeDirty() end,
+  }
 
   rightPane:Label { caption = "Properties", left = 6, top = 2, width = RIGHT - 12, height = 20 }
   d.props = props.new(rightPane, d, { left = 6, top = 24, width = RIGHT - 12, height = splitH - 30 })
 
-  d.output = win:ListBox { left = 0, top = MENU + splitH, width = W, height = OUTPUT, font = "mono" }
+  d.output = win:ListBox {
+    left = 0, top = MENU + splitH, width = W, height = OUTPUT, font = "mono",
+    onDoubleClick = function(self) d:jumpToError(self.text) end,
+  }
   d.statusLine = win:Label { left = 6, top = H - STATUS, width = W - 12, height = STATUS }
 
   ---------------------------------------------------------------- the designer's side of things
@@ -59,8 +88,21 @@ function M.start(opts)
   function d:status(text) self.statusLine.caption = text or "" end
 
   function d:selected(node)
+    self:offerRename()
     self.selection = node
+    self.namedAs = node.name
     self.props:show(node)
+  end
+
+  -- doubleClicked is a double-click on the form or a control: VB6 opened
+  -- the code at its default event, writing the handler if there was none.
+  function d:doubleClicked(node)
+    local event = code.defaultEvent(node.kind)
+    if event then
+      self:openHandler(node, event)
+    else
+      self:showCode()
+    end
   end
 
   function d:selectNode(node)
@@ -89,6 +131,13 @@ function M.start(opts)
     end
   end
 
+  function d:markCodeDirty()
+    if not self.codeDirty then
+      self.codeDirty = true
+      self:retitle()
+    end
+  end
+
   function d:setProp(node, prop, value)
     return self.surface:setProp(node, prop, value)
   end
@@ -96,7 +145,9 @@ function M.start(opts)
   function d:retitle()
     local parts = { "tlua design" }
     if self.dir then parts[#parts + 1] = self.dir:match("([^/\\]+)[/\\]?$") end
-    if self.formName then parts[#parts + 1] = self.formName .. (self.dirty and " *" or "") end
+    if self.formName then
+      parts[#parts + 1] = self.formName .. ((self.dirty or self.codeDirty) and " *" or "")
+    end
     self.win.caption = table.concat(parts, " - ")
   end
 
@@ -104,7 +155,7 @@ function M.start(opts)
 
   -- keepOrLose asks what to do with unsaved changes; false means stay put.
   function d:keepOrLose()
-    if not self.dirty then return true end
+    if not (self.dirty or self.codeDirty) then return true end
     local answer = gui.msgbox("Save the changes to " .. self.formName .. "?", "yesnocancel", "tlua design")
     if answer == "cancel" then return false end
     if answer == "yes" then self:save() end
@@ -131,8 +182,10 @@ function M.start(opts)
       return
     end
     self.doc, self.formName, self.dirty = doc, name, false
+    self.selection, self.namedAs = nil, nil
     self.props:list(doc)
     self.surface:load(doc)
+    self:loadCode()
     self.surface:select(nil)
     self.tree.path = name
     self:retitle()
@@ -141,10 +194,220 @@ function M.start(opts)
 
   function d:save()
     if not self.doc then return end
+    self:offerRename()
     project.save(self.dir, self.formName, self.doc)
     self.dirty = false
+    if self.codeDirty then self:saveCode() end
     self:retitle()
-    self:status("Saved " .. self.formName .. ".form.lua")
+    self:status("Saved " .. self.formName)
+  end
+
+  ---------------------------------------------------------------- code
+
+  function d:codePath()
+    return self.dir .. "/forms/" .. self.formName .. ".lua"
+  end
+
+  local function stamp(path)
+    return lfs.attributes(path, "modification")
+  end
+
+  -- loadCode reads the form's code into the code box.
+  function d:loadCode()
+    local path = self:codePath()
+    if not project.exists(path) then project.addForm(self.dir, self.formName) end
+    local f = io.open(path, "r")
+    self.codeBox.text = f and f:read("*a") or ""
+    if f then f:close() end
+    self.codeStamp = stamp(path)
+    self.codeDirty = false
+    self:retitle()
+  end
+
+  function d:saveCode()
+    local path = self:codePath()
+    if stamp(path) ~= self.codeStamp then
+      local answer = gui.msgbox(self.formName .. ".lua has changed on disk since it was opened here. Write over it?", "yesno", "tlua design")
+      if answer ~= "yes" then return end
+    end
+    local f = assert(io.open(path, "w"))
+    f:write(self.codeBox.text)
+    f:close()
+    self.codeStamp = stamp(path)
+    self.codeDirty = false
+  end
+
+  -- syncCode reads the code again if another editor changed it and there
+  -- is nothing here to lose.
+  function d:syncCode()
+    if self.formName and not self.codeDirty and stamp(self:codePath()) ~= self.codeStamp then
+      self:loadCode()
+      self:status(self.formName .. ".lua changed on disk, and was read again")
+    end
+  end
+
+  -- showCode switches to the code, with the object box on the selection.
+  function d:showCode()
+    if not self.doc then return end
+    self:offerRename()
+    self:syncCode()
+    self.views.selected = 2
+    self:fillObjects()
+    self.codeBox:focus()
+  end
+
+  function d:showDesign()
+    self.views.selected = 1
+  end
+
+  -- fillObjects lists the form and its controls in the object box, and the
+  -- events of the one selected in the event box.
+  function d:fillObjects()
+    self.codeNodes = { self.doc }
+    local items = { "(" .. self.formName .. ")" }
+    for _, node in ipairs(self.doc) do
+      self.codeNodes[#self.codeNodes + 1] = node
+      items[#items + 1] = node.name
+    end
+    self.objectBox.items = items
+    local at = 1
+    for i, n in ipairs(self.codeNodes) do
+      if n == self.selection then at = i end
+    end
+    self.objectBox.selected = at
+    self:fillEvents(self.codeNodes[at])
+  end
+
+  function d:fillEvents(node)
+    self.eventNode = node
+    local events = model.kinds()[node.kind].events
+    local text, var = self.codeBox.text, code.formVar(self.codeBox.text)
+    local items = {}
+    self.eventNames = {}
+    for _, e in ipairs(events) do
+      self.eventNames[#self.eventNames + 1] = e
+      -- A handler already written is marked, as VB6 showed it in bold.
+      local written = code.findHandler(text, var, node ~= self.doc and node.name or nil, e)
+      items[#items + 1] = (written and "• " or "  ") .. e
+    end
+    self.eventBox.items = items
+    self.eventBox.selected = 0
+  end
+
+  function d:pickObject(i)
+    local node = self.codeNodes and self.codeNodes[i]
+    if node then self:fillEvents(node) end
+  end
+
+  function d:pickEvent(i)
+    local event = self.eventNames and self.eventNames[i]
+    if event and self.eventNode then self:openHandler(self.eventNode, event) end
+  end
+
+  -- openHandler shows a handler in the code, writing an empty one first if
+  -- there is none.
+  function d:openHandler(node, event)
+    self:offerRename()
+    self:syncCode()
+    local text = self.codeBox.text
+    local var = code.formVar(text)
+    local name = node ~= self.doc and node.name or nil
+    local line = code.findHandler(text, var, name, event)
+    local indent = 0
+    if line then
+      line = line + 1
+    else
+      text, line = code.addHandler(text, var, name, event)
+      self.codeBox.text = text
+      self:markCodeDirty()
+      indent = 2
+    end
+    self.views.selected = 2
+    self:fillObjects()
+    for i, e in ipairs(self.eventNames) do
+      if e == event then self.eventBox.selected = i end
+    end
+    self.codeBox.line = line
+    self.codeBox.cursor = self.codeBox.cursor + indent
+    self.codeBox:focus()
+  end
+
+  -- offerRename asks to rename a control in the code too, after its name
+  -- changed in the properties: once, when the change is done with.
+  function d:offerRename()
+    local node, old = self.selection, self.namedAs
+    if not node or node == self.doc or not old or node.name == old then return end
+    self.namedAs = node.name
+    local text = self.codeBox.text
+    local var = code.formVar(text)
+    local n = code.countRefs(text, var, old)
+    if n == 0 then return end
+    local question = ("Rename %s.%s to %s.%s in the code? It is there %d time%s."):format(
+      var, old, var, node.name, n, n == 1 and "" or "s")
+    if gui.msgbox(question, "yesno", "Rename") == "yes" then
+      self.codeBox.text = code.renameRefs(text, var, old, node.name)
+      self:markCodeDirty()
+    end
+  end
+
+  -- find looks for text in the code, from the cursor on and round again.
+  function d:find(again)
+    self:showCode()
+    if not again or not self.lastFind then
+      local what = gui.inputbox("Find:", "Find", self.lastFind or "")
+      if not what or what == "" then return end
+      self.lastFind = what
+    end
+    local text = self.codeBox.text
+    local from = self.codeBox.cursor + 1
+    local i, j = text:find(self.lastFind, from, true)
+    if not i then i, j = text:find(self.lastFind, 1, true) end
+    if i then
+      self.codeBox:select(i, j)
+      self:status("")
+    else
+      self:status(self.lastFind .. " is not in the code")
+    end
+    self.codeBox:focus()
+  end
+
+  function d:goToLine()
+    self:showCode()
+    local n = tonumber(gui.inputbox("Line:", "Go to Line", tostring(self.codeBox.line)) or "")
+    if n then self.codeBox.line = n end
+    self.codeBox:focus()
+  end
+
+  -- jumpToError opens the code where an error message says it happened.
+  function d:jumpToError(message)
+    local form, line = code.errorAt(message or "")
+    if not form then return false end
+    if form ~= self.formName then
+      self:openForm(form)
+      if form ~= self.formName then return false end
+    end
+    self:showCode()
+    self.codeBox.line = line
+    self.codeBox:focus()
+    return true
+  end
+
+  -- openInEditor hands the code to whatever opens .lua files here.
+  function d:openInEditor()
+    if not self.formName then return end
+    self:save()
+    local path = self:codePath()
+    local opener
+    if package.config:sub(1, 1) == "\\" then
+      opener = { "cmd", "/c", "start", "", path }
+    else
+      local uname = io.popen("uname -s")
+      local os_name = uname and uname:read("*l") or ""
+      if uname then uname:close() end
+      opener = { os_name == "Darwin" and "open" or "xdg-open", path }
+    end
+    gui.spawn(opener)
+    self:status("Opened " .. self.formName .. ".lua elsewhere; it is read again here when it changes")
   end
 
   function d:addForm()
@@ -203,9 +466,15 @@ function M.start(opts)
     self.proc = gui.spawn {
       gui.interpreter, "main.lua", dir = self.dir,
       onOutput = function(line) d:print(line) end,
-      onExit = function(code)
-        d:print(code == 0 and "> finished" or ("> exited with " .. code))
+      onExit = function(status)
+        d:print(status == 0 and "> finished" or ("> exited with " .. status))
         d:status("")
+        if status ~= 0 then
+          -- To the first error in the program's own forms, if there is one.
+          for _, line in ipairs(d.output.items) do
+            if d:jumpToError(line) then break end
+          end
+        end
       end,
     }
     self:status("Running")
@@ -232,6 +501,16 @@ function M.start(opts)
       "-",
       { "Bring to &Front", function() d.surface:toFront() end },
       { "Send to &Back", function() d.surface:toBack() end },
+      "-",
+      { "&Find...", function() d:find(false) end, shortcut = "Cmd+F" },
+      { "Find &Next", function() d:find(true) end, shortcut = "Cmd+G" },
+      { "&Go to Line...", function() d:goToLine() end, shortcut = "Cmd+L" },
+    } },
+    { "&View", {
+      { "&Code", function() d:showCode() end, shortcut = "F7" },
+      { "&Object", function() d:showDesign() end, shortcut = "Shift+F7" },
+      "-",
+      { "Open Code in &Editor", function() d:openInEditor() end },
     } },
     { "&Run", {
       { "&Start", function() d:run() end, shortcut = "F5" },
