@@ -7,6 +7,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"tlua/internal/editor"
 	"tlua/internal/fuse"
 	"tlua/internal/game"
+	"tlua/internal/gui"
 	"tlua/internal/interp"
 	"tlua/internal/payload"
 	"tlua/internal/version"
@@ -199,6 +201,9 @@ func run(c *cli) int {
 		Args:   opts.ScriptArgs,
 		ArgIdx: opts.ScriptArgIdx,
 	}, nil)
+	// The same goes for a desktop GUI: the gui module is there to require,
+	// and bootgui() makes the program one.
+	guiBoot := gui.Ready(r)
 
 	if !opts.NoEnv {
 		if err := r.RunInit(interp.InitChunk()); err != nil {
@@ -227,9 +232,22 @@ func run(c *cli) int {
 		}
 	}
 
+	guiBoot.TooLate()
+
 	// The program has finished saying what it is. If it asked for a window,
 	// that is the rest of its life — unless an interactive session was asked
 	// for as well, which then picks up where the window left off.
+	if guiBoot.Wanted() && boot.Wanted() {
+		return r.Report(errors.New("a program says boot() or bootgui(), not both"))
+	}
+	if guiBoot.Wanted() {
+		if err := guiBoot.Show(); err != nil {
+			return r.Report(err)
+		}
+		if !opts.Interactive {
+			return 0
+		}
+	}
 	if boot.Wanted() {
 		status := boot.Show()
 		if !opts.Interactive {

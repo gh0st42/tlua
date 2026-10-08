@@ -1,0 +1,74 @@
+# GUI implementation progress
+
+Last updated: 2026-10-08
+
+## Locked decisions
+
+- Desktop GUI activation uses boot-style startup via `bootgui()`.
+- The existing pico/game runtime stays unchanged in phase 1.
+- FLTK will be introduced behind an optional build path so the default pure-Go build stays intact.
+
+## Current work
+
+- [x] Capture the implementation plan and scope.
+- [x] Lock the runtime activation policy to `bootgui()`.
+- [x] Add the GUI bootstrap hook to the interpreter.
+- [x] Scaffold the GUI runtime package boundary.
+- [x] Add the first Lua-facing API surface.
+- [x] Add Lua example GUI applications.
+- [x] Add tests for the bootstrap and API contract.
+- [x] Add the backend seam for the future FLTK implementation.
+- [x] Make the demo GUI scripts runnable through the current backend.
+- [x] Wire an FLTK backend behind build tags: `fltk.go` needs cgo on a platform go-fltk ships libraries for; everywhere else `nofltk.go` builds the same object tree and `show`/`msgbox`/`inputbox` raise "built without FLTK".
+
+## Open points (review 2026-10-08)
+
+Done
+- [x] Build-tag split (`fltk.go` / `nofltk.go`), `go mod tidy`, and the main thread locked explicitly in `fltk.go`'s init.
+- [x] `bootgui()` makes the program a GUI application: `show()` returns at once and the loop runs after the script, until every form is closed, then `-i` if asked. Without it `show()` blocks until its form closes. Saying both `boot()` and `bootgui()` is an error.
+- [x] Event loops wait on their own windows with a bounded `fltk.Wait`, so `inputbox` works from a handler.
+- [x] Handler errors stop the loop and are raised where it started (`show()`, or reported by the boot loop); the forms are closed.
+- [x] Size defaults per kind; forms centred unless given a position.
+- [x] A form's window is shown only once its children exist.
+- [x] One userdata per object: `self == button` in handlers.
+- [x] Events are `onX` everywhere; `obj:on("click")` is `obj.onClick`; nil removes; unknown names are errors that list the valid ones.
+- [x] Per-state app replaces the global `currentForm`; `parent =` and `:add()` (which also moves) for explicit placement.
+- [x] `msgbox` buttons: ok, okcancel, yesno, yesnocancel, retrycancel. go-fltk's `ChoiceDialog` panics with three buttons, so the dialogs are our own.
+- [x] `inputbox` returns "" when cleared, and Enter presses OK.
+- [x] `grow`/`resizable` layout; TextBox captions dropped (they drew outside the box).
+- [x] `show()` twice reuses the window; controls added to a shown form appear.
+- [x] New kinds: Menu, CheckBox, RadioButton, ComboBox, ListBox, Slider, Spinner, ProgressBar, Image, Frame, Tabs/Page. Password/read-only TextBox, default Button. Module: openfile, savefile, choosedir, after, every, showModal. Properties: tooltip, color, textColor, font, fontSize, align. Form: onKey, onResize.
+- [x] docs/gui.md; examples README.
+
+Still open
+- [x] Real input is tested. `make test-gui` (`TLUA_GUI_TESTS=1`) opens windows and drives them through FLTK's own `Fl::handle()`, with the event fields set as a real event would set them. `internal/gui/fltkinput` reaches those by declaring the few FLTK statics it needs; go-fltk links the library. A `TestMain` serves FLTK on the main thread, which is what kept `go test` out before. The tests cover:
+  - clicks on buttons, check boxes, radio buttons and tabs, and a disabled button that ignores them;
+  - typing into plain, password, multi-line and read-only text boxes;
+  - form keys, Escape and the close guard;
+  - menu shortcuts, toggles and disabled items;
+  - list, tree and table clicks, double-clicks and arrow keys;
+  - canvas mouse and wheel;
+  - drops and drags out;
+  - every msgbox and inputbox path, including one opened from a handler;
+  - a modal form.
+  They are opt-in because they take over the screen briefly, and typing elsewhere meanwhile can break them.
+- [x] The tests found a drop bug: FLTK offers a drop that nothing under the mouse took to every control in turn, and any control with `onDrop` took it, wherever it was dropped. Controls now take only drops on themselves. A form's own `onDrop` gets the rest through an invisible catcher behind its controls, because FLTK delivers a drop only to the widget that accepted it while it was dragged over.
+- [ ] Still driven by nothing: the native file choosers; menus and ComboBoxes opened with the mouse (they run a popup loop of their own); a real drag session out to another program (the test stops at the point where the system takes over).
+- [ ] Two Image controls showing one file used to share (and rescale) one FLTK shared image. They now load their own copies, but that fix has not been seen on screen.
+- [ ] Every `gui.Form{}` stays in the app's list for good, so a modal form made per click accumulates. Forms could be dropped once closed and unreferenced.
+- [ ] Replacing an Image's file does not free the previous image.
+- [ ] Inputs have no text size or font of their own in go-fltk, so `font`/`fontSize` change only their captions (multi-line TextBoxes do get them).
+- [x] Clipboard (`gui.clipboard`), drag and drop (`onDrop`, `onDrag` on every kind), Tree, Table, and Canvas with a drawing API and mouse events, plus `:redraw()`.
+- [ ] go-fltk's own Tree cannot report the selected or clicked item, so Tree is built on the list widget: lines indented with ▸/▾ markers. It has no icons, multiple selection or editing.
+- [ ] go-fltk cannot read the clipboard, so `gui.clipboard()` pastes into a hidden text editor and reads that. It is synchronous on macOS and Windows. On X11 it waits up to half a second for the text, and the X11 path is untested.
+- [ ] Table cells are drawn as text: no editing, sorting by header click, or per-cell colours.
+
+## Notes
+
+- Initial implementation should stay narrow and reversible.
+- If the GUI runtime is not available yet, the bootstrap path should fail explicitly rather than silently doing nothing.
+- Validation completed for the first slice: `go test ./internal/gui ./cmd/tlua ./internal/interp`.
+- Validation completed for the module/API slice: `go test ./internal/gui ./cmd/tlua ./internal/interp`.
+- Validation completed after adding GUI examples: `go test ./internal/gui ./cmd/tlua ./internal/interp`.
+- Validation completed after adding the backend seam: `go test ./internal/gui ./cmd/tlua ./internal/interp`.
+- Validation completed after making the demos runnable: `go test ./internal/gui ./cmd/tlua ./internal/interp`.

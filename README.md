@@ -1,22 +1,31 @@
 # tlua
 
-A standalone Lua interpreter written in pure Go, with a DOS-style editor, a
-fantasy console for writing games, and LÖVE-style standalone executables. It
-embeds [gopher-lua](https://github.com/yuin/gopher-lua) (Lua 5.1) and draws
-with [Ebitengine](https://ebitengine.org), neither of which needs cgo, so
-`CGO_ENABLED=0 go build` still produces a single static binary you can drop on
-any machine.
+A standalone Lua interpreter written in Go, with a DOS-style editor, a fantasy
+console for writing games, desktop GUIs, and LÖVE-style standalone
+executables. It embeds [gopher-lua](https://github.com/yuin/gopher-lua) (Lua
+5.1) and draws games with [Ebitengine](https://ebitengine.org), neither of
+which needs cgo, so `CGO_ENABLED=0 go build` still produces a single static
+binary you can drop on any machine. Desktop GUIs use
+[FLTK](https://www.fltk.org) through [go-fltk](https://github.com/pwiecz/go-fltk),
+which does need cgo; the static binary has everything but them.
 
 It runs ordinary `.lua` files from disk, including the modules they `require()`.
 
 ## Build
 
 ```sh
-make build                  # -> bin/tlua
-make static                 # stripped, CGO_ENABLED=0
+make build                  # -> bin/tlua, with the desktop GUI (cgo)
+make static                 # stripped, CGO_ENABLED=0, no desktop GUI
 make test                   # go test ./...
+make test-gui               # the GUI tests, which open windows
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/tlua ./cmd/tlua
 ```
+
+The desktop GUI is built in where cgo is on and go-fltk ships FLTK for the
+platform: macOS, Linux and OpenBSD on amd64 and arm64 (Linux on arm too), and
+Windows on amd64. go-fltk brings FLTK already compiled, so a C compiler is all
+it takes. Anywhere else, cross-compiles and `make static` included, `require
+"gui"` still works but showing a window says the build has no FLTK.
 
 The module is self-contained: `go.mod` plus a one-line `go.work` (`use .`) that
 keeps it out of any workspace defined in a parent directory. Copy the folder
@@ -174,6 +183,85 @@ Vorbis play, on eight channels with separate looping music.
 
 In the editor, the Run menu's "Run with" setting decides what `F5` does:
 `tlua`, a console window, or love2d.
+
+## Desktop GUI
+
+`require "gui"` builds windows out of forms and controls, VB-style:
+
+```lua
+#!/usr/bin/env tlua
+local gui = bootgui()            -- this program is a desktop application
+
+local form = gui.Form { caption = "Hello", width = 300, height = 120 }
+local name = form:TextBox { left = 16, top = 16, width = 268 }
+form:Button {
+  caption = "Greet", left = 16, top = 60,
+  onClick = function() gui.msgbox("Hello, " .. name.text .. "!") end,
+}
+form:show()
+```
+
+`bootgui()` does for a desktop application what `boot()` does for a game.
+`form:show()` puts the form up and returns, and once the file has run, the
+program lives until its last form is closed. Without `bootgui()`, `form:show()`
+waits for that form to close. That works from any script, from `-e` and at
+the prompt.
+
+What there is:
+
+- **Controls:** Label, Button, TextBox (single, multi-line, password and
+  read-only), CheckBox, RadioButton, ComboBox, ListBox, Tree, Table, Slider,
+  Spinner, ProgressBar, Image and Canvas.
+- **Containers:** Frame, and Tabs with their Pages, plus a menu bar with
+  shortcuts.
+- **Dialogs:** message and input boxes, the system's file choosers, and modal
+  forms of your own.
+- **Also:** timers, the clipboard, drag and drop in and out, key presses,
+  colours and fonts, and resizing.
+- **Reading properties:** properties are read from the screen, so
+  `name.text` is what was typed. A handler gets its control as `self`, and an
+  error in one is reported like any other.
+
+A **control of your own** is a function that builds it out of these, named
+with `gui.define`. After that it is made and used like the built-in ones:
+
+```lua
+gui.define {
+  name = "Rating",
+  events = { "onChange" },
+  build = function(parent, opts)
+    local c = parent:Canvas { width = 120, height = 24 }
+    c.value = opts.value or 0
+    function c:onDraw(g)
+      for i = 1, 5 do
+        g:color(i <= self.value and "#f0b400" or "#d0d0d0")
+        g:disc(i * 24 - 12, 12, 10)
+      end
+    end
+    function c:onMouseDown(x)
+      self.value = math.floor(x / 24) + 1     -- assigning redraws it
+      self:fire("onChange", self.value)
+    end
+    return c
+  end,
+}
+
+form:Rating { left = 16, top = 100, value = 3, onChange = function(self, n) print(n) end }
+```
+
+A drawn control like this one is a Canvas with `onDraw` and the mouse
+handlers. A composite one is a Frame holding other controls, wired together
+in `build`; the colour picker in `examples/gui/custom.lua` is one.
+`self:fire` raises the control's own events. Fields of its own hold its
+state, and functions among them serve as its methods.
+
+[docs/gui.md](docs/gui.md) describes all of it. `examples/gui/kitchensink.lua`
+uses every control, and `examples/gui/custom.lua` defines two of its own.
+
+```sh
+tlua examples/gui/kitchensink.lua
+tlua examples/gui/custom.lua
+```
 
 ## The editor
 
@@ -640,10 +728,13 @@ internal/lsp/      a small Language Server Protocol client
 internal/pico/     the fantasy console: framebuffer, palette, drawing, font
 internal/picolua/  that console's Lua API
 internal/game/     the window: Ebitengine, the frame loop, input
+internal/gui/      the desktop GUI: the gui module, and FLTK under it
 docs/pico.md       the console API, written out
+docs/gui.md        the gui module, written out
+docs/gui-progress.md  what the GUI has, and what it does not yet
 docs/future.md     what is not here yet, and where it would go
 library/pico.lua   the same API declared for lua-language-server
-examples/          hello.lua, app/ to fuse, and pico/ for the console
+examples/          hello.lua, app/ to fuse, pico/ for the console, gui/ for the desktop
 third_party/       gopher-lua, patched; PATCHES.md says how
 bin/               build output (git-ignored)
 ```
@@ -689,7 +780,17 @@ bin/               build output (git-ignored)
 | [internal/picolua/stdlib.go](internal/picolua/stdlib.go) | `flr`, `rnd`, `add`, `all`, `split` and the rest |
 | [internal/game/game.go](internal/game/game.go) | the `play` subcommand: loading and starting a program |
 | [internal/game/app.go](internal/game/app.go) | the frame loop, and fitting the picture to the window |
+| [internal/gui/boot.go](internal/gui/boot.go) | `bootgui()`, and the event loop that runs after the script |
+| [internal/gui/module.go](internal/gui/module.go) | the gui module: kinds, properties, events, the object tree |
+| [internal/gui/custom.go](internal/gui/custom.go) | `gui.define`, for controls written in Lua |
+| [internal/gui/dialogs.go](internal/gui/dialogs.go) | message and input boxes, file choosers, the clipboard, timers |
+| [internal/gui/tree.go](internal/gui/tree.go) | a Tree's items as the lines it shows |
+| [internal/gui/fltk.go](internal/gui/fltk.go) | putting forms on screen with FLTK, and the dialogs |
+| [internal/gui/fltk_more.go](internal/gui/fltk_more.go) | events, drag and drop, Tree, Table and Canvas |
+| [internal/gui/nofltk.go](internal/gui/nofltk.go) | what stands in where tlua is built without FLTK |
+| [internal/gui/fltkinput/input.go](internal/gui/fltkinput/input.go) | synthetic input for the GUI tests |
 
 Tests sit beside what they cover: unit tests in each `internal` package, and
 end-to-end tests in [cmd/tlua](cmd/tlua/) that build the binary and drive it as
-a user would.
+a user would. The GUI's tests that put windows on screen and drive them with
+synthetic input only run under `make test-gui`.

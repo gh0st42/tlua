@@ -1,7 +1,7 @@
 BINARY := bin/tlua
 PKG    := ./cmd/tlua
 
-.PHONY: all build static test fmt vet clean
+.PHONY: all build static test test-gui fmt vet clean
 all: build
 
 build:
@@ -13,6 +13,12 @@ static:
 
 test:
 	go test ./...
+
+# The GUI tests open windows and drive them with synthetic input, so they
+# are kept out of plain `make test`. Typing elsewhere while they run can
+# get in their way.
+test-gui:
+	TLUA_GUI_TESTS=1 go test -count=1 ./internal/gui
 
 fmt:
 	gofmt -w .
