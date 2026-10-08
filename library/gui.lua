@@ -24,6 +24,7 @@ function bootgui() end
 -- What every object has.
 
 ---@class gui.Object
+---@field name string what its form calls it: frm.<name>; unique on the form
 ---@field caption string
 ---@field left integer measured from the container's corner
 ---@field top integer
@@ -59,11 +60,17 @@ function Object:fire(event, ...) end
 --- Gives it the keyboard.
 function Object:focus() end
 
+--- The control of that name on this object's form, or nil.
+---@param name string
+---@return gui.Object?
+function Object:find(name) end
+
 --- Asks for it to be drawn again: a Canvas whose picture has changed, mostly.
 function Object:redraw() end
 
 --- What every object can be made with.
 ---@class gui.Options
+---@field name? string
 ---@field caption? string
 ---@field left? integer
 ---@field top? integer
@@ -632,7 +639,55 @@ function gui.every(seconds, fn) end
 ---@class gui.Definition
 ---@field name string a capital first, like the built-in kinds
 ---@field events? string[] events of its own, as "onChange"
+---@field props? table<string, gui.PropInfo> properties of its own: offered by a designer, kept in a layout, reported by gui.kinds
 ---@field build fun(parent: gui.Container, opts: table<string, any>): gui.Object makes the control in parent and returns it
+
+---@alias gui.PropType "string"|"number"|"integer"|"boolean"|"color"|"choice"|"file"|"name"|"list"|"rows"|"tree"|"menu"
+
+---@class gui.PropInfo
+---@field type gui.PropType
+---@field default? any
+---@field choices? string[] for a choice
+---@field fixed? true only given when the control is made
+
+---@class gui.KindInfo
+---@field props table<string, gui.PropInfo>
+---@field events string[]
+---@field holds string[] the kinds it can be made inside it
+---@field width? integer its size when made without one
+---@field height? integer
+---@field defined? true made with gui.define
+
+--- What a part of a layout is: a kind, its properties, and its controls in
+--- the array part, each written the same way.
+---@class gui.Layout: gui.Options
+---@field kind string
+---@field [integer] gui.Layout
+
+--- Builds what a layout describes and returns its top: a Form, unless parent
+--- is given to build it in. A string is the path of a file returning a
+--- layout; without .lua at the end it means its .form.lua file, looked for
+--- next to the script that names it. Layout files run with nothing in scope.
+---@param layout string|gui.Layout
+---@param parent? gui.Container
+---@return gui.Form|gui.Object
+function gui.load(layout, parent) end
+
+--- The layout of an object as it stands, from what is on screen: only what
+--- differs from the defaults, and no handlers.
+---@param obj gui.Object
+---@return gui.Layout
+function gui.dump(obj) end
+
+--- Writes an object's layout to a Lua file, in a steady order.
+---@param obj gui.Object
+---@param path string
+function gui.save(obj, path) end
+
+--- Every kind, built in or defined, with its properties, events and what it
+--- holds. A fresh table each time.
+---@return table<string, gui.KindInfo>
+function gui.kinds() end
 
 --- Names a control written in Lua. After it, `container:Name{...}` and
 --- `gui.Name{...}` make one; the table it is made from goes to build, and

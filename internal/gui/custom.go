@@ -28,6 +28,16 @@ import (
 type customKind struct {
 	events []string
 	build  *lua.LFunction
+	// props are the properties it was defined with: what gui.kinds reports,
+	// what a layout keeps, and what is set on the control when it is made
+	// with them.
+	props map[string]customProp
+}
+
+type customProp struct {
+	typ     string
+	choices []string
+	def     lua.LValue
 }
 
 func (a *app) define(L *lua.LState) int {
@@ -50,7 +60,36 @@ func (a *app) define(L *lua.LState) int {
 			events = append(events, e)
 		}
 	}
-	a.custom[name] = &customKind{events: events, build: build}
+	props := map[string]customProp{}
+	if t, ok := spec.RawGetString("props").(*lua.LTable); ok {
+		var bad string
+		t.ForEach(func(k, v lua.LValue) {
+			pn, ok := k.(lua.LString)
+			desc, isTable := v.(*lua.LTable)
+			if !ok || !isTable {
+				bad = fmt.Sprintf("props are written name = {type = ..., default = ...}, not %s = %s", k, v.Type())
+				return
+			}
+			p := customProp{typ: lua.LVAsString(desc.RawGetString("type")), def: desc.RawGetString("default")}
+			if p.typ == "" {
+				p.typ = propType(string(pn), p.def).typ
+			}
+			if c, ok := desc.RawGetString("choices").(*lua.LTable); ok {
+				for i := 1; i <= c.Len(); i++ {
+					p.choices = append(p.choices, lua.LVAsString(c.RawGetInt(i)))
+				}
+			}
+			if _, clash := common[string(pn)]; clash || pn == "width" || pn == "height" || isStyle(string(pn)) {
+				bad = fmt.Sprintf("%s is a property every control has; a defined control's props are its own", pn)
+				return
+			}
+			props[string(pn)] = p
+		})
+		if bad != "" {
+			L.RaiseError("gui.define: %s", bad)
+		}
+	}
+	a.custom[name] = &customKind{events: events, build: build, props: props}
 	// gui.Rating{...} goes where gui.Button{...} would.
 	mod := L.Get(lua.UpvalueIndex(1)).(*lua.LTable)
 	mod.RawSetString(name, L.NewFunction(func(L *lua.LState) int {
@@ -115,6 +154,8 @@ func (a *app) makeCustom(L *lua.LState, name string, parent *guiObject, opts *lu
 		switch {
 		case key == "width" || key == "height" || isCommon:
 			err = obj.set(L, string(key), v)
+		case ck.props[string(key)].typ != "":
+			err = obj.set(L, string(key), v)
 		case looksLikeEvent(string(key)) && obj.hasEvent(string(key)):
 			err = obj.set(L, string(key), v)
 		}
@@ -154,4 +195,13 @@ func (o *guiObject) displayKind() string {
 		return o.custom
 	}
 	return o.kind
+}
+
+func isStyle(name string) bool {
+	for _, s := range styleProps {
+		if s == name {
+			return true
+		}
+	}
+	return false
 }

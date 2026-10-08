@@ -250,6 +250,11 @@ gui.define {
 form:Rating { left = 16, top = 100, value = 3, onChange = function(self, n) print(n) end }
 ```
 
+A form can also live in a file, as a layout table that `gui.load` builds and
+`gui.save` writes, with its controls reached by name: `frm.cmdGreet`.
+`examples/gui/layout` is laid out that way, which is how a form designer will
+write programs.
+
 A drawn control like this one is a Canvas with `onDraw` and the mouse
 handlers. A composite one is a Frame holding other controls, wired together
 in `build`; the colour picker in `examples/gui/custom.lua` is one.

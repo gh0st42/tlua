@@ -40,6 +40,7 @@ Done
 - [x] New kinds: Menu, CheckBox, RadioButton, ComboBox, ListBox, Slider, Spinner, ProgressBar, Image, Frame, Tabs/Page. Password/read-only TextBox, default Button. Module: openfile, savefile, choosedir, after, every, showModal. Properties: tooltip, color, textColor, font, fontSize, align. Form: onKey, onResize.
 - [x] docs/gui.md; examples README.
 - [x] library/gui.lua declares the module for lua-language-server, as library/pico.lua does the console; the examples check clean against it. Unknown keys in the table a control is made from are not flagged; lua-language-server does not check table literals for those.
+- [x] Forms in files (phase 1 of docs/rad-plan.md): control names reached as `frm.<name>` and `find`, unique per form; `gui.load` from a table or a sandboxed layout file (beside the calling script, or in a fused archive); `gui.dump` from what is on screen, defaults left out; `gui.save` in a steady order that round-trips; `gui.kinds()` with property types, defaults, fixed flags and choices; `gui.define` takes `props`. `examples/gui/layout` is two forms written this way.
 - [x] Fused GUI programs: `runFused` installs `bootgui()` and runs the GUI loop, and images (Image and `g:image`) are read from the archive before the disk.
 
 Still open

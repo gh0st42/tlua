@@ -81,7 +81,7 @@ Controls added after a form is shown appear straight away.
 | `Frame`       | holds controls inside a captioned border             | — |
 | `Tabs`        | holds Pages, made with `tabs:Page{caption = ...}`; `selected` | `onChange` |
 
-Every object also has `caption`, `left`, `top`, `width`, `height`, `visible`,
+Every object also has `name` (see [Forms in files](#forms-in-files)), `caption`, `left`, `top`, `width`, `height`, `visible`,
 `enabled` and `tooltip`, plus `color`, `textColor`, `font` (`"sans"`,
 `"serif"`, `"mono"`) and `fontSize`. Colours are `"#rrggbb"`, `"#rgb"`, or one
 of black, white, gray, red, green, blue, yellow, orange and purple. A script
@@ -292,6 +292,11 @@ How it works:
   `Rating` in errors and in `tostring`.
 - **Raising its events.** `self:fire("onChange", ...)` calls whatever handler
   the user gave. Naming an event the control was not defined with is an error.
+- **Its properties.** `props = { value = { type = "integer", default = 0 } }`
+  in the definition declares the properties a designer offers, a layout keeps,
+  and `gui.kinds()` reports. They take the types above. Given when the control
+  is made, they are set on it after `build`. A prop cannot be one every
+  control has already.
 - **Its own state.** State lives in fields of its own (`c.value`). A drawn
   control reads them in `onDraw`, so assigning one from outside redraws it.
 - **Methods.** A field holding a function serves as a method: write
@@ -309,6 +314,93 @@ There are two common shapes:
   the parts and over the Frame itself, which is what the user holds.
 
 `examples/gui/custom.lua` defines one of each.
+
+## Forms in files
+
+A form can be written down as a **layout**: a Lua table with the form's kind
+and properties, and its controls, each written the same way, in its array
+part. A designer writes these, and they can be written by hand too:
+
+```lua
+-- forms/Main.form.lua
+return { kind = "Form", name = "Main", caption = "Hello", width = 320, height = 160,
+  { kind = "Label", name = "lblName", caption = "Name", left = 16, top = 16, width = 60 },
+  { kind = "TextBox", name = "txtName", left = 80, top = 16, width = 224 },
+  { kind = "Button", name = "cmdGreet", caption = "Greet", left = 204, top = 112, width = 100 },
+}
+```
+
+The code that goes with it loads the layout and wires up its controls by
+name:
+
+```lua
+-- forms/Main.lua
+local gui = require "gui"
+local frm = gui.load "Main"           -- forms/Main.form.lua, beside this file
+
+function frm.cmdGreet:onClick()
+  gui.msgbox("Hello, " .. frm.txtName.text .. "!")
+end
+
+return frm
+```
+
+`examples/gui/layout` is a program of two forms written this way.
+
+### Names
+
+- **Reaching controls.** A control's `name` makes it a field of its form:
+  `frm.cmdGreet`, at any depth (a control in a Frame or on a Tabs page is the
+  form's too). `obj:find("cmdGreet")` finds it from anywhere on the form, and
+  returns nil when there is none.
+- **Unique per form.** Names are unique within a form, and a control moved to
+  another form takes its name along.
+- **Valid names.** A name is a Lua identifier, and it cannot be something
+  `frm.<name>` already means: a property, a method, a kind, an event
+  (`onX`), or a Lua keyword. Assigning a field of the script's own to a
+  control's name is refused too.
+
+### `gui.load`, `gui.dump` and `gui.save`
+
+- **`gui.load(layout [, parent])`** builds what a layout describes and
+  returns its top.
+  - `layout` is a table, or the path of a file returning one. A path without
+    `.lua` at the end means its `.form.lua` file.
+  - A path is looked for next to the script that names it, and in a fused
+    program's packed files.
+  - A layout file runs with nothing in scope: it is data, and cannot call
+    anything.
+  - Its top is a Form, unless `parent` is given to build it in.
+  - An error says which part of the layout it is about:
+    `gui.load forms/Main.form.lua, at fraOpts.chkBold: font must be ...`.
+- **`gui.dump(obj)`** is the layout of an object as it stands. Values are
+  read from the screen, so what the user typed or ticked is in it.
+  - Only what differs from the defaults is written.
+  - Handlers and fields of the script's own are left out; they are code.
+  - An Image's `file` is written as the script gave it.
+- **`gui.save(obj, path)`** writes that layout as a Lua file, in a steady
+  order: kind, name, caption, position and size first, then the rest
+  alphabetically. Saving what was loaded gives back the same file.
+
+### `gui.kinds()`
+
+`gui.kinds()` describes every kind, built in or defined, as a fresh table:
+
+```lua
+local k = gui.kinds().Label
+k.props.align   --> { type = "choice", default = "left", choices = { "left", "center", "right" } }
+k.props.color   --> { type = "color" }
+k.events        --> { "onDrop", "onDrag" }
+k.width, k.height, k.holds
+```
+
+- **Property types:** `string`, `number`, `integer`, `boolean`, `color`,
+  `choice` (with `choices`), `file`, `name`, `list`, `rows` (a Table's),
+  `tree` (a Tree's items) and `menu` (a Menu's).
+- **Fixed properties:** `fixed = true` marks a property that can only be given
+  when the control is made.
+- **Defined controls** say `defined = true`. They list the placement
+  properties every control has, plus the `props` they were defined with.
 
 ## Packing an application
 

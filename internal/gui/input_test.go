@@ -92,6 +92,14 @@ func (s *scene) pump() {
 }
 
 func (s *scene) obj(name string) *guiObject {
+	// "frm.txtName" is a control found by name on a global form.
+	if form, control, ok := strings.Cut(name, "."); ok {
+		if f, ok := toObject(s.L.GetGlobal(form)); ok {
+			if c, ok := f.names[control]; ok {
+				return c
+			}
+		}
+	}
 	o, ok := toObject(s.L.GetGlobal(name))
 	if !ok {
 		s.t.Errorf("%s is not a gui object", name)
@@ -586,5 +594,21 @@ form:show()`, pic), func(s *scene) {
 		}
 		s.lua(fmt.Sprintf(`pic.file = %q`, pic))
 		s.pump()
+	})
+}
+
+func TestLoadedFormsWorkAndDumpWhatIsOnScreen(t *testing.T) {
+	onScreen(t, `
+frm = gui.load{ kind = "Form", name = "Main", width = 300, height = 150,
+  { kind = "TextBox", name = "txtName", left = 10, top = 10, width = 150 },
+  { kind = "Button", name = "cmdGo", caption = "Go", left = 10, top = 50 },
+}
+function frm.cmdGo:onClick() went = frm.txtName.text end
+frm:show()`, func(s *scene) {
+		s.focus("frm.txtName")
+		in.Type("Ada")
+		in.Click(s.middle("frm.cmdGo"))
+		s.expect(`went == "Ada"`)
+		s.expect(`gui.dump(frm)[1].text == "Ada"`)
 	})
 }

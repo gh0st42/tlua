@@ -1,6 +1,8 @@
 # A VB6-style form designer: plan
 
-Status: proposed, 2026-10-08. Nothing here is built yet.
+Status: Phase 1 is built (2026-10-08): names, `gui.load`, `gui.dump`,
+`gui.save` and `gui.kinds`, described in docs/gui.md under "Forms in files".
+The rest is proposed.
 
 ## What it is
 
@@ -71,7 +73,7 @@ return {
 ```lua
 -- forms/Main.lua — yours; the designer adds stubs at the end
 local gui = require "gui"
-local frm = gui.load "forms/Main"
+local frm = gui.load "Main"   -- forms/Main.form.lua, beside this file
 
 function frm.cmdGreet:onClick()
   gui.msgbox("Hello, " .. frm.txtName.text .. "!")
@@ -135,7 +137,12 @@ piece to build.
 
 Each phase ends with something usable and tested.
 
-### Phase 1: forms as files (runtime only: R1–R3)
+### Phase 1: forms as files (runtime only: R1–R3) — done
+
+Built as planned, plus `gui.save`, which writes a layout in a steady order,
+so that saving what was loaded gives the same file. A designer needs that.
+`gui.load` paths resolve beside the calling script (and in a fused
+program's archive), so a form's code says `gui.load "Main"`.
 
 - **Build:** `gui.load`, `gui.dump`, names and `gui.kinds`, with
   `examples/gui/hello` rewritten as a layout file plus code.

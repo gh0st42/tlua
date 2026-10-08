@@ -9,5 +9,7 @@ need a tlua built with cgo (`make build`, not `make static`).
 - `kitchensink.lua` - every control, the menu, tabs, a tree and a table, a
   canvas to paint on, dialogs, file choosers, the clipboard, drag and drop,
   timers, keys, resizing, colours and fonts, a modal form, and a close guard.
+- `layout/` - a program of two forms laid out in files (`forms/*.form.lua`)
+  and wired up by name in code (`forms/*.lua`), as a designer would write it.
 - `custom.lua` - controls of your own with `gui.define`: a star rating drawn
   on a Canvas, and a colour picker made of sliders in a Frame.

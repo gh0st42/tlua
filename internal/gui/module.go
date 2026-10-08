@@ -163,6 +163,7 @@ var kinds = map[string]*kind{
 
 // common are the properties every object has.
 var common = map[string]lua.LValue{
+	"name":    lua.LString(""),
 	"caption": lua.LString(""),
 	"visible": lua.LTrue,
 	"enabled": lua.LTrue,
@@ -188,6 +189,7 @@ func init() {
 		"focus":     guiFocus,
 		"redraw":    guiRedraw,
 		"fire":      guiFire,
+		"find":      guiFind,
 	}
 }
 
@@ -241,6 +243,11 @@ type guiObject struct {
 	// the events it was defined with.
 	custom string
 	extra  []string
+	// names are a Form's controls by name, for frm.<name> and find.
+	names map[string]*guiObject
+	// fileGiven is an Image's file as the script wrote it, for a layout;
+	// the file property itself is where it was found.
+	fileGiven string
 }
 
 const guiObjectType = "tlua.gui.object"
@@ -275,6 +282,10 @@ func (a *app) open(L *lua.LState) int {
 		"savefile":  a.fileFunc("save"),
 		"choosedir": a.fileFunc("dir"),
 		"clipboard": a.clipboard,
+		"load":      a.load,
+		"dump":      a.dump,
+		"save":      a.save,
+		"kinds":     a.kindsTable,
 		"after":     a.timerFunc(false),
 		"every":     a.timerFunc(true),
 	})
@@ -398,6 +409,12 @@ func (o *guiObject) adopt(child *guiObject) error {
 			return fmt.Errorf("gui: a %s cannot hold itself", child.kind)
 		}
 	}
+	oldForm, newForm := child.form(), o.form()
+	if oldForm != newForm {
+		if err := fitNames(newForm, child); err != nil {
+			return err
+		}
+	}
 	if old := child.parent; old != nil {
 		for i, c := range old.children {
 			if c == child {
@@ -408,6 +425,10 @@ func (o *guiObject) adopt(child *guiObject) error {
 	}
 	child.parent = o
 	o.children = append(o.children, child)
+	if oldForm != newForm {
+		unregister(oldForm, child)
+		register(newForm, child)
+	}
 	if child.kind == "RadioButton" && propBool(child, "checked") {
 		// Settles which one of its new siblings is on.
 		if err := child.set(o.app.L, "checked", lua.LTrue); err != nil {
@@ -506,6 +527,26 @@ func (o *guiObject) set(L *lua.LState, name string, value lua.LValue) error {
 	}
 	if alias, ok := o.spec.aliases[name]; ok {
 		name = alias
+	}
+	if o.kind == "Form" && o.names[name] != nil {
+		return fmt.Errorf("gui: %s is a control on this form", name)
+	}
+	switch name {
+	case "name":
+		s, ok := value.(lua.LString)
+		if !ok && value != lua.LNil {
+			return fmt.Errorf("gui: a name is a string, not a %s", value.Type())
+		}
+		if o.kind != "Form" {
+			if err := o.rename(string(s)); err != nil {
+				return err
+			}
+		} else if err := o.checkName(string(s)); err != nil {
+			return err
+		}
+		value = s
+	case "file":
+		o.fileGiven = lua.LVAsString(value)
 	}
 	if o.widget != nil {
 		for _, f := range o.spec.fixed {
@@ -683,6 +724,10 @@ func guiIndex(L *lua.LState) int {
 	}
 	if alias, ok := obj.spec.aliases[key]; ok {
 		key = alias
+	}
+	if c, ok := obj.names[key]; ok {
+		L.Push(c.ud)
+		return 1
 	}
 	L.Push(obj.get(key))
 	return 1
