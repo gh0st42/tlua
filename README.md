@@ -138,7 +138,8 @@ local coin = sprite[[
 `hello.lua` up to a snake game, a platformer with a tile map, a painting
 program and a level drawn in Tiled. [library/pico.lua](library/pico.lua)
 declares it for lua-language-server, so an editor completes these names and
-shows what they take; the `.luarc.json` at the root points at it.
+shows what they take; the `.luarc.json` at the root points at it, and at
+[library/gui.lua](library/gui.lua) for the desktop GUI.
 [docs/future.md](docs/future.md) is what is not there yet.
 
 Drawing happens on an indexed framebuffer, one byte a pixel, which is scaled to
@@ -255,12 +256,15 @@ in `build`; the colour picker in `examples/gui/custom.lua` is one.
 `self:fire` raises the control's own events. Fields of its own hold its
 state, and functions among them serve as its methods.
 
-[docs/gui.md](docs/gui.md) describes all of it. `examples/gui/kitchensink.lua`
+[docs/gui.md](docs/gui.md) describes all of it, and
+[library/gui.lua](library/gui.lua) declares it for lua-language-server, so an
+editor completes the controls, their properties and handlers. `examples/gui/kitchensink.lua`
 uses every control, and `examples/gui/custom.lua` defines two of its own.
 
 ```sh
 tlua examples/gui/kitchensink.lua
 tlua examples/gui/custom.lua
+tlua fuse -o myapp myapp/          # one executable, images and all
 ```
 
 ## The editor
@@ -734,6 +738,7 @@ docs/gui.md        the gui module, written out
 docs/gui-progress.md  what the GUI has, and what it does not yet
 docs/future.md     what is not here yet, and where it would go
 library/pico.lua   the same API declared for lua-language-server
+library/gui.lua    the gui module declared for lua-language-server
 examples/          hello.lua, app/ to fuse, pico/ for the console, gui/ for the desktop
 third_party/       gopher-lua, patched; PATCHES.md says how
 bin/               build output (git-ignored)

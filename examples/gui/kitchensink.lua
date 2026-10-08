@@ -328,10 +328,12 @@ function canvas:onMouseDrag(x, y)
   self:redraw()
 end
 function canvas:onMouseMove(x, y) say("Canvas %d, %d", x, y) end
-function canvas:onDrop(text)
+-- Text dropped or pasted on the canvas is stamped on it, a line at a time.
+local function stamp(text)
   stamps[#stamps + 1] = { text = text:gsub("\n.*", ""), x = 20, y = 20 + 24 * #stamps, color = ink }
-  self:redraw()
+  canvas:redraw()
 end
+function canvas:onDrop(text) stamp(text) end
 
 draw:Label { caption = "Ink", left = 464, top = 12, width = 40 }
 draw:ComboBox {
@@ -347,7 +349,7 @@ draw:Button {
 }
 draw:Button {
   caption = "Paste text", left = 464, top = 84, width = 148,
-  onClick = function() canvas:onDrop(gui.clipboard()) end,
+  onClick = function() stamp(gui.clipboard()) end,
 }
 
 -- Drop anything here: text, or files from the desktop, one path per line.

@@ -4,6 +4,7 @@ package gui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
@@ -143,13 +144,41 @@ func group(o *guiObject) *fltk.Group {
 	return nil
 }
 
-// forget drops the widgets of an object and everything in it, after a build
-// that failed part of the way through.
+// forget drops the widgets of an object and everything in it, freeing what
+// FLTK would not free with them: the images, which widgets only borrow, and
+// a Canvas's drawing handler, which go-fltk only lets go of when the Canvas
+// itself is destroyed. The caller destroys the window.
 func forget(o *guiObject) {
-	o.widget = nil
+	switch st := o.state.(type) {
+	case *canvas:
+		for _, img := range st.images {
+			img.Destroy()
+		}
+	case scalable:
+		st.Destroy()
+	}
+	if b, ok := o.widget.(*fltk.Box); ok && o.kind == "Canvas" {
+		b.Destroy()
+	}
+	o.widget, o.state = nil, nil
+	o.mouse.armed, o.mouse.dropping = false, false
 	for _, c := range o.children {
 		forget(c)
 	}
+}
+
+// releaseForm frees a closed form's window from the event loop, outside the
+// callback that closed it, unless it has been shown again by then.
+func releaseForm(f *guiObject, gone func()) {
+	fltk.AddTimeout(0, func() {
+		win := window(f)
+		if win == nil || win.IsShown() {
+			return
+		}
+		forget(f)
+		win.Destroy()
+		gone()
+	})
 }
 
 func buildForm(f *guiObject) error {
@@ -669,14 +698,12 @@ func setImage(o *guiObject, path string) error {
 	if !ok {
 		return nil
 	}
-	if path == "" {
-		b.SetImage(nil)
-		b.Redraw()
-		return nil
-	}
-	img, err := loadImage(path)
-	if err != nil {
-		return fmt.Errorf("gui: cannot load image %s: %v", path, err)
+	var img scalable = blank()
+	if path != "" {
+		var err error
+		if img, err = loadImage(o.app, path); err != nil {
+			return fmt.Errorf("gui: cannot load image %s: %v", path, err)
+		}
 	}
 	// Shrunk to fit, and with fit set grown to fit too, keeping its shape.
 	fit := propBool(o, "fit")
@@ -684,8 +711,34 @@ func setImage(o *guiObject, path string) error {
 		img.Scale(b.W(), b.H(), true, fit)
 	}
 	b.SetImage(img)
+	// The picture it replaces is the Image's own, and nothing else's.
+	if old, ok := o.state.(scalable); ok && old != blankImage {
+		old.Destroy()
+	}
+	o.state = img
+	if img == blankImage {
+		o.state = nil
+	}
 	b.Redraw()
 	return nil
+}
+
+// blankImage is what an Image with no file shows: one transparent pixel,
+// since a widget cannot be told to show no image at all.
+var (
+	blankImage  scalable
+	blankPixels = []uint8{0, 0, 0, 0}
+)
+
+func blank() scalable {
+	if blankImage == nil {
+		img, err := fltk.NewRgbImage(blankPixels, 1, 1, 4)
+		if err != nil {
+			panic(err)
+		}
+		blankImage = img
+	}
+	return blankImage
 }
 
 type scalable interface {
@@ -694,12 +747,18 @@ type scalable interface {
 	H() int
 	Scale(w, h int, proportional, canExpand bool)
 	Draw(x, y, w, h int)
+	Destroy()
 }
 
 // loadImage reads an image of its own. FLTK's shared images are one per
 // path, so scaling one for a control would scale it for every control
-// showing the same file.
-func loadImage(path string) (scalable, error) {
+// showing the same file. A fused program's images come out of its archive.
+func loadImage(a *app, path string) (scalable, error) {
+	if a.read != nil {
+		if data, err := a.read(path); err == nil {
+			return imageFromData(path, data)
+		}
+	}
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".png":
 		return fltk.NewPngImageLoad(path)
@@ -711,6 +770,34 @@ func loadImage(path string) (scalable, error) {
 		return fltk.NewSvgImageLoad(path)
 	}
 	return fltk.NewSharedImageLoad(path)
+}
+
+func imageFromData(path string, data []byte) (scalable, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".png":
+		return fltk.NewPngImageFromData(data)
+	case ".jpg", ".jpeg":
+		return fltk.NewJpegImageFromData(data)
+	case ".bmp":
+		return fltk.NewBmpImageFromData(data)
+	case ".svg":
+		return fltk.NewSvgImageFromString(string(data))
+	}
+	// FLTK reads the other formats from files only.
+	tmp, err := os.CreateTemp("", "tlua-image-*"+ext)
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return nil, err
+	}
+	if err := tmp.Close(); err != nil {
+		return nil, err
+	}
+	return fltk.NewSharedImageLoad(tmp.Name())
 }
 
 // readProp reads what may have changed on screen since the script set it.

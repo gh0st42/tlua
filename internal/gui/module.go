@@ -199,7 +199,8 @@ type app struct {
 	// lastForm is where gui.Button{} and the like go when they are given no
 	// parent: the Form made most recently.
 	lastForm *guiObject
-	forms    []*guiObject
+	// forms are the forms with a window: shown, or closed and not yet freed.
+	forms []*guiObject
 	// err is the first error raised by a handler. It stops whatever event
 	// loop is running, and is reported from where that loop was started.
 	err error
@@ -209,6 +210,9 @@ type app struct {
 	methods map[string]*lua.LFunction
 	// custom are the controls the script defined with gui.define.
 	custom map[string]*customKind
+	// read is where a fused program's own files come from, archive first;
+	// nil for a program on disk.
+	read func(string) ([]byte, error)
 }
 
 type guiObject struct {
@@ -347,7 +351,6 @@ func (a *app) make(L *lua.LState, name string, spec *kind, opts *lua.LTable, par
 
 	if name == "Form" {
 		a.lastForm = obj
-		a.forms = append(a.forms, obj)
 	} else if parent != nil {
 		if err := parent.adopt(obj); err != nil {
 			L.RaiseError("%s", err.Error())
@@ -514,7 +517,7 @@ func (o *guiObject) set(L *lua.LState, name string, value lua.LValue) error {
 			return fmt.Errorf("gui: grow can only be given before the form is shown")
 		}
 	}
-	value, err := checkProp(L, name, value)
+	value, err := o.app.checkProp(L, name, value)
 	if err != nil {
 		return err
 	}
@@ -549,7 +552,7 @@ func (o *guiObject) set(L *lua.LState, name string, value lua.LValue) error {
 // checkProp catches values the backend could only get wrong, and settles
 // what can be settled once: a relative image path is found beside the script
 // that gave it.
-func checkProp(L *lua.LState, name string, value lua.LValue) (lua.LValue, error) {
+func (a *app) checkProp(L *lua.LState, name string, value lua.LValue) (lua.LValue, error) {
 	switch name {
 	case "items", "columns", "rows":
 		if _, ok := value.(*lua.LTable); !ok {
@@ -579,18 +582,32 @@ func checkProp(L *lua.LState, name string, value lua.LValue) (lua.LValue, error)
 			return nil, fmt.Errorf("gui: align must be \"left\", \"center\" or \"right\", not %q", lua.LVAsString(value))
 		}
 	case "file":
-		return lua.LString(besideCaller(L, lua.LVAsString(value))), nil
+		return lua.LString(a.besideCaller(L, lua.LVAsString(value))), nil
 	}
 	return value, nil
 }
 
+// exists says whether a program can read a file: from its archive when it
+// is fused, or from the disk.
+func (a *app) exists(path string) bool {
+	if _, err := os.Stat(path); err == nil {
+		return true
+	}
+	if a.read != nil {
+		if _, err := a.read(path); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // besideCaller finds a relative path next to the script that named it, when
 // it is not where the current directory would put it.
-func besideCaller(L *lua.LState, path string) string {
+func (a *app) besideCaller(L *lua.LState, path string) string {
 	if path == "" || filepath.IsAbs(path) {
 		return path
 	}
-	if _, err := os.Stat(path); err == nil {
+	if a.exists(path) {
 		return path
 	}
 	for level := 1; level < 8; level++ {
@@ -609,7 +626,7 @@ func besideCaller(L *lua.LState, path string) string {
 			continue
 		}
 		candidate := filepath.Join(filepath.Dir(src), path)
-		if _, err := os.Stat(candidate); err == nil {
+		if a.exists(candidate) {
 			return candidate
 		}
 	}
@@ -749,7 +766,7 @@ func checkForm(L *lua.LState) *guiObject {
 func guiShow(L *lua.LState) int {
 	f := checkForm(L)
 	a := f.app
-	if err := buildForm(f); err != nil {
+	if err := a.build(f); err != nil {
 		L.RaiseError("%s", err.Error())
 	}
 	showWindow(f, false)
@@ -765,7 +782,7 @@ func guiShow(L *lua.LState) int {
 func guiShowModal(L *lua.LState) int {
 	f := checkForm(L)
 	a := f.app
-	if err := buildForm(f); err != nil {
+	if err := a.build(f); err != nil {
 		L.RaiseError("%s", err.Error())
 	}
 	showWindow(f, true)
@@ -822,6 +839,56 @@ func (a *app) requestClose(f *guiObject) {
 		return
 	}
 	hideWindow(f)
+	a.release(f)
+}
+
+// build puts a form's window together, if it has none, and keeps track of it.
+func (a *app) build(f *guiObject) error {
+	if err := buildForm(f); err != nil {
+		return err
+	}
+	for _, g := range a.forms {
+		if g == f {
+			return nil
+		}
+	}
+	a.forms = append(a.forms, f)
+	return nil
+}
+
+// release frees a closed form's window and everything in it, once the event
+// loop is past whatever closed it. What the user left in the controls is
+// copied back into their properties first, so the script can still read it,
+// and showing the form again builds it afresh from them.
+func (a *app) release(f *guiObject) {
+	settle(f)
+	f.props["visible"] = lua.LFalse
+	releaseForm(f, func() {
+		for i, g := range a.forms {
+			if g == f {
+				a.forms = append(a.forms[:i], a.forms[i+1:]...)
+				break
+			}
+		}
+	})
+}
+
+// settle copies what is on screen into an object's properties, and its
+// children's.
+func settle(o *guiObject) {
+	if o.widget != nil {
+		for name := range o.props {
+			if name == "visible" && o.kind == "Form" {
+				continue
+			}
+			if v, ok := readProp(o, name); ok {
+				o.props[name] = v
+			}
+		}
+	}
+	for _, c := range o.children {
+		settle(c)
+	}
 }
 
 // fire calls one of an object's handlers with the object itself as self. An

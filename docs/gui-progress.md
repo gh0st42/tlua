@@ -39,6 +39,8 @@ Done
 - [x] `show()` twice reuses the window; controls added to a shown form appear.
 - [x] New kinds: Menu, CheckBox, RadioButton, ComboBox, ListBox, Slider, Spinner, ProgressBar, Image, Frame, Tabs/Page. Password/read-only TextBox, default Button. Module: openfile, savefile, choosedir, after, every, showModal. Properties: tooltip, color, textColor, font, fontSize, align. Form: onKey, onResize.
 - [x] docs/gui.md; examples README.
+- [x] library/gui.lua declares the module for lua-language-server, as library/pico.lua does the console; the examples check clean against it. Unknown keys in the table a control is made from are not flagged; lua-language-server does not check table literals for those.
+- [x] Fused GUI programs: `runFused` installs `bootgui()` and runs the GUI loop, and images (Image and `g:image`) are read from the archive before the disk.
 
 Still open
 - [x] Real input is tested. `make test-gui` (`TLUA_GUI_TESTS=1`) opens windows and drives them through FLTK's own `Fl::handle()`, with the event fields set as a real event would set them. `internal/gui/fltkinput` reaches those by declaring the few FLTK statics it needs; go-fltk links the library. A `TestMain` serves FLTK on the main thread, which is what kept `go test` out before. The tests cover:
@@ -55,8 +57,8 @@ Still open
 - [x] The tests found a drop bug: FLTK offers a drop that nothing under the mouse took to every control in turn, and any control with `onDrop` took it, wherever it was dropped. Controls now take only drops on themselves. A form's own `onDrop` gets the rest through an invisible catcher behind its controls, because FLTK delivers a drop only to the widget that accepted it while it was dragged over.
 - [ ] Still driven by nothing: the native file choosers; menus and ComboBoxes opened with the mouse (they run a popup loop of their own); a real drag session out to another program (the test stops at the point where the system takes over).
 - [ ] Two Image controls showing one file used to share (and rescale) one FLTK shared image. They now load their own copies, but that fix has not been seen on screen.
-- [ ] Every `gui.Form{}` stays in the app's list for good, so a modal form made per click accumulates. Forms could be dropped once closed and unreferenced.
-- [ ] Replacing an Image's file does not free the previous image.
+- [x] Closed forms are freed: their windows, the images in them, and their Canvases' handlers. What the controls held is copied into their properties first, so it stays readable, and showing the form again rebuilds it. The app keeps only forms that have a window, so a modal form made per click no longer accumulates.
+- [x] Replacing an Image's file frees the previous image. Clearing it (`file = ""`) used to call `SetImage(nil)`, which go-fltk does not allow; it now shows a transparent pixel.
 - [ ] Inputs have no text size or font of their own in go-fltk, so `font`/`fontSize` change only their captions (multi-line TextBoxes do get them).
 - [x] Clipboard (`gui.clipboard`), drag and drop (`onDrop`, `onDrag` on every kind), Tree, Table, and Canvas with a drawing API and mouse events, plus `:redraw()`.
 - [ ] go-fltk's own Tree cannot report the selected or clicked item, so Tree is built on the list widget: lines indented with ▸/▾ markers. It has no icons, multiple selection or editing.

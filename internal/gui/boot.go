@@ -26,9 +26,11 @@ type Boot struct {
 }
 
 // Ready installs the gui module and bootgui() into the interpreter before
-// the script runs.
-func Ready(in *interp.Interp) *Boot {
+// the script runs. read is where a fused program's own files come from, its
+// archive before the disk; nil for a program on disk.
+func Ready(in *interp.Interp, read func(string) ([]byte, error)) *Boot {
 	b := &Boot{app: Open(in.L)}
+	b.app.read = read
 	in.L.SetGlobal("bootgui", in.L.NewFunction(func(L *lua.LState) int {
 		if b.late {
 			L.RaiseError("bootgui: too late to ask for a window; a program asks while it is running, not after")

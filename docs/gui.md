@@ -6,6 +6,10 @@ Windows/amd64. Everywhere else, `make static` included, the module still
 loads and builds forms, but showing one raises "built without FLTK".
 
 `examples/gui/kitchensink.lua` uses everything described here.
+[library/gui.lua](../library/gui.lua) declares it all for lua-language-server,
+so an editor completes the controls and their properties, and shows what each
+handler is given. The `.luarc.json` at the root of this repository points at
+it.
 
 ## Two ways to run
 
@@ -305,6 +309,23 @@ There are two common shapes:
   the parts and over the Frame itself, which is what the user holds.
 
 `examples/gui/custom.lua` defines one of each.
+
+## Packing an application
+
+`tlua fuse -o myapp myapp/` packs a GUI program into one executable, as it
+packs a game. A program that says `bootgui()` needs no flag. Its images go
+in with it: an Image's `file` and `g:image` read from the packed files before
+the disk, and a relative path is looked for next to the script that names it,
+inside the package too. The executable is the tlua it was packed with, so
+pack with a tlua built with the GUI (`make build`).
+
+## Closing and showing again
+
+Closing a form frees its window and everything in it. What the user left in
+its controls stays readable: `name.text` is still what was typed. Showing the
+form again builds it afresh from those values. So a form made for one
+question, on each click, does not pile up. Replacing an Image's `file` frees
+the picture it showed.
 
 ## Dialogs and timers
 

@@ -9,6 +9,7 @@ package gui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	goruntime "runtime"
 	"strings"
 	"testing"
@@ -507,5 +508,83 @@ form:show()`, func(s *scene) {
 		s.expect(`stars.hover == 0`)
 		s.lua(`before = draws; stars.value = 1`)
 		s.expect(`draws > before`) // assigning a property redraws it
+	})
+}
+
+func TestClosedFormsAreFreed(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 300, height = 200}
+name = form:TextBox{left = 10, top = 10, width = 150}
+check = form:CheckBox{caption = "c", left = 10, top = 50}
+canvas = form:Canvas{left = 170, top = 10, width = 100, height = 60, onDraw = function(self, g) g:fill(0, 0, 10, 10) end}
+form:show()`, func(s *scene) {
+		form := s.obj("form")
+		s.focus("name")
+		in.Type("Ada")
+		in.Click(s.at("check", 8, 14))
+		s.lua(`form:close()`)
+		s.pump()
+		if form.widget != nil || s.obj("name").widget != nil || s.obj("canvas").widget != nil {
+			s.t.Error("a closed form should have let go of its widgets")
+		}
+		if len(s.a.forms) != 0 {
+			s.t.Errorf("forms still kept: %d", len(s.a.forms))
+		}
+		s.expect(`name.text == "Ada" and check.checked == true and not form.visible`)
+
+		s.lua(`form:show()`)
+		s.pump()
+		if form.widget == nil || len(s.a.forms) != 1 {
+			s.t.Error("showing it again should build it again")
+		}
+		s.expect(`form.visible and name.text == "Ada" and check.checked == true`)
+		s.focus("name")
+		in.Type("!")
+		s.expect(`name.text == "Ada!"`)
+	})
+}
+
+func TestModalFormsDoNotPileUp(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 200, height = 100}
+form:show()
+function ask()
+  local dlg = gui.Form{caption = "modal", width = 150, height = 80}
+  dlg:Button{caption = "OK", default = true, left = 10, top = 10, onClick = function() dlg:close() end}
+  dlg:showModal()
+end`, func(s *scene) {
+		for i := 0; i < 3; i++ {
+			later(func() { in.Key(fltk.ENTER_KEY, "\r", 0) })
+			s.lua(`ask()`)
+			s.pump()
+		}
+		if len(s.a.forms) != 1 {
+			s.t.Errorf("forms kept after three modal forms: %d, want 1", len(s.a.forms))
+		}
+	})
+}
+
+func TestReplacingAnImageFreesTheOldOne(t *testing.T) {
+	pic, _ := filepath.Abs("../../examples/pico/cellar/gfx/tiles.png")
+	onScreen(t, fmt.Sprintf(`
+form = gui.Form{width = 300, height = 200}
+pic = form:Image{file = %q, left = 10, top = 10, width = 100, height = 40}
+form:show()`, pic), func(s *scene) {
+		o := s.obj("pic")
+		first, ok := o.state.(scalable)
+		if !ok {
+			s.t.Fatal("the Image should keep its picture")
+		}
+		s.lua(fmt.Sprintf(`pic.fit = true; pic.file = %q`, pic))
+		second, _ := o.state.(scalable)
+		if second == nil || second == first {
+			s.t.Error("a new file should give a new picture")
+		}
+		s.lua(`pic.file = ""`)
+		if o.state != nil {
+			s.t.Error("an Image with no file holds no picture of its own")
+		}
+		s.lua(fmt.Sprintf(`pic.file = %q`, pic))
+		s.pump()
 	})
 }

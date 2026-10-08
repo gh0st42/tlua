@@ -26,6 +26,7 @@ func readProp(o *guiObject, name string) (lua.LValue, bool)       { return nil, 
 func addTimeout(secs float64, fn func()) error                    { return errNoBackend }
 func fileDialog(opts fileOptions) ([]string, error)               { return nil, errNoBackend }
 func redraw(o *guiObject)                                         {}
+func releaseForm(f *guiObject, gone func())                       {}
 func getClipboard() (string, error)                               { return "", errNoBackend }
 func setClipboard(text string) error                              { return errNoBackend }
 

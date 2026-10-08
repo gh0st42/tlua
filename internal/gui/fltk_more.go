@@ -654,14 +654,14 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 		return 2
 	})
 	def("image", func(L *lua.LState, x0, y0 int) int {
-		path := besideCaller(L, L.CheckString(2))
+		path := o.app.besideCaller(L, L.CheckString(2))
 		x, y := x0+n(L, 3), y0+n(L, 4)
 		w, h := int(L.OptNumber(5, 0)), int(L.OptNumber(6, 0))
 		key := fmt.Sprintf("%s@%dx%d", path, w, h)
 		img, ok := c.images[key]
 		if !ok {
 			var err error
-			if img, err = loadImage(path); err != nil {
+			if img, err = loadImage(o.app, path); err != nil {
 				L.RaiseError("gui: cannot load image %s: %v", path, err)
 			}
 			if w > 0 && h > 0 {

@@ -203,7 +203,7 @@ func run(c *cli) int {
 	}, nil)
 	// The same goes for a desktop GUI: the gui module is there to require,
 	// and bootgui() makes the program one.
-	guiBoot := gui.Ready(r)
+	guiBoot := gui.Ready(r, nil)
 
 	if !opts.NoEnv {
 		if err := r.RunInit(interp.InitChunk()); err != nil {
@@ -311,7 +311,8 @@ func isTerminal(f *os.File) bool {
 }
 
 // runFused runs a program attached to this binary that was not built with
-// -play, giving it the chance to ask for a window with boot() anyway.
+// -play, giving it the chance to ask for a window with boot() anyway, or to be
+// a desktop application with bootgui().
 //
 // That is what makes -play optional: a program that says boot() in its own text
 // does not also have to be told at the moment it is packed.
@@ -326,11 +327,18 @@ func runFused(p *payload.Payload, exe string) int {
 	args := os.Args[1:]
 	boot := game.Ready(f.Interp, game.Options{Title: filepath.Base(exe), Args: args},
 		game.Attached(p))
+	guiBoot := gui.Ready(f.Interp, game.Attached(p))
 
 	if err := f.Run(args); err != nil {
 		return f.Report(err)
 	}
-	if boot.Wanted() {
+	guiBoot.TooLate()
+	switch {
+	case guiBoot.Wanted() && boot.Wanted():
+		return f.Report(errors.New("a program says boot() or bootgui(), not both"))
+	case guiBoot.Wanted():
+		return f.Report(guiBoot.Show())
+	case boot.Wanted():
 		return boot.Show()
 	}
 	return 0

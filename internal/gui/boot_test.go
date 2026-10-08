@@ -10,7 +10,7 @@ func TestReadyInstallsBootgui(t *testing.T) {
 	in := interp.New(&interp.Options{})
 	defer in.Close()
 
-	b := Ready(in)
+	b := Ready(in, nil)
 	if b == nil {
 		t.Fatal("expected boot state")
 	}
@@ -29,7 +29,7 @@ func TestTooLateBlocksBootgui(t *testing.T) {
 	in := interp.New(&interp.Options{})
 	defer in.Close()
 
-	b := Ready(in)
+	b := Ready(in, nil)
 	b.TooLate()
 	if err := in.DoString(`local ok, err = pcall(bootgui); assert(not ok and err:match("too late"))`, "=test"); err != nil {
 		t.Fatalf("bootgui late check failed: %v", err)
@@ -40,7 +40,7 @@ func TestBootguiReturnsTheModule(t *testing.T) {
 	in := interp.New(&interp.Options{})
 	defer in.Close()
 
-	b := Ready(in)
+	b := Ready(in, nil)
 	if err := in.DoString(`local gui = bootgui(); assert(gui == require("gui") and gui.Form)`, "=test"); err != nil {
 		t.Fatal(err)
 	}
