@@ -2,7 +2,8 @@
 
 `tlua design [directory]` opens a form designer in the manner of Visual Basic
 6. It draws forms for the [gui module](gui.md), and what it makes is ordinary
-tlua: a folder that runs with `tlua main.lua`, and packs with `tlua fuse`.
+tlua: a folder that runs with `tlua main.lua`, and packs with `tlua fuse` or
+`tlua bundle`.
 [rad-plan.md](rad-plan.md) is the plan it is being built to; this is what
 there is so far.
 
@@ -124,6 +125,9 @@ new project there.
   under the list of forms.
 - **Make EXE:** File > Make EXE saves everything and packs the project into
   one executable with `tlua fuse`, images and all.
+- **Export Bundle:** File > Export Bundle saves everything and packs the
+  project into a `.ztl` bundle with `tlua bundle`: one file that
+  `tlua app.ztl` runs on any platform, with no executable made for each.
 
 ## Controls of your own
 

@@ -848,6 +848,10 @@ in it: `cls` would be a nil value. Fusing notices a program that defines
 `_draw` or `_update` and says so rather than leaving that to be discovered at
 the first drawing call.
 
+A game can also ship as a bundle, one zip file that any tlua plays:
+`tlua bundle -play -o mygame.ztl mygame/`, then `tlua mygame.ztl` or
+`tlua play mygame.ztl`. It reads its files the way a fused game does.
+
 Building for another machine is what `--base` is for: cross-compile tlua for it
 first, then fuse against that binary.
 

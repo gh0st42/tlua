@@ -31,10 +31,19 @@ type Fused struct {
 // not an interpreter any more: it parses no options of its own and passes the
 // whole command line to the program, like a .love executable does.
 func OpenFused(p *payload.Payload, exe string) (*Fused, error) {
-	r := New(&Options{ScriptArgIdx: 0}) // arg[0] is the executable itself
+	return OpenPayload(p, exe, 0) // arg[0] is the executable itself
+}
+
+// OpenPayload prepares a program that came as a payload: one attached to the
+// binary, or a bundle run as `tlua app.ztl`. name is the file it came in, and
+// argIdx where that file sits in os.Args, which is arg[0] for the program.
+func OpenPayload(p *payload.Payload, name string, argIdx int) (*Fused, error) {
+	exe := name
+	r := New(&Options{ScriptArgIdx: argIdx})
 	r.name = filepath.Base(exe)
 	if dir, err := filepath.Abs(filepath.Dir(exe)); err == nil {
-		// Files shipped next to the executable are still importable.
+		// Files shipped next to the executable (or the bundle) are still
+		// importable.
 		r.prependPath(dir)
 	}
 

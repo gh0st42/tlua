@@ -38,7 +38,9 @@ be deleted there.
 usage: tlua [options] [script [args]]
        tlua edit [file...]
        tlua design [directory]
-       tlua play [script | directory] [args]
+       tlua play [script | directory | bundle] [args]
+       tlua app.ztl [args]
+       tlua bundle [-o output] [-play] <main.lua | directory>
        tlua fuse [-o output] [-play] <main.lua | directory | archive.zip>
 
 Options:
@@ -172,6 +174,9 @@ tlua fuse -play -o mygame mygame/   # a directory with main.lua in it
 ./mygame                            # opens its own window
 ```
 
+Or as one file that runs wherever tlua does: `tlua bundle -play mygame/`
+writes `mygame.ztl`, and `tlua mygame.ztl` plays it (see [Bundles](#bundles)).
+
 The `-play` flag is only for a program that does not say `boot()` itself; one
 that does needs no telling. Its artwork, sounds and data go in with it. `loadpng`, `fetch`, `sfx`, `music`
 and `require` all read what was attached before they read the disk, so the same
@@ -276,6 +281,7 @@ uses every control, and `examples/gui/custom.lua` defines two of its own.
 tlua examples/gui/kitchensink.lua
 tlua examples/gui/custom.lua
 tlua fuse -o myapp myapp/          # one executable, images and all
+tlua bundle myapp/ && tlua myapp.ztl   # or one file any tlua runs
 ```
 
 ## The editor
@@ -559,6 +565,33 @@ line and extended only as far down as you have scrolled. An edit keeps every
 line state above the line that changed, so a keystroke at the bottom of a long
 file re-reads one line instead of all of them: that took a redraw there from
 2.5 ms to 86 µs, and what is left is tview's own drawing.
+
+## Bundles
+
+A bundle is a program packed into one zip file, for any tlua to run on any
+platform: the archive `tlua fuse` would attach to a binary, shipped without the
+binary. `tlua bundle` makes one, named `.ztl` (zipped tlua); tlua runs a file
+named `.ztl`, `.zip` or `.app` as a bundle.
+
+```sh
+tlua bundle myapp/               # myapp.ztl (needs myapp/main.lua)
+tlua bundle -play mygame/        # a console program: opens a window
+tlua bundle -o tool.ztl main.lua # one file, as the main.lua of a bundle
+tlua myapp.ztl --any --args      # run it: a script, a GUI app or a game
+tlua play mygame.ztl             # the same, with play's -scale and -title
+```
+
+A bundle runs the way a fused binary does. `main.lua` is its entry point,
+`require`, `dofile`, `embed`, images, sprites and sounds read from it first,
+and `arg[0]` is the bundle. A program that says `bootgui()` or `boot()` is a
+GUI application or a game. A bundle made with `-play` carries the mark in its
+zip comment; one zipped by hand whose `main.lua` defines `_draw` or `_update`
+and does not say `boot()` opens a window as well, since there is no command
+line to say `-play` on. `tlua fuse` takes a bundle too, and keeps it a game.
+
+Bundles are known by name only, so `tlua data.zip` on a zip without a
+`main.lua` says so, and a zip named otherwise is read as a Lua script. A macOS
+application is a folder named `.app` and is left alone.
 
 ## Standalone executables (fuse)
 

@@ -29,7 +29,9 @@ const banner = "tlua " + version.Number + " (Lua 5.1 via gopher-lua, pure Go)"
 const usage = `usage: tlua [options] [script [args]]
        tlua edit [file...]
        tlua design [directory]
-       tlua play [script | directory] [args]
+       tlua play [script | directory | bundle] [args]
+       tlua app.ztl [args]
+       tlua bundle [-o output] [-play] <main.lua | directory>
        tlua fuse [-o output] [-play] <main.lua | directory | archive.zip>
 
 Options:
@@ -62,6 +64,11 @@ console in the spirit of PICO-8 and Picotron: a 480x270 screen, 64 colours,
 sprites, input and a program built out of _update() and _draw(). The calls
 are listed in docs/pico.md; "tlua play -h" explains the options.
 
+A bundle is a program packed into one zip file with a main.lua in it,
+named .ztl, .zip or .app: "tlua app.ztl" runs it the way a fused binary
+runs, as a script, a desktop application or a game, on any platform tlua
+runs on. The bundle subcommand makes one; "tlua bundle -h" explains it.
+
 The fuse subcommand attaches a Lua program to a copy of this binary, producing
 a standalone executable; with -play the executable opens a window and runs the
 program against the console. "tlua fuse -h" explains it. A zip concatenated
@@ -85,7 +92,7 @@ func main() {
 			if p.Kind.Game() {
 				os.Exit(game.RunFused(p, exe))
 			}
-			os.Exit(runFused(p, exe))
+			os.Exit(runFused(p, exe, os.Args[1:], 0))
 		}
 	}
 
@@ -93,6 +100,8 @@ func main() {
 		switch os.Args[1] {
 		case "fuse":
 			os.Exit(fuse.Command(os.Args[2:]))
+		case "bundle":
+			os.Exit(fuse.BundleCommand(os.Args[2:]))
 		case "edit":
 			os.Exit(editCommand(os.Args[2:]))
 		case "design":
@@ -192,6 +201,15 @@ func run(c *cli) int {
 		if opts.Script == "" && len(opts.Actions) == 0 && !opts.Interactive {
 			return 0
 		}
+	}
+
+	// A bundle is a program of its own, as a fused binary is: it is run
+	// alone, with no options of ours around it.
+	if payload.IsBundle(opts.Script) {
+		if len(opts.Actions) > 0 || opts.Interactive {
+			return report(errors.New("a bundle is run on its own: tlua app.ztl [args]"))
+		}
+		return runBundle(opts.Script, opts.ScriptArgs, opts.ScriptArgIdx)
 	}
 
 	r := interp.New(opts)
@@ -314,22 +332,44 @@ func isTerminal(f *os.File) bool {
 	return st.Mode()&os.ModeCharDevice != 0
 }
 
-// runFused runs a program attached to this binary that was not built with
-// -play, giving it the chance to ask for a window with boot() anyway, or to be
-// a desktop application with bootgui().
+func report(err error) int {
+	fmt.Fprintf(os.Stderr, "tlua: %v\n", err)
+	return 1
+}
+
+// runBundle runs a bundle: a zip with a main.lua in it, which runs as a
+// fused binary would, as a script, a desktop application or a game.
+func runBundle(name string, args []string, argIdx int) int {
+	p, err := payload.OpenBundle(name)
+	if err != nil {
+		return report(err)
+	}
+	defer p.Close()
+	if p.Kind.Game() {
+		return game.RunAttached(p, name, game.Options{Args: args, ArgIdx: argIdx})
+	}
+	return runFused(p, name, args, argIdx)
+}
+
+// runFused runs a program that came as a payload — attached to this binary,
+// or a bundle — and is not marked as a game, giving it the chance to ask for
+// a window with boot() anyway, or to be a desktop application with bootgui().
 //
 // That is what makes -play optional: a program that says boot() in its own text
 // does not also have to be told at the moment it is packed.
-func runFused(p *payload.Payload, exe string) int {
-	f, err := interp.OpenFused(p, exe)
+func runFused(p *payload.Payload, name string, args []string, argIdx int) int {
+	f, err := interp.OpenPayload(p, name, argIdx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", filepath.Base(exe), err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", filepath.Base(name), err)
 		return 1
 	}
 	defer f.Close()
 
-	args := os.Args[1:]
-	boot := game.Ready(f.Interp, game.Options{Title: filepath.Base(exe), Args: args},
+	title := filepath.Base(name)
+	if payload.IsBundleName(name) {
+		title = strings.TrimSuffix(title, filepath.Ext(title))
+	}
+	boot := game.Ready(f.Interp, game.Options{Title: title, Args: args},
 		game.Attached(p))
 	guiBoot := gui.Ready(f.Interp, game.Attached(p))
 

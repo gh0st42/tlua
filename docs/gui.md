@@ -475,6 +475,10 @@ the disk, and a relative path is looked for next to the script that names it,
 inside the package too. The executable is the tlua it was packed with, so
 pack with a tlua built with the GUI (`make build`).
 
+`tlua bundle myapp/` packs it into `myapp.ztl` instead: one file, read the
+same way, that `tlua myapp.ztl` runs on any platform with a GUI-built tlua,
+without an executable made for each.
+
 ## Closing and showing again
 
 Closing a form frees its window and everything in it. What the user left in

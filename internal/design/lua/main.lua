@@ -298,26 +298,53 @@ function M.start(opts)
     end
   end
 
-  -- makeExe packs the project into one executable, with tlua fuse.
-  function d:makeExe()
+  -- pack saves the project and runs a tlua subcommand that packs it into
+  -- out, saying how it went in the output pane.
+  function d:pack(command, out, what)
+    self:save()
+    self.output.items = {}
+    self:print("> tlua " .. command .. " -o " .. out .. " .")
+    gui.spawn {
+      gui.interpreter, command, "-o", out, self.dir,
+      onOutput = function(line) d:print(line) end,
+      onExit = function(status)
+        d:print(status == 0 and ("> made " .. out) or ("> " .. command .. " exited with " .. status))
+        d:status(status == 0 and ("Made " .. out) or (what .. " failed"))
+      end,
+    }
+  end
+
+  -- packTo asks where to write what the project is packed into, beside the
+  -- project's folder to begin with.
+  function d:packTo(title, ext)
     if not self.dir then return end
     local name = self.dir:match("([^/\\]+)[/\\]?$") or "app"
-    local out = gui.savefile { title = "Make EXE", file = name, dir = self.dir:match("^(.*)[/\\]") }
+    return gui.savefile {
+      title = title, file = name .. ext, dir = self.dir:match("^(.*)[/\\]"),
+      filter = ext ~= "" and ("Bundle\t*" .. ext .. "\nAll\t*") or nil,
+    }
+  end
+
+  -- makeExe packs the project into one executable, with tlua fuse.
+  function d:makeExe()
+    local out = self:packTo("Make EXE", "")
     if out then self:makeExeTo(out) end
   end
 
   function d:makeExeTo(out)
-    self:save()
-    self.output.items = {}
-    self:print("> tlua fuse -o " .. out .. " .")
-    gui.spawn {
-      gui.interpreter, "fuse", "-o", out, self.dir,
-      onOutput = function(line) d:print(line) end,
-      onExit = function(status)
-        d:print(status == 0 and ("> made " .. out) or ("> fuse exited with " .. status))
-        d:status(status == 0 and ("Made " .. out) or "Make EXE failed")
-      end,
-    }
+    self:pack("fuse", out, "Make EXE")
+  end
+
+  -- exportBundle packs the project into a bundle, with tlua bundle: one
+  -- file that "tlua app.ztl" runs on any platform, with no executable made
+  -- for each.
+  function d:exportBundle()
+    local out = self:packTo("Export Bundle", ".ztl")
+    if out then self:exportBundleTo(out) end
+  end
+
+  function d:exportBundleTo(out)
+    self:pack("bundle", out, "Export Bundle")
   end
 
   function d:retitle()
@@ -707,6 +734,7 @@ function M.start(opts)
       { "&Save", function() d:save() end, shortcut = "Cmd+S" },
       "-",
       { "&Make EXE...", function() d:makeExe() end },
+      { "&Export Bundle...", function() d:exportBundle() end },
       "-",
       { "&Quit", function() win:close() end, shortcut = "Cmd+Q" },
     } },

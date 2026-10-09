@@ -19,7 +19,7 @@ test:
 # get in their way. The packages run one at a time (-p 1): two at once take
 # the keyboard focus from each other's windows.
 test-gui:
-	TLUA_GUI_TESTS=1 go test -count=1 -p 1 ./internal/gui ./internal/design
+	TLUA_GUI_TESTS=1 go test -count=1 -p 1 ./internal/gui ./internal/design ./cmd/tlua
 
 fmt:
 	gofmt -w .

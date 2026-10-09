@@ -56,7 +56,7 @@ Done
   - tab order (`tabIndex` in the runtime);
   - the Menu Editor (a Menu's `onClick` by item `name`);
   - a startup form;
-  - Make EXE.
+  - Make EXE, and Export Bundle (`tlua bundle`, a `.ztl` any tlua runs).
 - [x] The code window, phase 3 of docs/rad-plan.md:
   - double-clicking a control writes or finds its handler;
   - VB6's object and event boxes;

@@ -651,6 +651,16 @@ func TestDesignerStartupForm(t *testing.T) {
 }
 
 func TestDesignerMakesAnExe(t *testing.T) {
+	testPacking(t, "makeExeTo", "app", "fuse", func(exe, out string) *exec.Cmd { return exec.Command(out) })
+}
+
+func TestDesignerExportsABundle(t *testing.T) {
+	testPacking(t, "exportBundleTo", "app.ztl", "bundle", func(exe, out string) *exec.Cmd { return exec.Command(exe, out) })
+}
+
+// testPacking packs a project with the designer's method into a file called
+// name, and runs what it made.
+func testPacking(t *testing.T, method, name, command string, run func(exe, out string) *exec.Cmd) {
 	if testing.Short() {
 		t.Skip("builds tlua")
 	}
@@ -658,22 +668,22 @@ func TestDesignerMakesAnExe(t *testing.T) {
 	if out, err := exec.Command("go", "build", "-o", exe, "tlua/cmd/tlua").CombinedOutput(); err != nil {
 		t.Fatalf("building tlua: %v\n%s", err, out)
 	}
-	app := filepath.Join(t.TempDir(), "app")
+	app := filepath.Join(t.TempDir(), name)
 	withDesigner(t, func(s *scene) {
 		os.WriteFile(filepath.Join(s.dir, "main.lua"), []byte(`print("made by tlua design")`), 0o644)
 		s.L.SetGlobal("exe", lua.LString(exe))
 		s.L.SetGlobal("app", lua.LString(app))
-		s.lua(`require("gui").interpreter = exe; D:makeExeTo(app)`)
+		s.lua(`require("gui").interpreter = exe; D:` + method + `(app)`)
 		for i := 0; i < 300; i++ {
 			s.pump()
-			if err := s.L.DoString(`__done = D.output.items[#D.output.items]:find("^> made") or D.output.items[#D.output.items]:find("^> fuse exited")`); err == nil && lua.LVAsBool(s.L.GetGlobal("__done")) {
+			if err := s.L.DoString(`__done = D.output.items[#D.output.items]:find("^> made") or D.output.items[#D.output.items]:find("^> ` + command + ` exited")`); err == nil && lua.LVAsBool(s.L.GetGlobal("__done")) {
 				break
 			}
 		}
 		s.expect(`D.output.items[#D.output.items] == "> made " .. app`)
-		out, err := exec.Command(app).CombinedOutput()
+		out, err := run(exe, app).CombinedOutput()
 		if err != nil || strings.TrimSpace(string(out)) != "made by tlua design" {
-			s.t.Errorf("running the exe: %v %q", err, out)
+			s.t.Errorf("running what was made: %v %q", err, out)
 		}
 	})
 }
