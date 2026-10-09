@@ -64,16 +64,35 @@ func withDesigner(t *testing.T, steps func(s *scene)) {
 		r, _ := newLua(t)
 		s := &scene{t: t, L: r.L, dir: dir}
 		r.L.SetGlobal("dir", lua.LString(dir))
-		// Questions answer themselves "no" unless a test says otherwise.
-		if err := r.L.DoString(`bootgui(); D = require("design.main").start{dir = dir, create = true}; D.answer = "no"`); err != nil {
+		// Questions answer themselves "no" unless a test says otherwise, and
+		// a dialog that would still open fails the test rather than wait for
+		// someone to answer it.
+		if err := r.L.DoString(`bootgui(); D = require("design.main").start{dir = dir, create = true}; D.answer = "no"
+local gui = require "gui"
+gui.msgbox = function(m) error("a message box would wait for someone: " .. tostring(m)) end
+gui.inputbox = function(m) error("an input box would wait for someone: " .. tostring(m)) end`); err != nil {
 			t.Errorf("start: %v", err)
 			return
 		}
 		defer func() {
-			s.L.DoString(`D.dirty = false; D.win:close()`)
+			s.L.DoString(`D.answer = "no"; D.dirty = false; D.codeDirty = false; D.win:close()`)
 			s.pump()
 		}()
 		s.pump()
+		// A dialog nobody answers would wait for whoever is at the screen:
+		// after 20 seconds it is sent Escape, and the test fails.
+		finished := false
+		var watch func()
+		watch = func() {
+			if finished {
+				return
+			}
+			t.Errorf("something was still waiting after 20 seconds; it was sent Escape")
+			in.Key(fltk.ESCAPE, "", 0)
+			fltk.AddTimeout(20, watch)
+		}
+		fltk.AddTimeout(20, watch)
+		defer func() { finished = true }()
 		steps(s)
 	}
 	<-done
@@ -377,14 +396,14 @@ func TestDesignerOffersToRename(t *testing.T) {
 	withDesigner(t, func(s *scene) {
 		s.pickTool("Button")
 		s.drag(20, 20, 120, 50)
-		s.lua(`D.answer = nil -- this question is answered by a key`)
+		s.lua(`D.answer = "yes"`)
 		s.lua(`D:openHandler(D.doc[1], "onClick"); D.codeBox.text = D.codeBox.text .. "frm.Button1.caption = 'x'\n"; D:showDesign()`)
 		s.lua(`D.surface:selectNode(D.doc[1])`)
 		s.lua(`D.props.editors.name.obj.text = ""; D.props.editors.name.obj:focus()`)
 		in.Type("cmdGo")
 		s.expect(`D.doc[1].name == "cmdGo"`)
-		later(func() { in.Key(fltk.ENTER_KEY, "\r", 0) }) // Yes
-		s.click(400, 280)                                 // selecting the form ends the renaming
+		s.click(400, 280) // selecting the form ends the renaming
+		s.expect(`D.asked == "Rename frm.Button1 to frm.cmdGo in the code? It is there 2 times."`)
 		s.expect(`D.codeBox.text:find("function frm.cmdGo:onClick") and D.codeBox.text:find("frm.cmdGo.caption") and not D.codeBox.text:find("Button1")`)
 	})
 }
@@ -395,11 +414,7 @@ func TestDesignerFindsAndGoesToLines(t *testing.T) {
 		s.expect(`D.codeBox.selectedText == "gui.load"`)
 		s.lua(`D.lastFind = "no such thing"; D:find(true)`)
 		s.expect(`D.statusLine.caption:find("is not in the code")`)
-		later(func() {
-			in.Key(fltk.BACKSPACE, "", 0)
-			in.Type("2")
-			in.Key(fltk.ENTER_KEY, "\r", 0)
-		})
+		s.lua(`D.answerText = "2"`)
 		s.lua(`D:goToLine()`)
 		s.expect(`D.codeBox.line == 2`)
 	})
@@ -447,7 +462,11 @@ D:showDesign()`)
 // place draws a control of a kind on the form, and names it.
 func (s *scene) place(kind string, x0, y0, x1, y1 int, name string) {
 	s.pickTool(kind)
-	s.drag(x0, y0, x1, y1)
+	if x1 == 0 && y1 == 0 {
+		s.click(x0, y0)
+	} else {
+		s.drag(x0, y0, x1, y1)
+	}
 	s.lua(fmt.Sprintf(`D.props.editors.name.obj.text = ""; D.props.editors.name.obj:focus()`))
 	in.Type(name)
 	s.pump()
@@ -655,6 +674,119 @@ func TestDesignerMakesAnExe(t *testing.T) {
 		out, err := exec.Command(app).CombinedOutput()
 		if err != nil || strings.TrimSpace(string(out)) != "made by tlua design" {
 			s.t.Errorf("running the exe: %v %q", err, out)
+		}
+	})
+}
+
+func TestDesignerNestsControls(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.place("Frame", 20, 20, 220, 160, "fraOpts")
+		// Drawn inside the frame, a control goes in it, placed from its corner.
+		s.place("CheckBox", 40, 60, 160, 88, "chkBold")
+		s.expect(`#D.doc == 1 and D.doc[1][1].name == "chkBold" and D.doc[1][1].left == 20 and D.doc[1][1].top == 40`)
+		s.expect(`D.surface.entries[2].obj.parent == D.surface.entries[1].obj`)
+
+		// Dragged out onto the form, it stays where it was on the form.
+		s.click(100, 74)
+		s.drag(100, 74, 340, 214)
+		s.expect(`#D.doc == 2 and #D.doc[1] == 0 and D.doc[2].name == "chkBold"`)
+		s.expect(`D.doc[2].left == 280 and D.doc[2].top == 200`)
+
+		// And back in.
+		s.drag(340, 214, 100, 74)
+		s.expect(`#D.doc == 1 and D.doc[1][1].name == "chkBold" and D.doc[1][1].left == 20 and D.doc[1][1].top == 40`)
+
+		// Deleting the frame deletes what is in it; undo brings both back.
+		s.click(30, 150)
+		s.expect(`D.surface.sel.node.name == "fraOpts"`)
+		in.Key(fltk.DELETE, "", 0)
+		s.expect(`#D.doc == 0 and D.surface.host:find("chkBold") == nil`)
+		s.lua(`D:undo()`)
+		s.expect(`#D.doc == 1 and D.doc[1][1].name == "chkBold" and D.surface.host:find("chkBold") ~= nil`)
+
+		// Pasting with the frame selected pastes into it.
+		s.click(100, 74)
+		mod, _ := cmdKey()
+		in.Key('c', "c", mod)
+		s.click(30, 150)
+		in.Key('v', "v", mod)
+		s.expect(`#D.doc[1] == 2 and D.doc[1][2].name == "CheckBox1"`)
+
+		s.lua(`D:save()`)
+		s.expect(`D.props.picker.items[3]:find("^   chkBold")`)
+	})
+}
+
+func TestDesignerTabsPages(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.place("Tabs", 20, 20, 320, 220, "tabMain")
+		s.expect(`#D.doc[1] == 2 and D.surface.entries[1].obj.selected == 1`)
+		s.place("Label", 40, 70, 160, 98, "lblFirst") // on the first page
+		s.expect(`D.doc[1][1][1].name == "lblFirst" and D.doc[1][1][1].left == 20 and D.doc[1][1][1].top == 25`)
+
+		// A click on the tab row of the selected Tabs shows the next page;
+		// the first page's label can no longer be clicked.
+		s.click(150, 150)
+		s.expect(`D.surface.sel.node.name == "tabMain"`)
+		s.click(150, 30)
+		s.expect(`D.surface.entries[1].obj.selected == 2`)
+		s.click(80, 84)
+		s.expect(`D.surface.sel.node.name == "tabMain"`)
+
+		s.lua(`D.surface:addPage()`)
+		s.expect(`#D.doc[1] == 3 and D.doc[1][3].kind == "Page" and D.surface.entries[1].obj.selected == 3`)
+		s.lua(`D.surface:removePage()`)
+		s.expect(`#D.doc[1] == 2`)
+	})
+}
+
+func TestDesignerUsesControlsOfTheProject(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds tlua")
+	}
+	exe := filepath.Join(t.TempDir(), "tlua")
+	if out, err := exec.Command("go", "build", "-o", exe, "tlua/cmd/tlua").CombinedOutput(); err != nil {
+		t.Fatalf("building tlua: %v\n%s", err, out)
+	}
+	withDesigner(t, func(s *scene) {
+		s.lua(`D.answerText = "Counter"; D:newControl()`)
+		s.expect(`D.toolbox:rowOf("Counter") ~= nil`)
+		s.place("Counter", 20, 20, 0, 0, "cntClicks") // a click: its own size
+		s.expect(`D.doc[1].kind == "Counter" and D.surface.entries[1].obj.width == 120`)
+		s.expect(`D.props.editors.value ~= nil`)
+		s.lua(`before = D.surface.entries[1].obj; D:setProp(D.doc[1], "value", 7)`)
+		s.expect(`D.doc[1].value == 7 and D.surface.entries[1].obj ~= before and D.surface.entries[1].obj.value == 7`)
+		s.lua(`D:save()`)
+
+		code := "local gui = require \"gui\"\nlocal frm = gui.load \"Form1\"\ngui.after(0.2, function() print(tostring(frm.cntClicks), frm.cntClicks.value); frm:close() end)\nreturn frm\n"
+		os.WriteFile(filepath.Join(s.dir, "forms/Form1.lua"), []byte(code), 0o644)
+		run := exec.Command(exe, "main.lua")
+		run.Dir = s.dir
+		out, err := run.CombinedOutput()
+		if err != nil || strings.TrimSpace(string(out)) != "Counter\t7" {
+			s.t.Errorf("running it: %v\n%s", err, out)
+		}
+	})
+}
+
+func TestDesignerWritesLanguageServerStubs(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.place("Button", 20, 20, 120, 50, "cmdGo")
+		s.place("Frame", 20, 80, 220, 200, "fraBox")
+		s.place("TextBox", 40, 120, 180, 148, "txtIn")
+		s.lua(`D:save()`)
+		stub, err := os.ReadFile(filepath.Join(s.dir, "forms/Form1.d.lua"))
+		if err != nil {
+			s.t.Fatal(err)
+		}
+		for _, want := range []string{"---@class forms.Form1: gui.Form", "---@field cmdGo gui.Button", "---@field fraBox gui.Frame", "---@field txtIn gui.TextBox"} {
+			if !strings.Contains(string(stub), want) {
+				s.t.Errorf("stub lacks %s:\n%s", want, stub)
+			}
+		}
+		code, _ := os.ReadFile(filepath.Join(s.dir, "forms/Form1.lua"))
+		if !strings.Contains(string(code), "--[[@as forms.Form1]]") {
+			s.t.Errorf("the code does not say what frm is:\n%s", code)
 		}
 	})
 }

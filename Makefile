@@ -16,9 +16,10 @@ test:
 
 # The GUI tests open windows and drive them with synthetic input, so they
 # are kept out of plain `make test`. Typing elsewhere while they run can
-# get in their way.
+# get in their way. The packages run one at a time (-p 1): two at once take
+# the keyboard focus from each other's windows.
 test-gui:
-	TLUA_GUI_TESTS=1 go test -count=1 ./internal/gui ./internal/design
+	TLUA_GUI_TESTS=1 go test -count=1 -p 1 ./internal/gui ./internal/design
 
 fmt:
 	gofmt -w .

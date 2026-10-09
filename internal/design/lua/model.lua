@@ -19,11 +19,64 @@ local captioned = {
   Label = true, Button = true, CheckBox = true, RadioButton = true, Frame = true,
 }
 
-local kinds -- gui.kinds(), read once: it does not change while designing
+local kinds -- gui.kinds(), read again only when controls are defined
 
 function M.kinds()
   kinds = kinds or gui.kinds()
   return kinds
+end
+
+-- refreshKinds reads gui.kinds() again, after a project's own controls
+-- have been defined.
+function M.refreshKinds()
+  kinds = nil
+end
+
+-- defined lists the kinds a project defined, by name.
+function M.definedKinds()
+  local out = {}
+  for name, info in pairs(M.kinds()) do
+    if info.defined then out[#out + 1] = name end
+  end
+  table.sort(out)
+  return out
+end
+
+---------------------------------------------------------------- the tree
+
+-- Kinds a control can be put in on the surface. A Tabs holds its pages,
+-- which hold controls.
+M.holders = { Form = true, Frame = true, Panel = true, Page = true }
+
+-- walk calls fn for every control under node, before those under it, with
+-- the node that holds it.
+function M.walk(node, fn)
+  for _, child in ipairs(node) do
+    fn(child, node)
+    M.walk(child, fn)
+  end
+end
+
+-- parentOf is what holds a control in a layout.
+function M.parentOf(doc, target)
+  local found
+  M.walk(doc, function(n, p) if n == target then found = p end end)
+  return found
+end
+
+-- within says whether node is inside outer, or is it.
+function M.within(node, outer)
+  if node == outer then return true end
+  local found = false
+  M.walk(outer, function(n) if n == node then found = true end end)
+  return found
+end
+
+-- removeNode takes a control out of whatever holds it in a layout.
+function M.removeNode(doc, node)
+  local parent = M.parentOf(doc, node)
+  if parent then M.remove(parent, node) end
+  return parent
 end
 
 -- newForm is the layout of an empty form.
@@ -51,6 +104,8 @@ end
 -- means the kind's own.
 function M.newControl(doc, kind, x, y, w, h)
   local info = M.kinds()[kind]
+  -- A control of the project's own is the size its build makes it,
+  -- unless it was drawn to a size.
   local node = {
     kind = kind,
     name = M.uniqueName(doc, kind),

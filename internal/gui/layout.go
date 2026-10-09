@@ -392,6 +392,12 @@ func (a *app) buildLayout(L *lua.LState, t *lua.LTable, parent *guiObject, path 
 		}
 	})
 
+	if _, builtIn := kinds[string(kind)]; !builtIn {
+		if err := a.findControl(L, string(kind)); err != nil {
+			return nil, err
+		}
+	}
+
 	var obj *guiObject
 	if _, ok := a.custom[string(kind)]; ok {
 		if parent == nil {
@@ -430,6 +436,31 @@ func (a *app) buildLayout(L *lua.LState, t *lua.LTable, parent *guiObject, path 
 	}
 	*at = ""
 	return obj, nil
+}
+
+// findControl looks for a control a layout uses that is not defined yet, as
+// a project keeps them: controls/<kind>.lua, which says gui.define. It is
+// required the first time it is needed, so a program whose forms use a
+// control of its own needs nothing else to find it, fused or not. A file
+// there that fails to run says why; no file is no error, and the layout's
+// kind is then reported as unknown.
+func (a *app) findControl(L *lua.LState, kind string) error {
+	if _, ok := a.custom[kind]; ok || !identifier.MatchString(kind) {
+		return nil
+	}
+	module := "controls." + kind
+	err := L.CallByParam(lua.P{Fn: L.GetGlobal("require"), NRet: 0, Protect: true}, lua.LString(module))
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if apiErr, ok := err.(*lua.ApiError); ok {
+		msg = lua.LVAsString(apiErr.Object)
+	}
+	if strings.Contains(msg, "module "+module+" not found") {
+		return nil
+	}
+	return fmt.Errorf("gui: %s: %s", module, strings.TrimPrefix(luaPosition.ReplaceAllString(msg, ""), "gui: "))
 }
 
 // ---------------------------------------------------------------- dump

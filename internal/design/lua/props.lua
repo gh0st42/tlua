@@ -31,10 +31,14 @@ function M:list(doc)
   self.doc = doc
   self.nodes = { doc }
   local items = { (doc.name or "?") .. "  (Form)" }
-  for _, node in ipairs(doc) do
-    self.nodes[#self.nodes + 1] = node
-    items[#items + 1] = (node.name or "?") .. "  (" .. node.kind .. ")"
-  end
+  local depth = { [doc] = 0 }
+  model.walk(doc, function(node, parent)
+    depth[node] = depth[parent] + 1
+    if node.name then
+      self.nodes[#self.nodes + 1] = node
+      items[#items + 1] = string.rep("   ", depth[node] - 1) .. node.name .. "  (" .. node.kind .. ")"
+    end
+  end)
   self.picker.items = items
 end
 

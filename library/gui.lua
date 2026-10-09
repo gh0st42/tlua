@@ -750,6 +750,7 @@ function gui.every(seconds, fn) end
 --- is given to build it in. A string is the path of a file returning a
 --- layout; without .lua at the end it means its .form.lua file, looked for
 --- next to the script that names it. Layout files run with nothing in scope.
+--- A kind it does not know is required as controls.<kind>, which defines it.
 ---@param layout string|gui.Layout
 ---@param parent? gui.Container
 ---@return gui.Form|gui.Object

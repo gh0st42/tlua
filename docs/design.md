@@ -13,6 +13,8 @@ myapp/
   main.lua              shows the first form
   forms/Form1.form.lua  the layout: written by the designer
   forms/Form1.lua       the code: yours
+  forms/Form1.d.lua     what the form holds, for a language server: written by the designer
+  controls/Counter.lua  a control of the project's own: yours
 ```
 
 - **The layout** (`Form1.form.lua`) is the designer's. It is rewritten
@@ -24,7 +26,7 @@ myapp/
 
 ```lua
 local gui = require "gui"
-local frm = gui.load "Form1"
+local frm = gui.load "Form1" --[[@as forms.Form1]]
 
 function frm.Button1:onClick()
   gui.msgbox("Hello")
@@ -52,6 +54,16 @@ new project there.
   the form, or click for one of its own size. Double-clicking in the toolbox
   puts one in the middle of the form. New controls are named as VB6 named
   them: `Button1`, `TextBox1`, ...
+- **Containers:** a control drawn inside a Frame or a Panel, or on the page a
+  Tabs is showing, goes in it, placed from its corner. Dragging controls
+  into a container, or out of one onto the form, moves them there, and they
+  stay where they were on the form (the container they would go into is
+  outlined green while they are dragged). Deleting a container deletes what
+  is in it, and pasting with a container selected pastes into it.
+- **Tabs:** a new Tabs has two pages. Clicking the row of tabs of the
+  selected Tabs shows its next page, as does its `selected` property; Format
+  > Tabs adds and removes pages. Controls on a page that is not showing
+  cannot be clicked.
 - **Selecting:** click a control to select it, or the form around the
   controls to select the form.
   - Several controls are selected by dragging a rubber band round them (it
@@ -113,6 +125,40 @@ new project there.
 - **Make EXE:** File > Make EXE saves everything and packs the project into
   one executable with `tlua fuse`, images and all.
 
+## Controls of your own
+
+A project's own controls are in `controls/`, one to a file, each a
+`gui.define` (see [gui.md](gui.md#controls-of-your-own)):
+- **Where they come from:** Project > New Control starts one: a Canvas
+  drawn with a `value` property, an `onChange` event, and a click that counts
+  up, to change into what you need.
+- **The toolbox:** when the project opens, every control in `controls/` is
+  loaded and has a place at the end of the toolbox, marked U. One that fails
+  to load says why in the output pane.
+- **On the form:** they are placed, moved and given properties like the
+  built-in ones, built for real, so the form shows them as they will be.
+  Their `props` are rows in the properties grid; changing one builds the
+  control again, so what it draws follows.
+- **When the program runs:** `gui.load` finds them itself. A layout's kind
+  it does not know is looked for as `controls.<kind>`, so `main.lua` needs
+  nothing more, packed with Make EXE or not.
+
+## The language server
+
+Saving a form also writes `forms/Form1.d.lua`. It declares a class,
+`forms.Form1`, with a field for every named control and its kind. The code
+the designer starts says its `frm` is one:
+
+```lua
+local frm = gui.load "Form1" --[[@as forms.Form1]]
+```
+
+So an editor with lua-language-server completes `frm.Button1.` with a
+Button's fields, and points out `frm.Button1.onClick = 5`. With
+[library/gui.lua](../library/gui.lua) in the language server's library, as
+the `.luarc.json` at this repository's root has it, everything in the gui
+module is known too.
+
 ## Code
 
 - **Double-click to write a handler.** Double-clicking a control opens its
@@ -140,7 +186,19 @@ new project there.
 
 ## Not yet
 
-These are the plan's last phase:
-- placing controls inside a Frame or on a Tabs page;
-- your own `gui.define` controls in the toolbox;
-- language-server stubs for each form, so `frm.Button1.` completes.
+- **Layouts that arrange themselves:** containers built on go-fltk's Flex and
+  Grid, the plan's "maybe later".
+- **Things VB6 had that are not planned at all:** data binding, a debugger,
+  and reports.
+
+## Its tests
+
+`make test-gui` drives the designer through all of the above with synthetic
+input, as well as the gui module's own tests. Nothing in them waits for
+someone at the screen:
+- every question the designer would ask is answered by the test;
+- a dialog that would open anyway fails the test at once;
+- anything still waiting after 20 seconds is sent Escape, and fails it.
+
+Typing elsewhere while they run can still reach their windows, so they are
+best left alone for the minute they take.

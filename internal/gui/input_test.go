@@ -76,6 +76,20 @@ func onScreen(t *testing.T, script string, steps func(s *scene)) {
 			return
 		}
 		s.pump()
+		// A dialog nobody answers would wait for whoever is at the screen:
+		// after 20 seconds it is sent Escape, and the test fails.
+		finished := false
+		var watch func()
+		watch = func() {
+			if finished {
+				return
+			}
+			t.Errorf("something was still waiting after 20 seconds; it was sent Escape")
+			in.Key(fltk.ESCAPE, "", 0)
+			fltk.AddTimeout(20, watch)
+		}
+		fltk.AddTimeout(20, watch)
+		defer func() { finished = true }()
 		steps(s)
 		if a.err != nil {
 			t.Errorf("a handler failed: %v", a.err)
@@ -808,5 +822,22 @@ form:show()`, func(s *scene) {
 		in.Key(fltk.F6, "", 0)
 		s.expect(`picked == "mnuOpen:&Open"`)
 		s.expect(`menu.width == 130`)
+	})
+}
+
+// TestRedrawingACanvasUnderOthers: a Canvas asked to draw again had FLTK
+// draw only it, over the controls on top of it, which vanished (the
+// designer's grid did this to the form it was under).
+func TestRedrawingACanvasUnderOthers(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 300, height = 200}
+under = form:Canvas{left = 0, top = 0, width = 300, height = 200, onDraw = function() end}
+over = form:Canvas{left = 20, top = 20, width = 50, height = 50, onDraw = function() overDraws = (overDraws or 0) + 1 end}
+apart = form:Canvas{left = 0, top = 0, width = 10, height = 10, onDraw = function() end}
+form:show()`, func(s *scene) {
+		s.lua(`before = overDraws; under:redraw()`)
+		s.expect(`overDraws > before`)
+		s.lua(`before = overDraws; under.color = "#ffeecc"`)
+		s.expect(`overDraws > before`)
 	})
 }

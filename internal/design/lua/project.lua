@@ -28,14 +28,44 @@ require("forms.%s"):show()
 end
 
 local function codeLua(name)
-  return ([[-- The code behind %s.form.lua: the controls are fields of the form, by
+  return ([=[-- The code behind %s.form.lua: the controls are fields of the form, by
 -- the names the layout gives them.
 
 local gui = require "gui"
-local frm = gui.load "%s"
+local frm = gui.load "%s" --[[@as forms.%s]]
 
 return frm
-]]):format(name, name)
+]=]):format(name, name, name)
+end
+
+local function controlLua(name)
+  return ([[-- A control of this project's own. A form's layout that uses a %s
+-- finds it here, as controls.%s, the first time it is needed; the designer
+-- shows it in its toolbox. It is yours: draw it, give it props and events.
+
+local gui = require "gui"
+
+gui.define {
+  name = "%s",
+  events = { "onChange" },
+  props = { value = { type = "integer", default = 0 } },
+  build = function(parent, opts)
+    local c = parent:Canvas { width = 120, height = 30 }
+    c.value = opts.value or 0
+    function c:onDraw(g)
+      local w, h = g:size()
+      g:color("#e4ecfa"); g:fill(0, 0, w, h)
+      g:color("#1e64d8"); g:rect(0, 0, w, h)
+      g:color("black"); g:text("%s " .. tostring(self.value), 0, 0, w, h, "center")
+    end
+    function c:onMouseDown()
+      self.value = self.value + 1
+      self:fire("onChange", self.value)
+    end
+    return c
+  end,
+}
+]]):format(name, name, name, name)
 end
 
 -- forms lists the forms of the project in dir, by name.
@@ -73,6 +103,54 @@ function M.layoutPath(dir, name)
   return dir .. "/forms/" .. name .. ".form.lua"
 end
 
+-- controls lists the project's own controls, by name.
+function M.controls(dir)
+  local names = {}
+  if not exists(dir .. "/controls") then return names end
+  for file in lfs.dir(dir .. "/controls") do
+    local name = file:match("^([%a_][%w_]*)%.lua$")
+    if name then names[#names + 1] = name end
+  end
+  table.sort(names)
+  return names
+end
+
+-- addControl starts a control of the project's own.
+function M.addControl(dir, name)
+  lfs.mkdir(dir .. "/controls")
+  local path = dir .. "/controls/" .. name .. ".lua"
+  if exists(path) then return false end
+  write(path, controlLua(name))
+  return true
+end
+
+-- classOf is the language server's name for what a layout's kind makes.
+local function classOf(kind)
+  local info = model.kinds()[kind]
+  if info and not info.defined then return "gui." .. kind end
+  return "gui.Object"
+end
+
+-- stub writes Name.d.lua beside a form: its controls, as the fields of a
+-- class the code's frm is declared as, so a language server completes
+-- frm.cmdGreet. with a Button's fields.
+function M.stub(dir, name, doc)
+  local lines = {
+    "---@meta",
+    "-- What " .. name .. ".form.lua has in it, for a language server. Written by tlua",
+    "-- design each time the form is saved; changing it here changes nothing.",
+    "",
+    "---@class forms." .. name .. ": gui.Form",
+  }
+  local fields = {}
+  model.walk(doc, function(node)
+    if node.name then fields[#fields + 1] = ("---@field %s %s"):format(node.name, classOf(node.kind)) end
+  end)
+  table.sort(fields)
+  for _, f in ipairs(fields) do lines[#lines + 1] = f end
+  write(dir .. "/forms/" .. name .. ".d.lua", table.concat(lines, "\n") .. "\n")
+end
+
 -- read loads a form's layout as a table, running the file with nothing in
 -- scope, as gui.load does.
 function M.read(dir, name)
@@ -91,6 +169,7 @@ end
 -- it is.
 function M.save(dir, name, doc)
   gui.save(doc, M.layoutPath(dir, name))
+  M.stub(dir, name, doc)
   local code = dir .. "/forms/" .. name .. ".lua"
   if not exists(code) then write(code, codeLua(name)) end
 end

@@ -2,6 +2,7 @@ package design
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -223,4 +224,46 @@ assert(project.startup(dir) == "About")
 local f = io.open(dir .. "/main.lua", "a"); f:write("print('mine')\n"); f:close()
 local ok, why = project.setStartup(dir, "Form1")
 assert(not ok and why:find("changed by hand") and project.startup(dir) == "About")`)
+}
+
+// TestStubsTypeTheForm runs lua-language-server, where there is one, on a
+// project the designer made: the stub it writes is what tells the server
+// that frm.cmdGo is a Button, so giving its onClick a number is an error.
+func TestStubsTypeTheForm(t *testing.T) {
+	lls, err := exec.LookPath("lua-language-server")
+	if err != nil {
+		t.Skip("no lua-language-server on PATH")
+	}
+	library, _ := filepath.Abs("../../library")
+	dir := t.TempDir()
+	r, _ := newLua(t)
+	r.L.SetGlobal("dir", lua.LString(dir))
+	run(t, r.L, `
+local project = require "design.project"
+project.create(dir)
+local doc = project.read(dir, "Form1")
+doc[1] = { kind = "Button", name = "cmdGo", caption = "Go" }
+project.save(dir, "Form1", doc)`)
+	code, _ := os.ReadFile(filepath.Join(dir, "forms/Form1.lua"))
+	text := strings.Replace(string(code), "return frm", "frm.cmdGo.onClick = 5\nreturn frm", 1)
+	os.WriteFile(filepath.Join(dir, "forms/Form1.lua"), []byte(text), 0o644)
+	os.WriteFile(filepath.Join(dir, ".luarc.json"), []byte(`{"runtime.version": "Lua 5.1", "workspace.library": ["`+library+`"]}`), 0o644)
+	out := filepath.Join(t.TempDir(), "check.json")
+	cmd := exec.Command(lls, "--check="+dir, "--checklevel=Warning", "--check_format=json", "--check_out_path="+out, "--logpath="+t.TempDir())
+	cmd.Dir = dir
+	// It exits with 1 when it finds something, which is the point here.
+	b, _ := cmd.CombinedOutput()
+	report, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("lua-language-server wrote no report: %v\n%s", err, b)
+	}
+	// The one warning is about the number given to a Button's onClick: with
+	// no stub, cmdGo is an undefined field instead, and a wrongly declared frm
+	// would add a warning of its own.
+	if !strings.Contains(string(report), "fun(self: gui.Button)") {
+		t.Errorf("the language server did not see frm.cmdGo as a Button:\n%s", report)
+	}
+	if n := strings.Count(string(report), `"code"`); n != 1 {
+		t.Errorf("%d warnings, where there should be one:\n%s", n, report)
+	}
 }

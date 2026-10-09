@@ -154,14 +154,40 @@ func abs(n int) int {
 }
 
 func redraw(o *guiObject) {
-	// A transparent Canvas shows what is under it, which has to be drawn
-	// again first, or what it drew before stays.
-	if o.kind == "Canvas" && propBool(o, "transparent") && o.parent != nil {
+	// FLTK draws again only the widget asked for. A transparent Canvas shows
+	// what is under it, which has to be drawn first; and a Canvas under other
+	// controls would paint over them. Either way it is what holds it that is
+	// drawn again, everything in it in its order.
+	if o.kind == "Canvas" && o.parent != nil && (propBool(o, "transparent") || covered(o)) {
 		o = o.parent
 	}
 	if w, ok := o.widget.(interface{ Redraw() }); ok {
 		w.Redraw()
 	}
+}
+
+// covered says whether a control drawn after o, in what holds it, overlaps
+// it.
+func covered(o *guiObject) bool {
+	g, ok := o.widget.(geometry)
+	if !ok {
+		return false
+	}
+	after := false
+	for _, c := range o.parent.children {
+		if c == o {
+			after = true
+			continue
+		}
+		if !after {
+			continue
+		}
+		if w, ok := c.widget.(geometry); ok &&
+			w.X() < g.X()+g.W() && g.X() < w.X()+w.W() && w.Y() < g.Y()+g.H() && g.Y() < w.Y()+w.H() {
+			return true
+		}
+	}
+	return false
 }
 
 func setClipboard(text string) error {

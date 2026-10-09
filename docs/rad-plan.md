@@ -1,9 +1,9 @@
 # A VB6-style form designer: plan
 
-Status: phases 1 to 4 are built (2026-10-08). Phase 1 added names,
+Status: all five phases are built (2026-10-09). Phase 1 added names,
 `gui.load`, `gui.dump`, `gui.save` and `gui.kinds`, described in docs/gui.md
-under "Forms in files". Phases 2 to 4 are `tlua design`, described in
-docs/design.md. Phase 5 is proposed.
+under "Forms in files". Phases 2 to 5 are `tlua design`, described in
+docs/design.md. Only the "maybe later" of phase 5 remains.
 
 ## What it is
 
@@ -268,7 +268,31 @@ The original phase 4 list follows.
 - **Make EXE:** runs `tlua fuse`, with the project's images and data
   included.
 
-### Phase 5: extending it
+### Phase 5: extending it — done
+
+Built with these notes:
+- **Finding a project's controls** is done by `gui.load` itself: a kind it
+  does not know is required as `controls.<kind>`. Programs need no wiring of
+  their own, packed or not, and the designer loads them the same way.
+- **Changing a declared prop** of such a control builds it again, so a
+  control that draws from its props, or builds itself from them, shows the
+  change.
+- **The stub** is `forms/Name.d.lua`, and the code's `frm` is cast to it with
+  `--[[@as forms.Name]]`. A `---@type` annotation would not do: `gui.load` is
+  declared to return a Form or any object, which a declared type rejects.
+  A test runs lua-language-server on a project the designer made.
+- **Containers:** the surface keeps a tree, not a list. Drops go into the
+  topmost Frame, Panel or showing page under the mouse, and controls keep
+  their place on the form when they move between containers.
+- **Clicking the tab row** of the selected Tabs shows its next page. go-fltk
+  cannot tell which tab is under a point.
+- **The tests** were made to never wait for a person: designer questions go
+  through one place the tests answer, an unexpected dialog fails at once, a
+  watchdog sends Escape after 20 seconds, and the two GUI packages run one
+  after the other so they do not take each other's keyboard focus.
+
+The original phase 5 list follows.
+
 
 - **Your own controls in the toolbox:** each `gui.define` in the project's
   `controls/` folder gets a toolbox entry, and rows in the properties grid

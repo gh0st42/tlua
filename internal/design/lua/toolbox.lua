@@ -111,6 +111,13 @@ function glyphs.Table(g, x, y)
   g:line(x + 7, y + 1, x + 7, y + 15); g:line(x + 13, y + 1, x + 13, y + 15)
 end
 
+-- A control of the project's own: VB6's user-control box.
+function glyphs.Defined(g, x, y)
+  g:color("#fff4dc"); g:fill(x + 1, y + 1, 18, 14)
+  g:color("#a06a00"); g:rect(x + 1, y + 1, 18, 14)
+  g:font("sans", 9); g:text("U", x + 1, y + 1, 18, 14, "center")
+end
+
 function glyphs.Tabs(g, x, y)
   g:color("#404040")
   g:rect(x + 1, y + 5, 18, 10); g:rect(x + 1, y + 1, 7, 5); g:rect(x + 8, y + 2, 7, 4)
@@ -121,6 +128,7 @@ end
 function M.new(parent, opts)
   local tools = { "Pointer" }
   for _, k in ipairs(model.tools) do tools[#tools + 1] = k end
+  local builtIn = #tools
 
   local c = parent:Canvas {
     left = opts.left, top = opts.top, width = opts.width, height = opts.height,
@@ -135,7 +143,7 @@ function M.new(parent, opts)
       if i == self.picked then
         g:color("#cfe0f7"); g:fill(0, y, w, ROW)
       end
-      glyphs[kind](g, 6, y + 3)
+      (glyphs[kind] or glyphs.Defined)(g, 6, y + 3)
       g:color("black"); g:font("sans", 13)
       g:text(kind, 34, y, w - 34, ROW, "left")
     end
@@ -164,6 +172,15 @@ function M.new(parent, opts)
     self.picked = 1
   end
 
+  -- setTools puts the project's own controls after the built-in ones.
+  function c:setTools(defined)
+    for i = #tools, builtIn + 1, -1 do tools[i] = nil end
+    for _, k in ipairs(defined) do tools[#tools + 1] = k end
+    if self.picked > #tools then self.picked = 1 end
+    self.height = #tools * ROW
+    self:redraw()
+  end
+
   -- rowOf is where a kind's row is, for tests: its middle, in the toolbox.
   function c:rowOf(kind)
     for i, k in ipairs(tools) do
@@ -173,5 +190,7 @@ function M.new(parent, opts)
 
   return c
 end
+
+M.ROW = ROW
 
 return M

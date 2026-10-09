@@ -281,6 +281,9 @@ Mouse handlers get positions in the same coordinates:
   focus, and keys are named as a Form's `onKey` names them. Returning true
   keeps the key from going further.
 
+A Canvas with other controls on top of it is drawn again together with
+them, so redrawing it never paints over them.
+
 A `transparent = true` Canvas draws only what `onDraw` draws, over the
 controls under it, and takes the mouse before they do. That is how a
 designer puts handles over a form.
@@ -427,6 +430,9 @@ return frm
     program's packed files.
   - A layout file runs with nothing in scope: it is data, and cannot call
     anything.
+  - A kind it does not know is looked for as the module `controls.<kind>`,
+    which is expected to `gui.define` it. A project keeps its own controls in
+    `controls/`, and its layouts find them there.
   - Its top is a Form, unless `parent` is given to build it in.
   - An error says which part of the layout it is about:
     `gui.load forms/Main.form.lua, at fraOpts.chkBold: font must be ...`.

@@ -41,8 +41,10 @@ function M.start(opts)
   }
   d.startupLine = leftPane:Label { left = 6, top = 134, width = LEFT - 12, height = 20, fontSize = 12 }
   leftPane:Label { caption = "Toolbox", left = 6, top = 158, width = LEFT - 12, height = 20 }
-  d.toolbox = toolbox.new(leftPane, {
-    left = 6, top = 178, width = LEFT - 12, height = splitH - 184, grow = true,
+  -- The toolbox scrolls, for a project with many controls of its own.
+  local tools = leftPane:Scroll { left = 6, top = 178, width = LEFT - 12, height = splitH - 184, grow = true, color = "#ffffff" }
+  d.toolbox = toolbox.new(tools, {
+    left = 0, top = 0, width = LEFT - 12 - 16, height = (#model.tools + 1) * toolbox.ROW,
     onPick = function() end,
     onPlace = function(kind) if d.doc then d.surface:place(kind) end end,
   })
@@ -98,6 +100,16 @@ function M.start(opts)
       return self.answer
     end
     return gui.msgbox(message, buttons, title)
+  end
+
+  -- prompt is every line of text the designer asks for; answerText, when
+  -- set, is the answer.
+  function d:prompt(message, title, default)
+    if self.answerText ~= nil then
+      self.asked = message
+      return self.answerText
+    end
+    return gui.inputbox(message, title, default)
   end
 
   function d:selected(node, count)
@@ -228,14 +240,16 @@ function M.start(opts)
     local nodes = model.pasteNodes(self.clip, self.doc, 8 * self.pastes)
     if not nodes then return end
     self:checkpoint()
-    self.surface:add(nodes)
+    self.surface:add(nodes, self.surface:pasteHolder())
   end
 
   function d:duplicate()
-    local nodes = self.surface:selectedNodes()
-    if #nodes == 0 then return end
+    local list = self.surface:outermost()
+    if #list == 0 then return end
+    local nodes = {}
+    for _, e in ipairs(list) do nodes[#nodes + 1] = e.node end
     self:checkpoint()
-    self.surface:add(model.pasteNodes(model.copyText(nodes), self.doc, 8))
+    self.surface:add(model.pasteNodes(model.copyText(nodes), self.doc, 8), self.surface:sameHolder() or self.doc)
   end
 
   ---------------------------------------------------------------- arranging, tab order, menus
@@ -326,13 +340,45 @@ function M.start(opts)
     return true
   end
 
+  -- loadControls defines the project's own controls, from controls/, and
+  -- puts them in the toolbox. A control that does not load says why below.
+  function d:loadControls()
+    for _, name in ipairs(project.controls(self.dir)) do
+      local ok, err = pcall(require, "controls." .. name)
+      if not ok then self:print("controls/" .. name .. ".lua: " .. tostring(err)) end
+    end
+    model.refreshKinds()
+    self.toolbox:setTools(model.definedKinds())
+  end
+
+  function d:newControl()
+    local n = 1
+    while project.exists(self.dir .. "/controls/Control" .. n .. ".lua") do n = n + 1 end
+    local name = self:prompt("A name for the new control (a capital first):", "New Control", "Control" .. n)
+    if not name or name == "" then return end
+    if not name:match("^%u[%w_]*$") or model.kinds()[name] then
+      self:ask(name .. " cannot be a control's name: start with a capital, and pick one that is not taken.", "ok", "New Control")
+      return
+    end
+    if not project.addControl(self.dir, name) then
+      self:ask("There is a controls/" .. name .. ".lua already.", "ok", "New Control")
+      return
+    end
+    self:loadControls()
+    self:status("controls/" .. name .. ".lua is yours to change; it is in the toolbox")
+  end
+
   function d:openProject(dir)
     self.dir = dir
+    -- The project's modules, its own controls among them, are found from
+    -- its folder, as they are when it runs.
+    package.path = dir .. "/?.lua;" .. package.path
     -- Image paths in a layout are relative to the form's code, which lives
     -- in forms/; the designer looks for them from there too.
     lfs.chdir(dir .. "/forms")
     local forms = project.forms(dir)
     self.tree.items = forms
+    self:loadControls()
     self:showStartup()
     self:retitle()
     if forms[1] then self:openForm(forms[1]) end
@@ -431,10 +477,12 @@ function M.start(opts)
   function d:fillObjects()
     self.codeNodes = { self.doc }
     local items = { "(" .. self.formName .. ")" }
-    for _, node in ipairs(self.doc) do
-      self.codeNodes[#self.codeNodes + 1] = node
-      items[#items + 1] = node.name
-    end
+    model.walk(self.doc, function(node)
+      if node.name and node.kind ~= "Page" then
+        self.codeNodes[#self.codeNodes + 1] = node
+        items[#items + 1] = node.name
+      end
+    end)
     self.objectBox.items = items
     local at = 1
     for i, n in ipairs(self.codeNodes) do
@@ -520,7 +568,7 @@ function M.start(opts)
   function d:find(again)
     self:showCode()
     if not again or not self.lastFind then
-      local what = gui.inputbox("Find:", "Find", self.lastFind or "")
+      local what = self:prompt("Find:", "Find", self.lastFind or "")
       if not what or what == "" then return end
       self.lastFind = what
     end
@@ -539,7 +587,7 @@ function M.start(opts)
 
   function d:goToLine()
     self:showCode()
-    local n = tonumber(gui.inputbox("Line:", "Go to Line", tostring(self.codeBox.line)) or "")
+    local n = tonumber(self:prompt("Line:", "Go to Line", tostring(self.codeBox.line)) or "")
     if n then self.codeBox.line = n end
     self.codeBox:focus()
   end
@@ -579,7 +627,7 @@ function M.start(opts)
   function d:addForm()
     local n = 1
     while project.exists(project.layoutPath(self.dir, "Form" .. n)) do n = n + 1 end
-    local name = gui.inputbox("A name for the new form:", "Add Form", "Form" .. n)
+    local name = self:prompt("A name for the new form:", "Add Form", "Form" .. n)
     if not name or name == "" then return end
     if not name:match("^[%a_][%w_]*$") then
       self:ask(name .. " is not a name: use letters, digits and _.", "ok", "Add Form")
@@ -712,12 +760,18 @@ function M.start(opts)
       "-",
       { "Bring to &Front", function() d.surface:toFront() end },
       { "Send to &Back", function() d.surface:toBack() end },
+      { "Ta&bs", {
+        { "&Add Page", function() d.surface:addPage() end },
+        { "&Remove Page", function() d.surface:removePage() end },
+      } },
       "-",
       { "&Tab Order", function() d:setTabOrder() end },
     } },
     { "&Project", {
       { "&Add Form...", function() d:addForm() end },
       { "Set as &Startup Form", function() d:setStartup() end },
+      "-",
+      { "&New Control...", function() d:newControl() end },
     } },
     { "&Tools", {
       { "&Menu Editor...", function() d:editMenu() end, shortcut = "Cmd+E" },

@@ -240,3 +240,20 @@ func TestQuoteReadsBack(t *testing.T) {
 		}
 	}
 }
+
+func TestLayoutsFindControlsOfTheirOwn(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "controls"), 0o755)
+	os.WriteFile(filepath.Join(dir, "controls", "Badge.lua"), []byte(`
+local gui = require "gui"
+gui.define{name = "Badge", props = {count = {type = "integer", default = 0}},
+  build = function(parent, opts) local c = parent:Canvas{width = 40, height = 20}; c.count = opts.count or 0; return c end}`), 0o644)
+	os.WriteFile(filepath.Join(dir, "controls", "Broken.lua"), []byte(`error("this control is broken")`), 0o644)
+	L, _ := newState(t)
+	L.SetGlobal("dir", lua.LString(dir))
+	run(t, L, `package.path = dir .. "/?.lua;" .. package.path
+frm = gui.load{ kind = "Form", { kind = "Badge", name = "bdg", count = 3 } }
+assert(frm.bdg.count == 3 and tostring(frm.bdg) == "Badge")`)
+	fails(t, L, `gui.load{ kind = "Form", { kind = "Broken" } }`, "controls.Broken: this control is broken")
+	fails(t, L, `gui.load{ kind = "Form", { kind = "Nowhere" } }`, `there is no kind "Nowhere"`)
+}
