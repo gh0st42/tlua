@@ -155,7 +155,16 @@ function M:button(row)
   end
   local info = self:info(prop)
   local value
-  if info.type == "color" then
+  if info.type == "menu" then
+    -- A control's context menu, in the Menu Editor too; empty is none.
+    value = self:editMenuItems(model.value(node, prop) or {})
+    if value and #value == 0 then
+      local ok, err = self.d:setProp(node, prop, nil)
+      self.d:status(ok and "" or (prop .. ": " .. tostring(err)))
+      self:refresh(node)
+      return
+    end
+  elseif info.type == "color" then
     value = self.d:chooseColor(prop, model.value(node, prop) or "#ffffff")
   elseif info.type == "file" then
     value = self:chooseFile(prop, model.value(node, prop))
@@ -167,6 +176,12 @@ function M:button(row)
     self.d:status(ok and "" or (prop .. ": " .. tostring(err)))
   end
   self:refresh(node)
+end
+
+-- editMenuItems edits a menu's items in the Menu Editor: the new items, or
+-- nil when it was cancelled.
+function M:editMenuItems(items)
+  return require("design.menueditor").edit(items)
 end
 
 -- chooseFile picks an image for a property. One inside the project is

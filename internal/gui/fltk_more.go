@@ -30,6 +30,7 @@ func listen(o *guiObject) {
 	}
 	defer func() { _ = recover() }() // "this widget does not support event handling"
 	w.SetEventHandler(func(e fltk.Event) bool { return handle(o, e) })
+	o.mouse.listening = true
 }
 
 // startDrag hands the selection to the system's drag and drop. Tests
@@ -50,6 +51,14 @@ func handle(o *guiObject, e fltk.Event) bool {
 		if used, ok := dropEvent(o, e); ok {
 			return used
 		}
+	}
+
+	if e == fltk.PUSH || e == fltk.KEY {
+		a.lastEvent = o
+	}
+	// A right click shows a context menu, the innermost one under it.
+	if e == fltk.PUSH && contextClick() && contextPress(o) {
+		return true
 	}
 
 	switch e {

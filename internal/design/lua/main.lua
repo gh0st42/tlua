@@ -159,6 +159,51 @@ function M.start(opts)
     end
   end
 
+  -- popup is every menu the designer pops up; answerMenu, when set, picks
+  -- the item with that caption without showing it, for tests.
+  function d:popup(items)
+    if self.answerMenu ~= nil then
+      self.menuAsked = items
+      for _, item in ipairs(items) do
+        if type(item) == "table" and type(item[2]) == "function"
+            and item[1]:gsub("&", "") == self.answerMenu and item.enabled ~= false then
+          item[2]()
+        end
+      end
+      return
+    end
+    gui.popup(items)
+  end
+
+  -- contextMenu is a right click on the form or a control: what can be
+  -- done to what is selected, as VB6's had it.
+  function d:contextMenu(node)
+    local paste = { "&Paste", function() d:paste() end, shortcut = "Cmd+V", enabled = self.clip ~= nil }
+    local code = { "View &Code", function() d:doubleClicked(node) end }
+    if node == self.doc then
+      self:popup {
+        paste,
+        { "Select &All", function() d.surface:selectAll() end },
+        "-",
+        code,
+        { "&Menu Editor...", function() d:editMenu() end },
+      }
+      return
+    end
+    self:popup {
+      { "Cu&t", function() d:cut() end, shortcut = "Cmd+X" },
+      { "&Copy", function() d:copy() end, shortcut = "Cmd+C" },
+      paste,
+      { "D&uplicate", function() d:duplicate() end, shortcut = "Cmd+D" },
+      { "&Delete", function() d.surface:deleteSelected() end },
+      "-",
+      { "Bring to &Front", function() d.surface:toFront() end },
+      { "Send to &Back", function() d.surface:toBack() end },
+      "-",
+      code,
+    }
+  end
+
   function d:selectNode(node)
     self.surface:selectNode(node)
   end

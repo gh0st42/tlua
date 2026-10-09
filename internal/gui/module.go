@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"sort"
 	"strings"
 	"unicode"
@@ -47,8 +48,8 @@ var controls = []string{
 }
 
 // commonEvents are the handlers every kind can raise: something dropped on
-// it, or the user starting to drag out of it.
-var commonEvents = []string{"onDrop", "onDrag"}
+// it, the user starting to drag out of it, or picking from its contextMenu.
+var commonEvents = []string{"onDrop", "onDrag", "onContextMenu"}
 
 var kinds = map[string]*kind{
 	"Form": {
@@ -194,6 +195,9 @@ var common = map[string]lua.LValue{
 	"top":     lua.LNumber(0),
 	"grow":    lua.LFalse,
 	"tooltip": lua.LString(""),
+	// contextMenu is the menu a right click on it shows, its items as a
+	// Menu's are written; none at first.
+	"contextMenu": lua.LNil,
 }
 
 // methods are what every object answers to beyond its properties; which of
@@ -239,8 +243,11 @@ type app struct {
 	err error
 	// booted is set by bootgui(): show() then puts a form up and returns,
 	// and the loop runs once the script has finished.
-	booted  bool
-	methods map[string]*lua.LFunction
+	booted bool
+	// lastEvent is the object the last click or key went to, which
+	// gui.popup shows its menu over when it is not told where.
+	lastEvent *guiObject
+	methods   map[string]*lua.LFunction
 	// custom are the controls the script defined with gui.define.
 	custom map[string]*customKind
 	// read is where a fused program's own files come from, archive first;
@@ -271,6 +278,9 @@ type guiObject struct {
 		// last one's rest is a hover; hovered is set while one is shown.
 		hover   int
 		hovered bool
+		// listening is set once its widget hands its events to handle, as
+		// some FLTK widgets cannot.
+		listening bool
 	}
 	// state is anything else the backend keeps for the object.
 	state any
@@ -318,6 +328,8 @@ func (a *app) open(L *lua.LState) int {
 		"savefile":    a.fileFunc("save"),
 		"choosedir":   a.fileFunc("dir"),
 		"choosecolor": a.choosecolor,
+		"popup":       a.popup,
+		"measure":     a.measure,
 		"clipboard":   a.clipboard,
 		"load":        a.load,
 		"dump":        a.dump,
@@ -332,6 +344,8 @@ func (a *app) open(L *lua.LState) int {
 		// The tlua running this, for running another program with it.
 		mod.RawSetString("interpreter", lua.LString(exe))
 	}
+	// The system it runs on, as Go names it: "darwin", "linux", "windows".
+	mod.RawSetString("platform", lua.LString(goruntime.GOOS))
 	mod.RawSetString("_DESCRIPTION", lua.LString("Desktop GUI module for tlua"))
 
 	mt := L.NewTypeMetatable(guiObjectType)
@@ -646,6 +660,10 @@ func (a *app) checkProp(L *lua.LState, name string, value lua.LValue) (lua.LValu
 	case "items", "columns", "rows":
 		if _, ok := value.(*lua.LTable); !ok {
 			return nil, fmt.Errorf("gui: %s must be a table, not a %s", name, value.Type())
+		}
+	case "contextMenu":
+		if _, ok := value.(*lua.LTable); !ok && value != lua.LNil {
+			return nil, fmt.Errorf("gui: contextMenu is a list of menu items, not a %s", value.Type())
 		}
 	case "editable":
 		switch value.(type) {
@@ -1173,6 +1191,106 @@ func (a *app) loop(done func() bool) {
 		}
 		wait()
 	}
+}
+
+// measure is gui.measure(text [, font [, size]]): the width and height the
+// text takes when drawn in that font ("sans", "serif" or "mono") and size,
+// 14 and sans unless said; a line a "\n". It is what a Label or a Canvas's
+// g:text needs for it, to size one to fit.
+func (a *app) measure(L *lua.LState) int {
+	text := L.CheckString(1)
+	font := L.OptString(2, "sans")
+	switch font {
+	case "sans", "serif", "mono":
+	default:
+		L.ArgError(2, "font must be \"sans\", \"serif\" or \"mono\"")
+	}
+	size := L.OptInt(3, 14)
+	if size < 1 {
+		L.ArgError(3, "size must be at least 1")
+	}
+	w, h, err := measureText(text, font, size)
+	if err != nil {
+		L.RaiseError("%s", err.Error())
+	}
+	L.Push(lua.LNumber(w))
+	L.Push(lua.LNumber(h))
+	return 2
+}
+
+// menuPick is the item picked from a popup menu: its table (nil for one
+// that is only a caption), its name, its caption and whether it is checked.
+type menuPick struct {
+	item *lua.LTable
+	name lua.LValue
+	text string
+	on   bool
+}
+
+// popup is gui.popup(items [, near]): a menu at the mouse, over near's form
+// or else the one the last click or key was in. The item picked runs its
+// function, and its name (or caption, without the &) is returned with
+// whether it is checked; nothing when none was picked.
+func (a *app) popup(L *lua.LState) int {
+	items := L.CheckTable(1)
+	near, ok := toObject(L.Get(2))
+	if !ok {
+		near = a.lastEvent
+	}
+	if near == nil || near.form() == nil {
+		near = a.lastForm
+	}
+	if near == nil {
+		L.RaiseError("gui: a popup menu is shown over a form on screen")
+	}
+	got, err := showMenu(near, items)
+	if err != nil {
+		L.RaiseError("%s", err.Error())
+	}
+	if got == nil {
+		return 0
+	}
+	if fn := itemFunction(got.item); fn != nil {
+		if err := L.CallByParam(lua.P{Fn: fn, NRet: 0, Protect: true}, lua.LString(got.text), lua.LBool(got.on)); err != nil {
+			L.RaiseError("%s", err.Error())
+		}
+	}
+	if got.name != lua.LNil {
+		L.Push(got.name)
+	} else {
+		L.Push(lua.LString(menuCaption(got.text)))
+	}
+	L.Push(lua.LBool(got.on))
+	return 2
+}
+
+// menuCaption is a caption as it reads: "&Open" is "Open", "&&" one "&".
+func menuCaption(text string) string {
+	var b strings.Builder
+	for i := 0; i < len(text); i++ {
+		if text[i] == '&' {
+			if i+1 < len(text) && text[i+1] == '&' {
+				b.WriteByte('&')
+				i++
+			}
+			continue
+		}
+		b.WriteByte(text[i])
+	}
+	return b.String()
+}
+
+// itemFunction is what a menu item runs: {"&Open", fn} or onClick = fn;
+// nil for none, and for an item that is only a caption.
+func itemFunction(item *lua.LTable) *lua.LFunction {
+	if item == nil {
+		return nil
+	}
+	if fn, ok := item.RawGetInt(2).(*lua.LFunction); ok {
+		return fn
+	}
+	fn, _ := item.RawGetString("onClick").(*lua.LFunction)
+	return fn
 }
 
 // errInterrupted is what a loop ended by Ctrl-C or SIGTERM reports.

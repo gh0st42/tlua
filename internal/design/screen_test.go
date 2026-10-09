@@ -163,6 +163,47 @@ func (s *scene) click(x, y int) {
 	s.pump()
 }
 
+// rightClick right-clicks on the design surface, in the form's coordinates.
+func (s *scene) rightClick(x, y int) {
+	ox, oy := s.at("D.surface.overlay", 0, 0)
+	in.RightClick(ox+x, oy+y)
+	s.pump()
+}
+
+func TestDesignerContextMenus(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.pickTool("Button")
+		s.drag(20, 20, 140, 50)
+		s.pickTool("Label")
+		s.drag(20, 80, 140, 110)
+		s.expect(`#D.doc == 2 and D.selection == D.doc[2]`)
+
+		// A right click on a control selects it, and offers what can be
+		// done to it.
+		s.lua(`D.answerMenu = "Duplicate"`)
+		s.rightClick(40, 30)
+		s.expect(`#D.doc == 3 and D.doc[3].kind == "Button" and D.menuAsked[1][1] == "Cu&t"`)
+
+		s.lua(`D.answerMenu = "Delete"`)
+		s.rightClick(40, 90)
+		s.expect(`#D.doc == 2 and D.doc[1].kind == "Button" and D.doc[2].kind == "Button"`)
+
+		// On the form: paste and select all.
+		s.lua(`D.answerMenu = "Select All"`)
+		s.rightClick(300, 250)
+		s.expect(`#D.surface:selectedNodes() == 2 and D.menuAsked[1][1] == "&Paste"`)
+		s.expect(`D.menuAsked[1].enabled == false`) // nothing copied yet
+
+		// A control's own context menu is written in the Menu Editor.
+		s.lua(`D.surface:selectNode(D.doc[1])`)
+		s.lua(`D.props.editMenuItems = function() return { { "Open", name = "open" }, "-", { "Close" } } end`)
+		s.lua(`D.props:button(D.props:row("contextMenu"))`)
+		s.expect(`#D.doc[1].contextMenu == 3 and D.doc[1].contextMenu[1].name == "open" and D.props:text("contextMenu") == "(3)"`)
+		s.lua(`D.props.editMenuItems = function() return {} end; D.props:button(D.props:row("contextMenu"))`)
+		s.expect(`D.doc[1].contextMenu == nil`)
+	})
+}
+
 func TestDesignerPlacesMovesResizesAndDeletes(t *testing.T) {
 	withDesigner(t, func(s *scene) {
 		s.expect(`D.formName == "Form1" and D.win.caption:find("Form1") and #D.doc == 0`)
@@ -381,6 +422,41 @@ func TestDesignerCompletesAndExplainsCode(t *testing.T) {
 		s.expect(`D.assist.tip.caption:find("gui")`)
 		in.Key(fltk.ESCAPE, "", 0)
 		s.expect(`not D.assist:tipShown()`)
+	})
+}
+
+// The help tip is as big as its text, wrapped to the code box and cut to
+// its height, whatever the text.
+func TestDesignerHelpTipFitsItsText(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.lua(`D:showCode()`)
+		s.lua(`
+			local long = ("word "):rep(60) .. "—→ " .. ("x"):rep(150)
+			local text = "function gui.load(layout: string|gui.Layout, parent?: gui.Container)\n  -> gui.Form\n\n" .. long
+			D.assist:showTip(text, 10, "key")
+			tipA = { D.assist.tipFrame.width, D.assist.tipFrame.height, D.assist.tip.caption }
+			local lines = {}
+			for i = 1, 50 do lines[i] = "line " .. i end
+			D.assist:showTip(table.concat(lines, "\n"), 10, "key")
+			tipB = { D.assist.tipFrame.width, D.assist.tipFrame.height, D.assist.tip.caption }
+		`)
+		s.expect(`D.assist:tipShown()`)
+		s.lua(`
+			local gui = require "gui"
+			box = D.codeBox
+			function check(tip)
+				local w, h, caption = tip[1], tip[2], tip[3]
+				local tw, th = gui.measure(caption, "mono", 12)
+				local widest = 0
+				for line in (caption .. "\n"):gmatch("(.-)\n") do
+					widest = math.max(widest, (gui.measure(line, "mono", 12)))
+				end
+				return w <= box.width and h <= box.height and tw <= w - 2 and th <= h - 2 and widest <= w - 16
+			end
+		`)
+		s.expect(`check(tipA) and tipA[3]:find("—→") and select(2, tipA[3]:gsub("\n", "")) >= 5`)
+		s.expect(`check(tipB) and tipB[3]:find("%.%.%.$") and not tipB[3]:find("line 50")`)
+		s.expect(`D.assist.tipFrame.top >= box.top and D.assist.tipFrame.top + D.assist.tipFrame.height <= box.top + box.height`)
 	})
 }
 

@@ -34,6 +34,8 @@ func selectText(o *guiObject, i, j int)                             {}
 func tableEdit(o *guiObject, row, col int)                          {}
 func tableEditing(o *guiObject) (int, int)                          { return 0, 0 }
 func insertText(o *guiObject, text string)                          {}
+func showMenu(o *guiObject, items *lua.LTable) (*menuPick, error)   { return nil, errNoBackend }
+func measureText(text, font string, size int) (int, int, error)     { return 0, 0, errNoBackend }
 func pointAt(o *guiObject, pos int) (int, int, int, bool)           { return 0, 0, 0, false }
 func getClipboard() (string, error)                                 { return "", errNoBackend }
 func setClipboard(text string) error                                { return errNoBackend }

@@ -67,7 +67,7 @@ function M.new(area, d)
     left = MARGIN, top = MARGIN + TITLE, width = 100, height = 100,
   }
   s.overlay.onDraw = function(_, g) s:draw(g) end
-  s.overlay.onMouseDown = function(_, x, y, _, double, mods) s:down(x, y, double, mods) end
+  s.overlay.onMouseDown = function(_, x, y, button, double, mods) s:down(x, y, double, mods, button) end
   s.overlay.onMouseDrag = function(_, x, y) s:dragTo(x, y) end
   s.overlay.onMouseUp = function(_, x, y) s:up(x, y) end
   s.overlay.onKey = function(_, key) return s:key(key) end
@@ -389,9 +389,24 @@ function M:snap(v)
   return math.floor(v + 0.5)
 end
 
-function M:down(x, y, double, mods)
+-- contextClick says whether a press asks for a context menu: the right
+-- button, or Ctrl with the left one on a Mac.
+local function contextClick(button, mods)
+  return button == 3 or (button == 1 and gui.platform == "darwin" and mods and mods:find("Ctrl") ~= nil)
+end
+
+function M:down(x, y, double, mods, button)
   local tool = self.d:tool()
   local shift = mods and mods:find("Shift")
+  if contextClick(button, mods) and not tool and not self.tabMode then
+    -- What is under the mouse is selected, unless it is selected already
+    -- (with others, perhaps), and its menu comes up.
+    local e = self:hit(x, y)
+    if not (e and self:isSelected(e)) then self:select(e) end
+    self.drag = nil
+    self.d:contextMenu(e and e.node or self.doc)
+    return
+  end
   if self.tabMode then
     local e = self:hit(x, y)
     if e and model.kinds()[e.node.kind].props.tabIndex then self:nextInTabOrder(e) end

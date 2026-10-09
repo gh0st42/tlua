@@ -827,7 +827,14 @@ func setItems(o *guiObject) error {
 		if items == nil {
 			return nil
 		}
-		return addMenu(o, w, "", items)
+		return addMenu(w, "", items, func(item *lua.LTable, name lua.LValue, text string, on bool) {
+			if fn := itemFunction(item); fn != nil {
+				o.app.call(fn, lua.LString(text), lua.LBool(on))
+			}
+			// A menu written down in a layout has no functions in it; its
+			// items are told apart by name in the Menu's onClick.
+			o.app.fire(o, "onClick", name, lua.LString(text), lua.LBool(on))
+		})
 	}
 	return nil
 }
@@ -1144,36 +1151,52 @@ func readProp(o *guiObject, name string) (lua.LValue, bool) {
 // addMenu adds a list of menu items under prefix. An item is {"&Open", fn},
 // with shortcut, checked and enabled as named fields, or {"&File", {...}} for
 // a submenu, or "-" for a line between two items.
-func addMenu(o *guiObject, mb *fltk.MenuBar, prefix string, items *lua.LTable) error {
+// menuWidget is what a menu is added to: a menu bar, or the button a
+// popup menu is shown with.
+type menuWidget interface {
+	AddEx(label string, shortcut int, callback func(), flags int) int
+	Mode(id int) int
+	Value() int
+}
+
+// addMenu adds a list of menu items under prefix. An item is {"&Open", fn},
+// with shortcut, checked, enabled and name as named fields, or {"&File",
+// {...}} for a submenu, or "-" for a line between two items, or just a
+// caption. picked is told of the item chosen: its table (nil for a caption
+// alone), its name, its caption, and whether it is checked now.
+func addMenu(mb menuWidget, prefix string, items *lua.LTable, picked func(item *lua.LTable, name lua.LValue, text string, on bool)) error {
 	n := items.Len()
 	for i := 1; i <= n; i++ {
 		v := items.RawGetInt(i)
 		if v == lua.LString("-") {
 			continue
 		}
+		divided := 0
+		if i < n && items.RawGetInt(i+1) == lua.LString("-") {
+			divided = fltk.MENU_DIVIDER
+		}
+		// A caption alone is an item with nothing else to it.
+		if s, isString := v.(lua.LString); isString {
+			text := string(s)
+			mb.AddEx(prefix+menuText(text), 0, func() { picked(nil, lua.LNil, text, false) }, divided)
+			continue
+		}
 		item, ok := v.(*lua.LTable)
 		if !ok {
-			return fmt.Errorf("gui: a menu item is a table like {\"&Open\", fn} or \"-\", not a %s", v.Type())
+			return fmt.Errorf("gui: a menu item is a table like {\"&Open\", fn}, a caption, or \"-\", not a %s", v.Type())
 		}
 		text := lua.LVAsString(item.RawGetInt(1))
 		path := prefix + menuText(text)
-		flags := 0
-		if i < n && items.RawGetInt(i+1) == lua.LString("-") {
-			flags |= fltk.MENU_DIVIDER
-		}
+		flags := divided
 		if item.RawGetString("enabled") == lua.LFalse {
 			flags |= fltk.MENU_INACTIVE
 		}
 		if sub, ok := item.RawGetInt(2).(*lua.LTable); ok {
 			mb.AddEx(path, 0, func() {}, flags|fltk.SUBMENU)
-			if err := addMenu(o, mb, path+"/", sub); err != nil {
+			if err := addMenu(mb, path+"/", sub, picked); err != nil {
 				return err
 			}
 			continue
-		}
-		fn, _ := item.RawGetInt(2).(*lua.LFunction)
-		if fn == nil {
-			fn, _ = item.RawGetString("onClick").(*lua.LFunction)
 		}
 		shortcut, err := parseShortcut(lua.LVAsString(item.RawGetString("shortcut")))
 		if err != nil {
@@ -1193,12 +1216,7 @@ func addMenu(o *guiObject, mb *fltk.MenuBar, prefix string, items *lua.LTable) e
 				// again leaves it as the user left it.
 				item.RawSetString("checked", lua.LBool(on))
 			}
-			if fn != nil {
-				o.app.call(fn, lua.LString(text), lua.LBool(on))
-			}
-			// A menu written down in a layout has no functions in it; its
-			// items are told apart by name in the Menu's onClick.
-			o.app.fire(o, "onClick", name, lua.LString(text), lua.LBool(on))
+			picked(item, name, text, on)
 		}, flags)
 	}
 	return nil

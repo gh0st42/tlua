@@ -19,7 +19,8 @@ local M = {}
 M.__index = M
 
 local LIST_W, LIST_ROWS, ROW = 260, 8, 16
-local TIP_LINES, TIP_COLS = 14, 90
+-- The help tip's font, and the room around its text.
+local TIP_FONT, TIP_SIZE, TIP_PAD_X, TIP_PAD_Y = "mono", 12, 16, 10
 
 function M.new(d, box, parent)
   local a = setmetatable({ d = d, box = box, shown = {} }, M)
@@ -206,14 +207,18 @@ function M:filter(byHand)
 end
 
 -- place puts a popup under the line of text position pos, or over it when
--- there is no room below, and inside the box.
+-- there is no room below, and inside the box either way.
 function M:place(popup, pos, w, h)
   local box = self.box
   local x, y, lh = box:pointAt(pos)
   if not x then return end
   x = math.max(0, math.min(x, box.width - w - 4))
   local top = y + lh
-  if top + h > box.height and y - h >= 0 then top = y - h end
+  if top + h > box.height then
+    -- Over the line when there is room there, and otherwise as low as it
+    -- can be and still all in the box.
+    top = y - h >= 0 and y - h or math.max(0, box.height - h)
+  end
   popup.left, popup.top = box.left + x, box.top + top
   popup.width, popup.height = w, h
 end
@@ -269,21 +274,60 @@ function M:help(pos, byHand)
   end)
 end
 
-function M:showTip(text, pos, from)
-  local lines, width = {}, 0
-  for line in (text .. "\n"):gmatch("(.-)\n") do
-    if #lines == TIP_LINES then
-      lines[#lines] = "..."
-      break
+-- wrap breaks a line that is wider than room at its spaces, and a word
+-- wider than room between its characters, keeping the line's indent on the
+-- lines it makes.
+local function wrap(line, room)
+  local function fits(s) return (gui.measure(s, TIP_FONT, TIP_SIZE)) <= room end
+  if fits(line) then return { line } end
+  local indent = line:match("^%s*")
+  local out, cur = {}, ""
+  local function push(s)
+    out[#out + 1] = s
+    cur = indent
+  end
+  for word in line:gmatch("%S+") do
+    local try = (cur == "" or cur == indent) and (cur .. word) or (cur .. " " .. word)
+    if fits(try) then
+      cur = try
+    else
+      if cur ~= "" and cur ~= indent then push(cur) end
+      -- A word too long for a line of its own, cut where it must be.
+      local piece = cur
+      for ch in word:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+        if not fits(piece .. ch) and piece ~= "" and piece ~= indent then
+          push(piece)
+          piece = cur
+        end
+        piece = piece .. ch
+      end
+      cur = piece
     end
-    if #line > TIP_COLS then line = line:sub(1, TIP_COLS - 3) .. "..." end
-    lines[#lines + 1] = line
-    width = math.max(width, #line)
+  end
+  if cur ~= "" and cur ~= indent then out[#out + 1] = cur end
+  return out
+end
+
+function M:showTip(text, pos, from)
+  local box = self.box
+  -- As wide and as tall as the code box allows, and no more than it needs.
+  local room = math.max(160, box.width - 2 * TIP_PAD_X - 8)
+  local _, lineH = gui.measure("X", TIP_FONT, TIP_SIZE)
+  local most = math.max(3, math.floor((box.height - 2 * TIP_PAD_Y - 8) / lineH))
+  local lines = {}
+  for line in (text .. "\n"):gmatch("(.-)\n") do
+    for _, part in ipairs(wrap(line, room)) do lines[#lines + 1] = part end
   end
   while lines[#lines] == "" do lines[#lines] = nil end
   if #lines == 0 then return end
-  self.tip.caption = table.concat(lines, "\n")
-  local w, h = math.floor(width * 7.5) + 20, #lines * 13 + 12
+  if #lines > most then
+    for i = #lines, most + 1, -1 do lines[i] = nil end
+    lines[most] = "..."
+  end
+  local caption = table.concat(lines, "\n")
+  self.tip.caption = caption
+  local tw, th = gui.measure(caption, TIP_FONT, TIP_SIZE)
+  local w, h = tw + 2 * TIP_PAD_X, th + 2 * TIP_PAD_Y
   self:place(self.tipFrame, pos, w, h)
   self.tip.width, self.tip.height = w - 2, h - 2
   self.tipFrame.visible = true

@@ -42,6 +42,8 @@ function bootgui() end
 ---@field tabIndex? integer its place in the order Tab goes in; controls that take the keyboard
 ---@field onDrop? fun(self: self, text: string, lines: string[]) something was dropped on it; files arrive as one path per line
 ---@field onDrag? fun(self: self): string? the user drags out of it; return the text to carry
+---@field contextMenu? gui.MenuItem[] what a right click on it shows, at the mouse
+---@field onContextMenu? fun(self: self, name: any, caption: string, checked: boolean) an item of its contextMenu was picked
 ---@field [string] any fields of the script's own, which controls written in Lua keep their state in
 local Object = {}
 
@@ -100,6 +102,8 @@ function Object:redraw() end
 ---@field parent? gui.Container where `gui.Button{}` and the like go, instead of the latest Form
 ---@field onDrop? fun(self: gui.Object, text: string, lines: string[])
 ---@field onDrag? fun(self: gui.Object): string?
+---@field contextMenu? gui.MenuItem[]
+---@field onContextMenu? fun(self: gui.Object, name: any, caption: string, checked: boolean)
 
 ----------------------------------------------------------------------------
 -- Containers: what holds controls, and makes them.
@@ -732,6 +736,29 @@ function gui.choosedir(opts) end
 ---@param opts? string|gui.ColorOptions
 ---@return string?
 function gui.choosecolor(opts) end
+
+--- Shows a menu at the mouse, over near's form or the one the last click
+--- or key was in, and waits: the picked item's name (or its caption without
+--- the &) and whether it is checked; nothing when none was picked. The
+--- item's own function runs too.
+---@param items gui.MenuItem[]
+---@param near? gui.Object
+---@return any? picked
+---@return boolean? checked
+function gui.popup(items, near) end
+
+--- The width and height text takes when drawn in a font and size (sans
+--- and 14 unless said); a line a "\n".
+---@param text string
+---@param font? "sans"|"serif"|"mono"
+---@param size? integer
+---@return integer width
+---@return integer height
+function gui.measure(text, font, size) end
+
+--- What the program runs on, as Go names it: "darwin", "linux", "windows".
+---@type string
+gui.platform = nil
 
 --- The text on the clipboard; `gui.clipboard(text)` puts text there instead.
 ---@overload fun(text: string)

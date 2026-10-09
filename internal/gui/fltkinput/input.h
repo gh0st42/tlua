@@ -6,6 +6,8 @@ int tlua_fltk_send(int event, int x, int y, int x_root, int y_root, int dx, int 
                    int keysym, int state, int clicks, int is_click,
                    const char *text, int length);
 
+int tlua_fltk_grabbing(void);
+
 #ifdef __cplusplus
 }
 #endif

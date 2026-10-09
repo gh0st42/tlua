@@ -165,11 +165,11 @@ assert(form.onClose ~= nil, "on('close') is onClose")`)
 	if _, ok := button.events["onClick"]; ok {
 		t.Fatal("assigning nil should remove the handler")
 	}
-	fails(t, L, `button.onChange = function() end`, "a Button has no event onChange (it has onClick, onDrop, onDrag)")
+	fails(t, L, `button.onChange = function() end`, "a Button has no event onChange (it has onClick, onDrop, onDrag, onContextMenu)")
 	fails(t, L, `form:on("click", function() end)`, "a Form has no event onClick")
 	fails(t, L, `button.onClick = 5`, "must be a function or nil")
 	fails(t, L, `button.show = 1`, "show is a method")
-	fails(t, L, `form:Label{}.onClick = print`, "a Label has no event onClick (it has onDrop, onDrag)")
+	fails(t, L, `form:Label{}.onClick = print`, "a Label has no event onClick (it has onDrop, onDrag, onContextMenu)")
 	run(t, L, `form:Label{}.onDrop = print`)
 	run(t, L, `assert(button.focus == form.focus, "methods are the same function every time")`)
 }

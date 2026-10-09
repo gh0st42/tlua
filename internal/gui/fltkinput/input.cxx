@@ -15,6 +15,7 @@ public:
   static char *e_text;
   static int handle(int event, Fl_Window *window);
   static Fl_Window *first_window();
+  static Fl_Window *grab_;
 };
 
 // FLTK may read the text after the call that set it has returned.
@@ -23,7 +24,9 @@ static char text_buf[4096];
 extern "C" int tlua_fltk_send(int event, int x, int y, int x_root, int y_root, int dx, int dy,
                               int keysym, int state, int clicks, int is_click,
                               const char *text, int length) {
-  Fl_Window *w = Fl::first_window();
+  // A window holding the grab, as a popup menu does while it is up, is
+  // where FLTK sends what happens, as it would the system's events.
+  Fl_Window *w = Fl::grab_ ? Fl::grab_ : Fl::first_window();
   if (!w) {
     return -1;
   }
@@ -47,3 +50,5 @@ extern "C" int tlua_fltk_send(int event, int x, int y, int x_root, int y_root, i
   Fl::e_length = length;
   return Fl::handle(event, w);
 }
+
+extern "C" int tlua_fltk_grabbing(void) { return Fl::grab_ != 0; }

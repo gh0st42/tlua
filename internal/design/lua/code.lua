@@ -25,7 +25,7 @@ local params = {
   onKey = "key, text", onDrop = "text, lines", onDraw = "g",
   onMouseDown = "x, y, button, double", onMouseUp = "x, y, button",
   onMouseMove = "x, y", onMouseDrag = "x, y", onMouseWheel = "dx, dy",
-  onToggle = "path, open",
+  onToggle = "path, open", onContextMenu = "name, caption, checked",
 }
 
 -- A Menu's onClick says which item; a Button's says nothing.

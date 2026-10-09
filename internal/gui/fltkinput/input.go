@@ -5,8 +5,9 @@
 // menus and the widgets' own handling all see them as they would a real
 // key or click. It is for tests; nothing in tlua itself imports it.
 //
-// Events go to the window in front, which is the one shown last. Positions
-// are in that window's coordinates.
+// Events go to the window in front, which is the one shown last, or to the
+// one holding the grab while a popup menu is up. Positions are in that
+// window's coordinates.
 package fltkinput
 
 // #cgo CXXFLAGS: -std=c++11
@@ -51,6 +52,7 @@ func Send(e Event) bool {
 const (
 	button      = 0xfee8 // FL_Button
 	button1Held = 0x01000000
+	button3Held = 0x04000000
 )
 
 // Click presses and releases mouse button 1 at x, y.
@@ -61,6 +63,17 @@ func Click(x, y int) { click(x, y, 0) }
 func ClickWith(x, y, state int) {
 	Send(Event{Type: fltk.PUSH, X: x, Y: y, Key: button + 1, State: button1Held | state})
 	Send(Event{Type: fltk.RELEASE, X: x, Y: y, Key: button + 1, State: state, IsClick: true})
+}
+
+// Grabbing says whether a window holds the grab: a popup menu is up.
+func Grabbing() bool { return C.tlua_fltk_grabbing() != 0 }
+
+// RightClick presses and releases mouse button 3 at x, y. What the press
+// opens (a context menu) is up before it returns, and gone again: answer
+// it from a timer set beforehand.
+func RightClick(x, y int) {
+	Send(Event{Type: fltk.PUSH, X: x, Y: y, Key: button + 3, State: button3Held})
+	Send(Event{Type: fltk.RELEASE, X: x, Y: y, Key: button + 3, IsClick: true})
 }
 
 // DoubleClick is the second click of a double click at x, y.

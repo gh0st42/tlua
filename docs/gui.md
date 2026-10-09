@@ -116,6 +116,8 @@ Some details:
   beside it.
 
 Every kind also raises `onDrop` and `onDrag`; see [Drag and drop](#drag-and-drop).
+Every kind also has a `contextMenu`, and raises `onContextMenu`; see
+[Context menus](#context-menus).
 
 ## Handlers
 
@@ -225,6 +227,64 @@ table changed and assigned again, and it keeps what the user left it as.
 
 An `&` marks the letter to underline. `Cmd` is Command on a Mac and Ctrl
 elsewhere. The menu sits along the top of the form, so leave it 25 pixels.
+
+## Context menus
+
+Any control, and a form, can have a `contextMenu`: a right click on it (a
+Ctrl-click on a Mac) shows it at the mouse. Its items are written as a
+Menu's, and a caption alone is an item too.
+
+```lua
+list.contextMenu = {
+  { "&Open", function() open(list.text) end },
+  { "Re&name", function() rename(list.text) end, shortcut = "F2" },
+  "-",
+  { "&Delete", name = "delete", enabled = canDelete },
+}
+function list:onContextMenu(name, caption, checked)
+  if name == "delete" then ... end
+end
+```
+
+- **Which menu.** A right click shows the menu of the innermost control
+  under the mouse that has one: a button's own, or else the Panel's or the
+  form's it is in.
+- **Lists first.** A ListBox, Tree or Table selects the line under the
+  mouse before its menu comes up, so the menu is about that line.
+- **What runs.** The item's own function runs, with `(caption, checked)`
+  as a Menu item's does. Then the control's `onContextMenu(self, name,
+  caption, checked)` runs, which is how a menu written in a layout, with no
+  functions in it, is answered in code. tlua design writes a control's
+  context menu in the Menu Editor, from the `contextMenu` property's "...".
+- **Shortcuts.** A shortcut is shown beside its item, but works only while
+  the menu is up.
+- `nil` or an empty list is no menu, and a right click is then just a
+  click, which a Canvas's `onMouseDown` reports as button 3.
+
+`gui.popup(items [, near])` shows a menu at the mouse whenever the script
+asks, from a handler. It returns the picked item's `name`, or its caption
+without the `&`, and whether it is checked. It returns nothing when the menu
+was closed without a pick, and the item's own function runs as well. The
+menu appears over `near`'s form, or over the form the last click or key was
+in:
+
+```lua
+function canvas:onMouseDown(x, y, button)
+  if button == 3 then
+    local choice = gui.popup { "Cut", "Copy", "-", "Paste" }
+    if choice == "Cut" then ... end
+  end
+end
+```
+
+`gui.measure(text [, font [, size]])` is the width and height text takes
+when drawn in a font (`"sans"`, `"serif"` or `"mono"`, sans unless said) and
+size (14 unless said), a line a `"\n"`. With it a Label, a tip or a box
+drawn on a Canvas can be made to fit what it shows.
+
+`gui.platform` says what the program runs on, as Go names it (`"darwin"`,
+`"linux"`, `"windows"`), for the odd thing that differs, as a Mac's
+Ctrl-click does.
 
 ## Tree
 
