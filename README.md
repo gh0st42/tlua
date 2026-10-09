@@ -804,7 +804,10 @@ indices walk back over tlua's own options.
 
 Ctrl-C aborts the running chunk rather than killing the process, so the REPL
 survives an interrupted loop; a script interrupted this way exits with
-status 1. A program waiting on a socket is interrupted the same way.
+status 1. A program waiting on a socket is interrupted the same way. So is
+a GUI program waiting on its windows, a modal form or a message box, and
+SIGTERM stops one as Ctrl-C does; a colour or file chooser open at the time
+is left to close first, since the system runs those itself.
 
 `io.popen` runs its command with tlua's own stdin and stderr, as popen(3)
 does, so `io.popen("stty size")` sees the terminal; closing the handle gives

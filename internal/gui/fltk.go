@@ -1304,8 +1304,9 @@ func onKey(f *guiObject) bool {
 
 // dialog shows a message with a row of buttons, and a line to type into when
 // input is set. It returns the index of the button pressed, or -1 when the
-// box was closed some other way, and what was typed.
-func dialog(title, message string, buttons []string, input bool, deflt string) (int, string, error) {
+// box was closed some other way, and what was typed. stop says when the
+// program has been told to stop, which closes the box.
+func dialog(title, message string, buttons []string, input bool, deflt string, stop func() bool) (int, string, error) {
 	const pad, gap, bw, bh = 16, 8, 88, 28
 	win := fltk.NewWindow(400, 200, title)
 	defer win.Destroy()
@@ -1367,8 +1368,13 @@ func dialog(title, message string, buttons []string, input bool, deflt string) (
 	} else {
 		first.TakeFocus()
 	}
-	for win.IsShown() {
+	// Told to stop, the box goes as if closed; the program stops after.
+	for win.IsShown() && !stop() {
 		wait()
+	}
+	if win.IsShown() {
+		pressed = -1
+		win.Hide()
 	}
 	text := ""
 	if in != nil {

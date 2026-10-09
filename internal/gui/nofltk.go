@@ -38,6 +38,6 @@ func pointAt(o *guiObject, pos int) (int, int, int, bool)           { return 0, 
 func getClipboard() (string, error)                                 { return "", errNoBackend }
 func setClipboard(text string) error                                { return errNoBackend }
 
-func dialog(title, message string, buttons []string, input bool, deflt string) (int, string, error) {
+func dialog(title, message string, buttons []string, input bool, deflt string, stop func() bool) (int, string, error) {
 	return -1, "", errNoBackend
 }

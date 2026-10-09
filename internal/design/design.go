@@ -68,7 +68,7 @@ func Command(args []string) int {
 		return r.Report(err)
 	}
 	boot.TooLate()
-	return r.Report(boot.Show())
+	return r.Report(r.Protect(boot.Show))
 }
 
 // Preload makes the designer's Lua files requirable as design.<name>, and

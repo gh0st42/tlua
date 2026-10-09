@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1162,10 +1163,25 @@ func (a *app) call(fn *lua.LFunction, args ...lua.LValue) lua.LValue {
 }
 
 // loop runs the event loop until done says so or a handler fails.
+// It stops, too, when the program is told to: Ctrl-C, or SIGTERM, which
+// cancel the state's context while a chunk runs or the loop does.
 func (a *app) loop(done func() bool) {
 	for a.err == nil && !done() {
+		if a.interrupted() {
+			a.err = errInterrupted
+			return
+		}
 		wait()
 	}
+}
+
+// errInterrupted is what a loop ended by Ctrl-C or SIGTERM reports.
+var errInterrupted = errors.New("interrupted")
+
+// interrupted says whether the program has been told to stop.
+func (a *app) interrupted() bool {
+	ctx := a.L.Context()
+	return ctx != nil && ctx.Err() != nil
 }
 
 func (a *app) anyShown() bool {

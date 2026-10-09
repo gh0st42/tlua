@@ -263,7 +263,7 @@ func run(c *cli) int {
 		return r.Report(errors.New("a program says boot() or bootgui(), not both"))
 	}
 	if guiBoot.Wanted() {
-		if err := guiBoot.Show(); err != nil {
+		if err := r.Protect(guiBoot.Show); err != nil {
 			return r.Report(err)
 		}
 		if !opts.Interactive {
@@ -381,7 +381,7 @@ func runFused(p *payload.Payload, name string, args []string, argIdx int) int {
 	case guiBoot.Wanted() && boot.Wanted():
 		return f.Report(errors.New("a program says boot() or bootgui(), not both"))
 	case guiBoot.Wanted():
-		return f.Report(guiBoot.Show())
+		return f.Report(f.Protect(guiBoot.Show))
 	case boot.Wanted():
 		return boot.Show()
 	}

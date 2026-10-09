@@ -32,7 +32,7 @@ func (a *app) msgbox(L *lua.LState) int {
 		sort.Strings(names)
 		L.ArgError(2, "buttons must be one of "+strings.Join(names, ", "))
 	}
-	pressed, _, err := dialog(title, message, set.labels, false, "")
+	pressed, _, err := dialog(title, message, set.labels, false, "", a.interrupted)
 	if err != nil {
 		L.RaiseError("%s", err.Error())
 	}
@@ -49,7 +49,7 @@ func (a *app) inputbox(L *lua.LState) int {
 	prompt := L.CheckString(1)
 	title := L.OptString(2, "Input")
 	deflt := L.OptString(3, "")
-	pressed, text, err := dialog(title, prompt, []string{"OK", "Cancel"}, true, deflt)
+	pressed, text, err := dialog(title, prompt, []string{"OK", "Cancel"}, true, deflt, a.interrupted)
 	if err != nil {
 		L.RaiseError("%s", err.Error())
 	}
