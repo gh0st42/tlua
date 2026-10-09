@@ -3,6 +3,7 @@ package lua
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 )
 
@@ -112,6 +113,15 @@ func (st LString) Format(f fmt.State, c rune) {
 }
 
 func (nm LNumber) String() string {
+	// As C's printf writes them, which is what Lua shows.
+	switch f := float64(nm); {
+	case math.IsInf(f, 1):
+		return "inf"
+	case math.IsInf(f, -1):
+		return "-inf"
+	case math.IsNaN(f):
+		return "nan"
+	}
 	if isInteger(nm) {
 		return fmt.Sprint(int64(nm))
 	}

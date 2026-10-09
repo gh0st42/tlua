@@ -59,3 +59,24 @@ and checked against its argument, `%q` escapes as Lua 5.1 does, `%c`, `%s`
 widths and precisions count bytes, `%g` has C's default precision, and
 infinities print as `inf`. Go's `fmt` still renders the numbers. `%s` keeps
 gopher-lua's leniency of taking any value, using `__tostring` as Lua 5.2 does.
+
+## utils.go, baselib.go, mathlib.go, value.go: numbers in strings
+
+Strings were read as numbers in two ways, neither of them Lua's. `tonumber`
+parsed a string without a `.` as an integer, so `tonumber("1e5")` was nil
+(and `"2e-3"`, `"1E5"`, and `tonumber("1e5", 10)`). Arithmetic on strings
+and the compiler went through Go's `strconv.ParseInt` with base 0, which
+reads Go's literals: `"010" + 0` was 8, and `"0b101"` and `"1_000"` were
+numbers.
+
+Both now use `str2number`, which is Lua 5.1's `luaO_str2d`: a decimal with
+an optional fraction and exponent, or a hexadecimal integer, with a sign
+and C's whitespace around it. Unlike C's `strtod`, it reads no `inf`, `nan`
+or hexadecimal fraction, as Lua 5.2 decided. `tonumber(s, base)` for
+another base reads an integer in it as `strtoul` does, `0x` allowed in base
+16, and a base outside 2 to 36 is an error.
+
+`math.huge` was the largest finite number rather than infinity, and
+infinities and NaN printed as Go writes them (`+Inf`); they are `inf`,
+`-inf` and `nan` now, as in Lua.
+

@@ -94,6 +94,19 @@ func TestGopherLuaPatches(t *testing.T) {
 			assert(not pcall(string.format, "%d", "x"))
 			assert(not pcall(string.format, "%y", 1))
 			assert(string.format("%u|%5.2s|%c|%g", 42, "abc", 65, math.pi) == "42|   ab|A|3.14159")`,
+		"tonumber reads exponents without a point": `
+			assert(tonumber("1e5") == 1e5 and tonumber("1E5") == 1e5 and tonumber("2e-3") == 2e-3)
+			assert(tonumber("1e+5") == 1e5 and tonumber("1e5", 10) == 1e5 and tonumber(" 1e5\r") == 1e5)
+			assert(tonumber("1e") == nil and tonumber("e5") == nil and tonumber("1e5x") == nil)`,
+		"strings become numbers as Lua 5.1 reads them": `
+			assert("010" + 0 == 10 and "1e5" + 0 == 1e5 and " 0x10 " * 1 == 16 and "-0x10" + 0 == -16)
+			assert(tonumber("0b101") == nil and tonumber("1_000") == nil and tonumber("inf") == nil)
+			assert(not pcall(function() return "0b101" + 0 end))
+			assert(tonumber("ff", 16) == 255 and tonumber("0xff", 16) == 255 and tonumber("8", 8) == nil)
+			assert(tonumber("z", 36) == 35 and tonumber("-101", 2) == -5 and not pcall(tonumber, "1", 99))`,
+		"math.huge is infinite": `
+			assert(math.huge == 1/0 and tonumber("1e400") == math.huge)
+			assert(tostring(math.huge) == "inf" and tostring(-math.huge) == "-inf")`,
 	} {
 		if err := r.DoString(src, name); err != nil {
 			t.Errorf("%s: %v", name, err)

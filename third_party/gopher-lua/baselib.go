@@ -409,22 +409,37 @@ func baseToNumber(L *LState) int {
 	case LNumber:
 		L.Push(lv)
 	case LString:
-		str := strings.Trim(string(lv), " \n\t")
-		if strings.Index(str, ".") > -1 {
-			if v, err := strconv.ParseFloat(str, LNumberBit); err != nil {
-				L.Push(LNil)
+		// Base 10, given or not, reads any Lua number; another base reads
+		// an integer in it, as strtoul does, with 0x allowed in base 16.
+		if noBase || base == 10 {
+			if v, ok := str2number(string(lv)); ok {
+				L.Push(v)
 			} else {
-				L.Push(LNumber(v))
+				L.Push(LNil)
 			}
+			break
+		}
+		if base < 2 || base > 36 {
+			L.ArgError(2, "base out of range")
+		}
+		str := trimLuaSpace(string(lv))
+		neg := false
+		if len(str) > 0 && (str[0] == '+' || str[0] == '-') {
+			neg, str = str[0] == '-', str[1:]
+		}
+		if base == 16 && len(str) > 2 && (str[:2] == "0x" || str[:2] == "0X") {
+			str = str[2:]
+		}
+		if str == "" || str[0] == '_' || strings.ContainsRune(str, '_') {
+			L.Push(LNil)
+			break
+		}
+		if v, err := strconv.ParseUint(str, base, 64); err != nil {
+			L.Push(LNil)
+		} else if neg {
+			L.Push(LNumber(-float64(v)))
 		} else {
-			if noBase && strings.HasPrefix(strings.ToLower(str), "0x") {
-				base, str = 16, str[2:] // Hex number
-			}
-			if v, err := strconv.ParseInt(str, base, LNumberBit); err != nil {
-				L.Push(LNil)
-			} else {
-				L.Push(LNumber(v))
-			}
+			L.Push(LNumber(float64(v)))
 		}
 	default:
 		L.Push(LNil)

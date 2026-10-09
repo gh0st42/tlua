@@ -141,18 +141,108 @@ func isArrayKey(v LNumber) bool {
 }
 
 func parseNumber(number string) (LNumber, error) {
-	var value LNumber
-	number = strings.Trim(number, " \t\n")
-	if v, err := strconv.ParseInt(number, 0, LNumberBit); err != nil {
-		if v2, err2 := strconv.ParseFloat(number, LNumberBit); err2 != nil {
-			return LNumber(0), err2
-		} else {
-			value = LNumber(v2)
-		}
-	} else {
-		value = LNumber(v)
+	if v, ok := str2number(number); ok {
+		return v, nil
 	}
-	return value, nil
+	return LNumber(0), fmt.Errorf("cannot convert %q to a number", number)
+}
+
+// isLuaSpace is C's isspace, which Lua skips around a number.
+func isLuaSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f'
+}
+
+func trimLuaSpace(s string) string {
+	for len(s) > 0 && isLuaSpace(s[0]) {
+		s = s[1:]
+	}
+	for len(s) > 0 && isLuaSpace(s[len(s)-1]) {
+		s = s[:len(s)-1]
+	}
+	return s
+}
+
+// str2number reads a number the way Lua 5.1's luaO_str2d does: a decimal
+// with an optional fraction and exponent (1, 1.5, .5, 5., 1e5, 2E-3), or a
+// hexadecimal integer (0x1F), either with a sign, and space around it.
+// Go's own syntax is not Lua's: no octal 010, no 0b101, no 1_000, and
+// unlike C's strtod, no inf, nan or hexadecimal fractions.
+func str2number(s string) (LNumber, bool) {
+	s = trimLuaSpace(s)
+	body := s
+	neg := false
+	if len(body) > 0 && (body[0] == '+' || body[0] == '-') {
+		neg = body[0] == '-'
+		body = body[1:]
+	}
+	if len(body) > 2 && body[0] == '0' && (body[1] == 'x' || body[1] == 'X') {
+		digits := body[2:]
+		for i := 0; i < len(digits); i++ {
+			if !isHexDigit(digits[i]) {
+				return 0, false
+			}
+		}
+		v, err := strconv.ParseUint(digits, 16, 64)
+		f := float64(v)
+		if err != nil {
+			// Too many digits for 64 bits: as strtoul, the largest there is.
+			f = float64(^uint64(0))
+		}
+		if neg {
+			f = -f
+		}
+		return LNumber(f), true
+	}
+	if !isDecimalNumber(body) {
+		return 0, false
+	}
+	v, err := strconv.ParseFloat(s, LNumberBit)
+	if err != nil {
+		// Out of range is HUGE_VAL or 0, as strtod gives; anything else
+		// was not a number after all.
+		if ne, ok := err.(*strconv.NumError); !ok || ne.Err != strconv.ErrRange {
+			return 0, false
+		}
+	}
+	return LNumber(v), true
+}
+
+func isHexDigit(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
+}
+
+// isDecimalNumber checks digits, an optional point and fraction, and an
+// optional exponent, with at least one digit before the exponent.
+func isDecimalNumber(s string) bool {
+	i, digits := 0, 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+		digits++
+	}
+	if i < len(s) && s[i] == '.' {
+		i++
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
+			digits++
+		}
+	}
+	if digits == 0 {
+		return false
+	}
+	if i < len(s) && (s[i] == 'e' || s[i] == 'E') {
+		i++
+		if i < len(s) && (s[i] == '+' || s[i] == '-') {
+			i++
+		}
+		start := i
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
+		}
+		if i == start {
+			return false
+		}
+	}
+	return i == len(s)
 }
 
 func popenArgs(arg string) (string, []string) {
