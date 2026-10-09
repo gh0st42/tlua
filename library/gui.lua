@@ -524,7 +524,8 @@ function Graphics:width(n) end
 
 ---@param name gui.Font
 ---@param size? integer 14 by default
-function Graphics:font(name, size) end
+---@param style? "bold"|"italic"|"bold italic"
+function Graphics:font(name, size, style) end
 
 ---@param x number
 ---@param y number

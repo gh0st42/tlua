@@ -372,7 +372,7 @@ works inside `onDraw`:
 | `g:size()` | returns the canvas's width and height |
 | `g:color(c)` | sets the colour for what follows (`"#rrggbb"` or a name) |
 | `g:width(n)` | sets the line width |
-| `g:font(name, size)` | sets the font: `"sans"`, `"serif"` or `"mono"` |
+| `g:font(name, size [, style])` | sets the font: `"sans"`, `"serif"` or `"mono"`; `style` is `"bold"`, `"italic"` or `"bold italic"` |
 | `g:point(x, y)`, `g:line(x1, y1, x2, y2)` | a point, a line |
 | `g:rect(x, y, w, h)`, `g:fill(x, y, w, h)` | a rectangle, outlined or filled |
 | `g:circle(x, y, r)`, `g:disc(x, y, r)` | a circle, outlined or filled |
