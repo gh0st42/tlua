@@ -1,0 +1,89 @@
+name: Release
+
+# Pushing a tag such as v0.3.2 builds tlua on each platform and publishes a
+# release with the archives. The tag must match internal/version. A tag with
+# a hyphen (v0.4.0-rc1) makes a pre-release.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-amd64, runner: ubuntu-24.04 }
+          - { name: linux-arm64, runner: ubuntu-24.04-arm }
+          - { name: macos-arm64, runner: macos-14 }
+          # Untested by hand; a release goes out without it if it fails.
+          - { name: windows-amd64, runner: windows-2022, optional: true }
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.optional == true }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+
+      - name: The tag is the version
+        shell: bash
+        run: |
+          tag=${GITHUB_REF_NAME#v}
+          version=$(sed -n 's/^const Number = "\(.*\)"$/\1/p' internal/version/version.go)
+          if [ "$tag" != "$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME, but internal/version/version.go says $version"
+            exit 1
+          fi
+
+      - name: Build
+        if: runner.os != 'Windows'
+        shell: bash
+        run: scripts/build-release.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Build (MinGW)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: scripts/build-release.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          cd dist
+          for a in *.tar.gz; do [ -e "$a" ] && tar xzf "$a"; done
+          for a in *.zip; do [ -e "$a" ] && 7z x -bso0 "$a" >/dev/null; done
+          for exe in */tlua */tlua.exe; do
+            [ -e "$exe" ] || continue
+            "$exe" -v
+            "$exe" -e 'assert(require("gui") and (1 + 1 == 2))'
+          done
+          find . -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tlua-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum -- * > SHA256SUMS
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          flags=""
+          case "$GITHUB_REF_NAME" in *-*) flags="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "tlua ${GITHUB_REF_NAME#v}" --generate-notes --verify-tag $flags

@@ -32,6 +32,32 @@ keeps it out of any workspace defined in a parent directory. Copy the folder
 anywhere — the `go.work` is harmless where no parent workspace exists, and can
 be deleted there.
 
+### Releases
+
+GitHub Actions tests every push (`.github/workflows/ci.yml`: Linux under
+Xvfb, with and without cgo, and macOS). Pushing a version tag releases:
+
+```sh
+# internal/version/version.go says 0.3.2, committed
+git tag v0.3.2 && git push origin v0.3.2
+```
+
+`.github/workflows/release.yml` checks that the tag matches
+`internal/version`, builds on each platform with `scripts/build-release.sh`,
+and publishes a release with these archives and their `SHA256SUMS`. Each
+archive holds `tlua`, the README, `docs/` and `examples/`. A tag with a
+hyphen, as `v0.4.0-rc1`, makes a pre-release.
+
+| Archive | Built on | Notes |
+|---------|----------|-------|
+| `tlua-V-linux-amd64.tar.gz`, `-linux-arm64` | Ubuntu 24.04 | with the GUI; needs a desktop's X11, Pango and OpenGL libraries |
+| `tlua-V-linux-amd64-static.tar.gz`, `-arm64-static` | Ubuntu 24.04 | no cgo: runs on any Linux, all but the gui module |
+| `tlua-V-darwin-arm64.tar.gz` | macOS 14 | with the GUI; unsigned, so `xattr -d com.apple.quarantine tlua` after downloading |
+| `tlua-V-windows-amd64.zip` | Windows, MinGW-w64 | with the GUI; built but untested, and a release goes out without it if it fails |
+
+`scripts/build-release.sh VERSION` builds the same archives for the machine
+it runs on, into `dist/`.
+
 ## Use
 
 ```

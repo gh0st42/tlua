@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        # Some tests open a game window; Xvfb is the screen they open on.
+        run: xvfb-run -a go test ./...
+      - name: Test without cgo
+        run: CGO_ENABLED=0 go test ./...
+      - name: Static build
+        run: make static
+      - name: Builds for other platforms, without cgo
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o /dev/null ./cmd/tlua
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./cmd/tlua
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o /dev/null ./cmd/tlua
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Test
+        run: go test ./...

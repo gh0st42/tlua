@@ -1,0 +1,44 @@
+name: Set up the build
+description: >
+  Go from go.mod, and what the GUI's cgo needs on the runner: the X11,
+  Wayland, OpenGL and sound development packages on Linux, the SDK path
+  go-fltk names on macOS, and MinGW-w64 on Windows.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+
+    - name: Linux packages
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq --no-install-recommends \
+          build-essential pkg-config xvfb xauth \
+          libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev \
+          libxrender-dev libxfixes-dev libxrandr-dev libxi-dev libxxf86vm-dev \
+          libpango1.0-dev libcairo2-dev libgl1-mesa-dev libglu1-mesa-dev \
+          libegl1-mesa-dev libwayland-dev libxkbcommon-dev libdbus-1-dev \
+          libfontconfig1-dev libfreetype-dev libharfbuzz-dev libasound2-dev
+
+    # go-fltk compiles against the command line tools' SDK by its path;
+    # a runner with only Xcode's is pointed at that one.
+    - name: macOS SDK
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        sdk=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+        if [ ! -d "$sdk" ]; then
+          sudo mkdir -p "$(dirname "$sdk")"
+          sudo ln -s "$(xcrun --show-sdk-path)" "$sdk"
+        fi
+
+    - name: MinGW-w64
+      if: runner.os == 'Windows'
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        path-type: inherit
+        install: mingw-w64-x86_64-gcc
