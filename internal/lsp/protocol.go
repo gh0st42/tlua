@@ -167,6 +167,18 @@ func (item CompletionItem) Text() string {
 	return text
 }
 
+// EditText is what the item's own edit puts in, with any snippet
+// placeholders reduced to their default text; "" when it has no edit.
+func (item CompletionItem) EditText() string {
+	if item.TextEdit == nil {
+		return ""
+	}
+	if item.InsertTextFormat == insertFormatSnippet {
+		return plainSnippet(item.TextEdit.NewText)
+	}
+	return item.TextEdit.NewText
+}
+
 // Help is the item's detail and documentation as plain text, for the line under
 // a completion list.
 func (item CompletionItem) Help() string {

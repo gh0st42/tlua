@@ -196,4 +196,59 @@ end
 
 M.exists = exists
 
+-- A layout names its images relative to forms/, where the form's code is:
+-- that is where gui.load looks for them, in a packed program too.
+
+local function slashes(path)
+  return (path:gsub("\\", "/"))
+end
+
+-- imagePath is how a layout names a file chosen for it, or nil when the
+-- file is outside the project and would not go with it.
+function M.imagePath(dir, file)
+  local root = slashes(dir):gsub("/+$", "") .. "/"
+  file = slashes(file)
+  if file:sub(1, #root) ~= root then return nil end
+  local rel = file:sub(#root + 1)
+  if rel:sub(1, 6) == "forms/" then return rel:sub(7) end
+  return "../" .. rel
+end
+
+-- imageDir is the folder an image's chooser starts in: the one the image
+-- named now is in, or the project's.
+function M.imageDir(dir, current)
+  if current and current ~= "" then
+    local path = current
+    if not (current:match("^/") or current:match("^%a:[/\\]")) then
+      path = dir .. "/forms/" .. current
+    end
+    local folder = slashes(path):match("^(.*)/[^/]*$")
+    if folder and exists(folder) then return folder end
+  end
+  return dir
+end
+
+-- copyIn copies a file into the project's images/ folder, under a name of
+-- its own, and returns how a layout names the copy.
+function M.copyIn(dir, file)
+  local src, err = io.open(file, "rb")
+  if not src then return nil, err end
+  local data = src:read("*a")
+  src:close()
+  lfs.mkdir(dir .. "/images")
+  local name = slashes(file):match("[^/]+$")
+  local base, ext = name:match("^(.-)(%.[^.]*)$")
+  if not base or base == "" then base, ext = name, "" end
+  local target, n = "images/" .. name, 1
+  while exists(dir .. "/" .. target) do
+    n = n + 1
+    target = ("images/%s%d%s"):format(base, n, ext)
+  end
+  local out, werr = io.open(dir .. "/" .. target, "wb")
+  if not out then return nil, werr end
+  out:write(data)
+  out:close()
+  return "../" .. target
+end
+
 return M

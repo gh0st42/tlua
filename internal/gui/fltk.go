@@ -13,6 +13,7 @@ import (
 	"github.com/pwiecz/go-fltk"
 	lua "github.com/yuin/gopher-lua"
 
+	"tlua/internal/gui/fltkcolor"
 	"tlua/internal/luasyntax"
 )
 
@@ -521,6 +522,10 @@ func buildTextBox(o *guiObject, x, y, w, h int) {
 		}
 		e.SetCallbackCondition(fltk.WhenChanged)
 		e.SetCallback(func() { a.fire(o, "onChange") })
+		e.SetDrawHandler(func(base func()) {
+			base()
+			drawOver(o)
+		})
 		o.widget = e
 		return
 	}
@@ -612,6 +617,11 @@ func applyProp(o *guiObject, name string, value lua.LValue) error {
 		c := fltk.ColorFromRgb(r, g, b)
 		if name == "color" {
 			w.SetColor(c)
+			// A Label is drawn on whatever is under it until it is given a
+			// colour of its own.
+			if b, ok := o.widget.(*fltk.Box); ok && o.kind == "Label" {
+				b.SetBox(fltk.FLAT_BOX)
+			}
 		} else {
 			w.SetLabelColor(c)
 			if t, ok := o.widget.(interface{ SetTextColor(fltk.Color) }); ok {
@@ -1365,6 +1375,11 @@ func dialog(title, message string, buttons []string, input bool, deflt string) (
 		text = in.Value()
 	}
 	return pressed, text, nil
+}
+
+func colorDialog(title string, r, g, b uint8) (string, bool, error) {
+	r, g, b, ok := fltkcolor.Choose(title, r, g, b)
+	return fmt.Sprintf("#%02x%02x%02x", r, g, b), ok, nil
 }
 
 func fileDialog(opts fileOptions) ([]string, error) {

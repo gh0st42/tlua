@@ -12,6 +12,7 @@ local props = require "design.props"
 local toolbox = require "design.toolbox"
 local code = require "design.code"
 local menueditor = require "design.menueditor"
+local assist = require "design.assist"
 
 local M = {}
 
@@ -75,6 +76,8 @@ function M.start(opts)
     left = 0, top = 34, width = CW, height = pageH - 34, grow = true,
     onChange = function() d:markCodeDirty() end,
   }
+  -- Completion and help from a language server, laid over the code.
+  d.assist = assist.new(d, d.codeBox, codePage)
 
   rightPane:Label { caption = "Properties", left = 6, top = 2, width = RIGHT - 12, height = 20 }
   d.props = props.new(rightPane, d, { left = 6, top = 24, width = RIGHT - 12, height = splitH - 30 })
@@ -110,6 +113,28 @@ function M.start(opts)
       return self.answerText
     end
     return gui.inputbox(message, title, default)
+  end
+
+  -- chooseColor and chooseFile are the colours and files the designer
+  -- asks for; answerColor and answerFile, when set, are the answers, and
+  -- false is Cancel.
+  function d:chooseColor(title, color)
+    if self.answerColor ~= nil then
+      self.asked = title
+      return self.answerColor or nil
+    end
+    return gui.choosecolor { title = title, color = color }
+  end
+
+  function d:chooseFile(title, dir)
+    if self.answerFile ~= nil then
+      self.asked = title
+      return self.answerFile or nil
+    end
+    return gui.openfile {
+      title = title, dir = dir,
+      filter = "Images\t*.{png,jpg,jpeg,gif,bmp,svg}\nAll files\t*",
+    }
   end
 
   function d:selected(node, count)
@@ -409,6 +434,7 @@ function M.start(opts)
     -- Image paths in a layout are relative to the form's code, which lives
     -- in forms/; the designer looks for them from there too.
     lfs.chdir(dir .. "/forms")
+    self.assist:start(dir)
     local forms = project.forms(dir)
     self.tree.items = forms
     self:loadControls()
@@ -459,6 +485,8 @@ function M.start(opts)
 
   -- loadCode reads the form's code into the code box.
   function d:loadCode()
+    self.assist:closeList()
+    self.assist:hideTip()
     local path = self:codePath()
     if not project.exists(path) then project.addForm(self.dir, self.formName) end
     local f = io.open(path, "r")
@@ -503,6 +531,8 @@ function M.start(opts)
 
   function d:showDesign()
     self.views.selected = 1
+    self.assist:closeList()
+    self.assist:hideTip()
   end
 
   -- fillObjects lists the form and its controls in the object box, and the
@@ -819,6 +849,7 @@ function M.start(opts)
   function win:onClose()
     if not d:keepOrLose() then return false end
     d:stop()
+    d.assist:stop()
   end
 
   ---------------------------------------------------------------- the project

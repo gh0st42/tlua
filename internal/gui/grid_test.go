@@ -98,3 +98,17 @@ func TestEditingATable(t *testing.T) {
 		s.expect(`grid:editing() == nil and #edits == 4`)
 	})
 }
+
+func TestChoosingAColour(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 200, height = 100}
+form:show()`, func(s *scene) {
+		// OK keeps the colour it started at; Cancel is nil.
+		later(func() { in.Key(fltk.ENTER_KEY, "\r", 0) })
+		s.lua(`picked = gui.choosecolor{title = "Pick", color = "#336699"}`)
+		s.expect(`picked == "#336699"`)
+		later(func() { in.Key(fltk.ESCAPE, "", 0) })
+		s.lua(`picked = gui.choosecolor{color = "red"}`)
+		s.expect(`picked == nil`)
+	})
+}

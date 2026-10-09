@@ -70,7 +70,7 @@ var kinds = map[string]*kind{
 	},
 	"TextBox": {
 		w: 120, h: 28,
-		events: []string{"onChange"},
+		events: []string{"onChange", "onKey", "onHover"},
 		props: map[string]lua.LValue{"tabIndex": lua.LNumber(0),
 			"text": lua.LString(""), "multiLine": lua.LFalse,
 			"password": lua.LFalse, "readOnly": lua.LFalse,
@@ -217,6 +217,8 @@ func init() {
 		"raise":     guiRaise,
 		"lower":     guiLower,
 		"edit":      guiEdit,
+		"insert":    guiInsert,
+		"pointAt":   guiPointAt,
 		"editing":   guiEditing,
 	}
 }
@@ -264,6 +266,10 @@ type guiObject struct {
 	mouse struct {
 		armed, dropping bool
 		x, y            int
+		// hover counts the mouse's moves over a TextBox, so that only the
+		// last one's rest is a hover; hovered is set while one is shown.
+		hover   int
+		hovered bool
 	}
 	// state is anything else the backend keeps for the object.
 	state any
@@ -305,19 +311,20 @@ func (a *app) open(L *lua.LState) int {
 		}))
 	}
 	L.SetFuncs(mod, map[string]lua.LGFunction{
-		"msgbox":    a.msgbox,
-		"inputbox":  a.inputbox,
-		"openfile":  a.fileFunc("open"),
-		"savefile":  a.fileFunc("save"),
-		"choosedir": a.fileFunc("dir"),
-		"clipboard": a.clipboard,
-		"load":      a.load,
-		"dump":      a.dump,
-		"save":      a.save,
-		"kinds":     a.kindsTable,
-		"spawn":     a.spawn,
-		"after":     a.timerFunc(false),
-		"every":     a.timerFunc(true),
+		"msgbox":      a.msgbox,
+		"inputbox":    a.inputbox,
+		"openfile":    a.fileFunc("open"),
+		"savefile":    a.fileFunc("save"),
+		"choosedir":   a.fileFunc("dir"),
+		"choosecolor": a.choosecolor,
+		"clipboard":   a.clipboard,
+		"load":        a.load,
+		"dump":        a.dump,
+		"save":        a.save,
+		"kinds":       a.kindsTable,
+		"spawn":       a.spawn,
+		"after":       a.timerFunc(false),
+		"every":       a.timerFunc(true),
 	})
 	mod.RawSetString("define", L.NewClosure(a.define, mod))
 	if exe, err := os.Executable(); err == nil {
@@ -1024,6 +1031,41 @@ func guiEditing(L *lua.LState) int {
 	L.Push(lua.LNumber(row))
 	L.Push(lua.LNumber(col))
 	return 2
+}
+
+// insert puts text in a TextBox in place of what is selected, or at the
+// cursor, leaves the cursor after it, and raises onChange.
+func guiInsert(L *lua.LState) int {
+	obj := checkObject(L, 1)
+	if obj.kind != "TextBox" {
+		L.RaiseError("gui: only a TextBox has text to insert into, not a %s", obj.displayKind())
+	}
+	if obj.widget != nil {
+		insertText(obj, L.CheckString(2))
+		obj.app.fire(obj, "onChange")
+	}
+	return 0
+}
+
+// pointAt is where a TextBox shows the text position pos, counted as cursor
+// counts: x and y of its top left, from the box's own top left, and the
+// height of its line. Nothing when the box is not on screen.
+func guiPointAt(L *lua.LState) int {
+	obj := checkObject(L, 1)
+	if obj.kind != "TextBox" {
+		L.RaiseError("gui: only a TextBox has text positions, not a %s", obj.displayKind())
+	}
+	if obj.widget == nil {
+		return 0
+	}
+	x, y, h, ok := pointAt(obj, L.CheckInt(2))
+	if !ok {
+		return 0
+	}
+	L.Push(lua.LNumber(x))
+	L.Push(lua.LNumber(y))
+	L.Push(lua.LNumber(h))
+	return 3
 }
 
 // redraw asks for an object to be drawn again: a Canvas whose picture has

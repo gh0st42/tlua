@@ -123,6 +123,7 @@ function M:startEdit(row)
   if info.type == "boolean" then return { choices = { "true", "false" } } end
   if info.type == "choice" then return { choices = info.choices } end
   if lists[info.type] then return { button = true, readOnly = true } end
+  if info.type == "color" or info.type == "file" then return { button = true } end
 end
 
 -- edited is a value typed or picked: the control takes it, or it is
@@ -144,8 +145,8 @@ function M:edited(row, text)
   return display(info, model.value(node, prop))
 end
 
--- button is a cell's "...": a list edited in a dialog, or the form's menu
--- in the Menu Editor.
+-- button is a cell's "...": a colour from the chooser, a file from the
+-- disk, a list edited in a dialog, or the form's menu in the Menu Editor.
 function M:button(row)
   local node, prop = self.node, self.names[row]
   if node.kind == "Menu" and prop == "items" then
@@ -153,12 +154,43 @@ function M:button(row)
     return
   end
   local info = self:info(prop)
-  local value = self:editList(prop, info, model.value(node, prop))
+  local value
+  if info.type == "color" then
+    value = self.d:chooseColor(prop, model.value(node, prop) or "#ffffff")
+  elseif info.type == "file" then
+    value = self:chooseFile(prop, model.value(node, prop))
+  else
+    value = self:editList(prop, info, model.value(node, prop))
+  end
   if value ~= nil then
     local ok, err = self.d:setProp(node, prop, value)
     self.d:status(ok and "" or (prop .. ": " .. tostring(err)))
   end
   self:refresh(node)
+end
+
+-- chooseFile picks an image for a property. One inside the project is
+-- named relative to forms/, as gui.load finds it; one outside is copied into
+-- the project's images/ folder first, if wanted, so that it goes with the
+-- program when it is packed.
+function M:chooseFile(prop, current)
+  local project = require "design.project"
+  local dir = self.d.dir
+  local file = self.d:chooseFile(prop, project.imageDir(dir, current))
+  if not file then return nil end
+  local path = project.imagePath(dir, file)
+  if path then return path end
+  local name = file:match("[^/\\]+$")
+  if self.d:ask(name .. " is outside the project. Copy it into the project's images folder, "
+      .. "so that it goes with the program?", "yesno", prop) ~= "yes" then
+    return file
+  end
+  local copy, err = project.copyIn(dir, file)
+  if not copy then
+    self.d:ask("Could not copy " .. name .. ": " .. tostring(err), "ok", prop)
+    return nil
+  end
+  return copy
 end
 
 -- editList edits a list in a form of its own: one item a line for a list,

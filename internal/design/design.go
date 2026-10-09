@@ -52,6 +52,7 @@ func Command(args []string) int {
 
 	r := interp.New(&interp.Options{})
 	defer r.Close()
+	defer closeServers()
 	boot := gui.Ready(r, nil)
 	Preload(r.L)
 
@@ -70,8 +71,10 @@ func Command(args []string) int {
 	return r.Report(boot.Show())
 }
 
-// Preload makes the designer's Lua files requirable as design.<name>.
+// Preload makes the designer's Lua files requirable as design.<name>, and
+// its language server as design.server.
 func Preload(L *lua.LState) {
+	preloadServer(L)
 	entries, _ := sources.ReadDir("lua")
 	for _, e := range entries {
 		file := e.Name()

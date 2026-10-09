@@ -373,6 +373,12 @@ uses it for three things. It looks for `lua-language-server`, `emmylua_ls` and
 `lua-lsp`, in that order; `TLUA_LSP` names a different one (with arguments, if it
 needs them) and `TLUA_LSP=off` does without.
 
+The server is told of tlua's own modules: the declarations in `library/` are
+built into the binary and handed to it, so `require "gui"` completes and
+explains itself on a machine with nothing else of tlua. `tlua design` uses the
+same server for completion and help in its code window (see
+[docs/design.md](docs/design.md)).
+
 **Formatting.** Each buffer is formatted as it is saved, so what lands on disk is
 what the screen shows. `F12` formats without saving. *Edit › Format on save*
 turns the pass on and off when a server's idea of tidy is not yours, and

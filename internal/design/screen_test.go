@@ -7,7 +7,11 @@ package design
 // TLUA_GUI_TESTS=1 go test ./internal/design (or make test-gui).
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,12 +54,18 @@ type scene struct {
 
 // withDesigner opens the designer on a new project in a fresh directory
 // and runs steps against it, on the main thread. Checks use Errorf only.
+// designerServer is what TLUA_LSP is while the designer is up in a test.
+var designerServer = "off"
+
 func withDesigner(t *testing.T, steps func(s *scene)) {
 	t.Helper()
 	if !guiTests {
 		t.Skip("set TLUA_GUI_TESTS=1 to run tests that open windows")
 	}
 	dir := t.TempDir()
+	// A language server for each test would slow them all; the one test of
+	// it asks for one.
+	t.Setenv("TLUA_LSP", designerServer)
 	done := make(chan struct{})
 	mainCalls <- func() {
 		defer close(done)
@@ -70,7 +80,9 @@ func withDesigner(t *testing.T, steps func(s *scene)) {
 		if err := r.L.DoString(`bootgui(); D = require("design.main").start{dir = dir, create = true}; D.answer = "no"
 local gui = require "gui"
 gui.msgbox = function(m) error("a message box would wait for someone: " .. tostring(m)) end
-gui.inputbox = function(m) error("an input box would wait for someone: " .. tostring(m)) end`); err != nil {
+gui.inputbox = function(m) error("an input box would wait for someone: " .. tostring(m)) end
+gui.choosecolor = function(m) error("a colour chooser would wait for someone") end
+gui.openfile = function(m) error("a file chooser would wait for someone") end`); err != nil {
 			t.Errorf("start: %v", err)
 			return
 		}
@@ -260,6 +272,115 @@ func TestDesignerPropertyGrid(t *testing.T) {
 		// Bring to front and send to back reorder the layout.
 		s.lua(`D.surface:selectNode(D.doc[1]); D.surface:toFront()`)
 		s.expect(`D.doc[3].name == "LabelX"`)
+	})
+}
+
+// pngBytes is a small picture, for an Image to show.
+func pngBytes(t *testing.T) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for i := range img.Pix {
+		img.Pix[i] = 200
+	}
+	img.Set(0, 0, color.RGBA{255, 0, 0, 255})
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestDesignerPicksColoursAndFiles(t *testing.T) {
+	outside := t.TempDir()
+	os.WriteFile(filepath.Join(outside, "logo.png"), pngBytes(t), 0o644)
+	withDesigner(t, func(s *scene) {
+		s.L.SetGlobal("outside", lua.LString(outside))
+		s.pickTool("Label")
+		s.drag(10, 10, 110, 40)
+
+		// A colour's "..." is the colour chooser; Cancel changes nothing.
+		s.lua(`D.answerColor = "#336699"; D.props.grid:edit(D.props:row("color"), 2); D.props:button(D.props:row("color"))`)
+		s.expect(`D.doc[1].color == "#336699" and D.props:text("color") == "#336699" and D.asked == "color"`)
+		s.lua(`D.answerColor = false; D.props:button(D.props:row("color"))`)
+		s.expect(`D.doc[1].color == "#336699"`)
+		s.lua(`D.props.grid:edit()`)
+
+		// A file inside the project is named from forms/.
+		os.MkdirAll(filepath.Join(s.dir, "images"), 0o755)
+		os.WriteFile(filepath.Join(s.dir, "images", "in.png"), pngBytes(t), 0o644)
+		s.lua(`D.answerFile = D.dir .. "/images/in.png"; D.props:button(D.props:row("image"))`)
+		s.expect(`D.doc[1].image == "../images/in.png"`)
+
+		// One outside is copied in, if wanted, and named the same way.
+		s.lua(`D.answer = "yes"; D.answerFile = outside .. "/logo.png"; D.props:button(D.props:row("image"))`)
+		s.expect(`D.doc[1].image == "../images/logo.png" and D.asked:find("outside the project")`)
+		if _, err := os.Stat(filepath.Join(s.dir, "images", "logo.png")); err != nil {
+			s.t.Errorf("the image was not copied in: %v", err)
+		}
+		s.lua(`D.answer = "no"; D.props:button(D.props:row("image"))`)
+		s.expect(`D.doc[1].image == outside .. "/logo.png"`)
+
+		// A colour can still be typed.
+		s.typeProp("color", "red")
+		s.expect(`D.doc[1].color == "red"`)
+	})
+}
+
+func TestDesignerCompletesAndExplainsCode(t *testing.T) {
+	if _, err := exec.LookPath("lua-language-server"); err != nil {
+		t.Skip("no lua-language-server on PATH")
+	}
+	designerServer = ""
+	defer func() { designerServer = "off" }()
+	withDesigner(t, func(s *scene) {
+		waitFor := func(expr string, secs int) bool {
+			deadline := time.Now().Add(time.Duration(secs) * time.Second)
+			for time.Now().Before(deadline) {
+				s.pump()
+				if err := s.L.DoString("__w = (" + expr + ")"); err == nil && lua.LVAsBool(s.L.GetGlobal("__w")) {
+					return true
+				}
+			}
+			return false
+		}
+		s.lua(`D:showCode()`)
+		if !waitFor(`D.assist:ready()`, 30) {
+			s.t.Fatal("the language server did not start")
+		}
+		s.lua(`D.codeBox.text = 'local gui = require "gui"\nlocal frm = gui.load "Form1"\ngui.'; D.codeBox.cursor = #D.codeBox.text; D.codeBox:focus()`)
+
+		// Ctrl+Space lists what goes after gui.; typing narrows it, and
+		// Enter puts the pick in. The first answers can come before the
+		// server has read tlua's declarations.
+		listed := false
+		for try := 0; try < 20 && !listed; try++ {
+			in.Key(' ', " ", fltk.CTRL)
+			listed = waitFor(`D.assist.list.visible and D.assist.shown[1] and D.assist.items and #D.assist.items > 5`, 3)
+		}
+		if !listed {
+			s.t.Fatalf("no completions after gui. (status %q)", s.L.GetGlobal("D").(*lua.LTable).RawGetString("statusLine"))
+		}
+		in.Type("Fo")
+		s.expect(`D.assist.list.visible and D.assist.shown[1].label:find("^Form")`)
+		in.Key(fltk.ENTER_KEY, "\r", 0)
+		s.expect(`D.codeBox.text:sub(-8) == "gui.Form" and not D.assist.list.visible`)
+
+		// Typing . asks by itself; Escape closes the list.
+		in.Type("\nfrm.")
+		if !waitFor(`D.assist.list.visible`, 10) {
+			s.t.Error("typing . listed nothing")
+		}
+		in.Key(fltk.ESCAPE, "", 0)
+		s.expect(`not D.assist.list.visible and D.win.visible`)
+
+		// F1 says what is at the cursor.
+		s.lua(`D.codeBox.cursor = #"local gu"`)
+		in.Key(fltk.F1, "", 0)
+		if !waitFor(`D.assist:tipShown()`, 10) {
+			s.t.Fatal("F1 showed nothing")
+		}
+		s.expect(`D.assist.tip.caption:find("gui")`)
+		in.Key(fltk.ESCAPE, "", 0)
+		s.expect(`not D.assist:tipShown()`)
 	})
 }
 

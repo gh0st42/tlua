@@ -57,6 +57,10 @@ type Client struct {
 	triggerChars   []string
 	signatureChars []string
 	serverName     string
+
+	// settings are what the server is told when it asks for its
+	// configuration: {"Lua": {"workspace": {"library": [...]}}}, say.
+	settings map[string]any
 }
 
 // shutdownTimeout is how long the client waits for a server to leave before it
@@ -66,6 +70,13 @@ const shutdownTimeout = 2 * time.Second
 // Start launches a language server and runs the initialize handshake. Root is
 // the directory the server should treat as the workspace.
 func Start(ctx context.Context, command string, args []string, root string) (*Client, error) {
+	return StartWith(ctx, command, args, root, nil)
+}
+
+// StartWith is Start with settings, which the server is given when it asks
+// for its configuration, as an editor gives it its own: where a library of
+// declarations is, which Lua it is. Keys are sections, as "Lua".
+func StartWith(ctx context.Context, command string, args []string, root string, settings map[string]any) (*Client, error) {
 	cmd := exec.Command(command, args...)
 	cmd.Dir = root
 	stdin, err := cmd.StdinPipe()
@@ -90,6 +101,7 @@ func Start(ctx context.Context, command string, args []string, root string) (*Cl
 		pending:     make(map[int]chan message),
 		docs:        make(map[string]int),
 		diagnostics: make(map[string][]Diagnostic),
+		settings:    settings,
 	}
 	go c.read()
 
@@ -172,7 +184,35 @@ func (c *Client) initialize(ctx context.Context, root string) error {
 	c.canHover = hasCapability(result.Capabilities.HoverProvider)
 	c.serverName = result.ServerInfo.Name
 
-	return c.notify("initialized", map[string]any{})
+	if err := c.notify("initialized", map[string]any{}); err != nil {
+		return err
+	}
+	if c.settings != nil {
+		return c.notify("workspace/didChangeConfiguration", map[string]any{"settings": c.settings})
+	}
+	return nil
+}
+
+// setting is the part of the settings a server asked for by section: "Lua",
+// or "Lua.workspace", or nothing for all of them. Nil when there is none.
+func setting(settings map[string]any, section string) any {
+	if section == "" {
+		if settings == nil {
+			return nil
+		}
+		return settings
+	}
+	var at any = settings
+	for _, part := range strings.Split(section, ".") {
+		m, ok := at.(map[string]any)
+		if !ok {
+			return nil
+		}
+		if at, ok = m[part]; !ok {
+			return nil
+		}
+	}
+	return at
 }
 
 // hasCapability reads a capability that may be a boolean or an options object.
@@ -440,10 +480,15 @@ func (c *Client) answer(msg message) {
 	switch msg.Method {
 	case "workspace/configuration":
 		var params struct {
-			Items []json.RawMessage `json:"items"`
+			Items []struct {
+				Section string `json:"section"`
+			} `json:"items"`
 		}
 		_ = json.Unmarshal(msg.Params, &params)
 		items := make([]any, len(params.Items))
+		for i, item := range params.Items {
+			items[i] = setting(c.settings, item.Section)
+		}
 		result = items
 	case "client/registerCapability", "client/unregisterCapability",
 		"window/workDoneProgress/create", "workspace/semanticTokens/refresh",

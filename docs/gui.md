@@ -70,7 +70,7 @@ behind its siblings, which is also the order a layout lists them in.
 | `Menu`        | `items` (see below); Form only                       | — |
 | `Label`       | `align` (`"left"`, `"center"`, `"right"`), `image`; `text` is `caption` | — |
 | `Button`      | `default` (Enter presses it), `image` beside the caption | `onClick` |
-| `TextBox`     | `text`, `multiLine`, `password`, `readOnly`; for code `lineNumbers`, `syntax = "lua"`, `acceptsTab`; `line`, `cursor`, `selectedText`, and `select(i, j)` | `onChange` |
+| `TextBox`     | `text`, `multiLine`, `password`, `readOnly`; for code `lineNumbers`, `syntax = "lua"`, `acceptsTab`; `line`, `cursor`, `selectedText`, `select(i, j)`, `insert(text)`, `pointAt(pos)` | `onChange`, `onKey`, `onHover` |
 | `CheckBox`    | `checked` (also `value`)                             | `onChange` |
 | `RadioButton` | `checked` (also `value`); one per parent is on       | `onChange` |
 | `ComboBox`    | `items`, `selected` (1-based, 0 for none), `text`    | `onChange` |
@@ -169,6 +169,25 @@ Any TextBox, code or not, has these:
 - `selectedText` is what is selected.
 - `box:select(i, j)` selects bytes `i` to `j`, counted as `string.sub` counts
   them, so `box:select(text:find("needle", 1, true))` finds and selects.
+- `box:insert(text)` puts text in place of the selection, or at the cursor,
+  leaves the cursor after it, and raises `onChange`.
+
+What a code editor of your own needs, a completion list for one, comes
+from these:
+- `onKey(self, key, text)` sees each key before the box does, named as a
+  Form's `onKey` names them (`"Ctrl+Space"`, `"Down"`, `"a"`). Returning
+  true keeps the key from the box.
+- `onHover(self, pos)` is the mouse resting on the text, at `pos` as
+  `cursor` counts. It is raised again with `nil` when the mouse moves on,
+  or a key is pressed.
+- `box:pointAt(pos)` is where position `pos` is shown: `x` and `y` of its
+  top left, from the box's own, and the height of its line. Add the box's
+  `left` and `top` to place a control under it in the same container.
+- A control laid over a multi-line TextBox, made after it in the same
+  container, stays drawn over it while the box is typed into.
+
+tlua design's code window is built this way: see
+`internal/design/lua/assist.lua`.
 
 ## Menu
 
@@ -551,6 +570,9 @@ These are module functions; any of them can be called from a handler.
   title, or a table of `title`, `filter` (`"Lua\t*.lua\nAll\t*"`), `dir` and
   `file`. They return a path or nil. `openfile{multiple = true}` returns a
   list.
+- `gui.choosecolor(opts)` shows FLTK's colour chooser. It takes a title, or a
+  table of `title` and `color`, the colour it starts at (`"#rrggbb"` or a
+  name). It returns the colour picked as `"#rrggbb"`, or nil when cancelled.
 - `form:showModal()` shows a form of your own in front of the others and
   waits until it is closed, with or without `bootgui()`.
 - `gui.after(seconds, fn)` and `gui.every(seconds, fn)` run `fn` later, or

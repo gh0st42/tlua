@@ -115,6 +115,12 @@ new project there.
   line. Empty means the default.
   - True or false, and a choice such as `font` or `align`, are picked from
     the ▾ at the cell's right, or taken in turn with a double click.
+  - A colour's "..." opens the colour chooser; a colour can also be typed,
+    as `#rrggbb` or a name.
+  - An image's "..." picks a file. One inside the project is named relative
+    to `forms/`, where `gui.load` looks for it, as `../images/logo.png`. One
+    outside is copied into the project's `images/` folder first, if you
+    agree, so that it is packed with the program.
   - A list shows how many items it has. Its "..." edits `items` and
     `columns` one item a line, rows and trees as a Lua table, and a Menu's
     items in the Menu Editor.
@@ -134,6 +140,27 @@ new project there.
 - **Export Bundle:** File > Export Bundle saves everything and packs the
   project into a `.ztl` bundle with `tlua bundle`: one file that
   `tlua app.ztl` runs on any platform, with no executable made for each.
+
+## Help with the code
+
+With a Lua language server on PATH (lua-language-server, say; `TLUA_LSP`
+names another, or `off` for none), the code window helps as an IDE's does:
+
+- **Completion:** Ctrl+Space, or typing `.` or `:`, lists what could go at
+  the cursor: the gui module's functions, a form's controls by name, their
+  properties and handlers, and the project's own modules. Typing on
+  narrows the list. Up and Down pick, Enter or Tab put the pick in, and
+  Escape closes it. The status line says what the pick is.
+- **Help:** the mouse resting on a name shows what it is and its
+  documentation, and F1 does the same at the cursor.
+- **Calls:** typing `(` or `,` puts what the call takes in the status line,
+  with the argument being typed in brackets.
+
+The server is started for the project when it is opened, and told of
+tlua's own modules, so `require "gui"` is known on a machine with nothing
+but the tlua binary. Each form's `forms/Name.d.lua` tells it of the form's
+controls. Nothing waits for it: the window works while it starts, and
+without one.
 
 ## Controls of your own
 

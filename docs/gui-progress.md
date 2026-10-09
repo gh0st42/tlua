@@ -91,7 +91,8 @@ Still open
 - [x] Clipboard (`gui.clipboard`), drag and drop (`onDrop`, `onDrag` on every kind), Tree, Table, and Canvas with a drawing API and mouse events, plus `:redraw()`.
 - [ ] go-fltk's own Tree cannot report the selected or clicked item, so Tree is built on the list widget: lines indented with ▸/▾ markers. It has no icons, multiple selection or editing.
 - [ ] go-fltk cannot read the clipboard, so `gui.clipboard()` pastes into a hidden text editor and reads that. It is synchronous on macOS and Windows. On X11 it waits up to half a second for the text, and the X11 path is untested.
-- [x] Table cells are edited in place (`editable`, `onStartEdit`, `onEdit`, `onEditButton`, `:edit()`), with choices and a "..." button; the designer's properties pane is one.
+- [x] Table cells are edited in place (`editable`, `onStartEdit`, `onEdit`, `onEditButton`, `:edit()`), with choices and a "..." button; the designer's properties pane is one, with a colour chooser (`gui.choosecolor`) and a file picker behind its "...".
+- [x] Completion, hover help and call signatures in tlua design's code window, from a language server: a TextBox has `onKey`, `onHover`, `pointAt` and `insert` for it, and tlua's declarations (library/) are built into the binary and given to the server, the terminal editor's too.
 - [ ] Table cells are drawn as text: no sorting by header click, or per-cell colours.
 
 ## Notes

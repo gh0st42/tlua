@@ -279,8 +279,24 @@ function Form:Menu(items) end
 ---@field cursor integer how many bytes come before the cursor
 ---@field selectedText string what is selected
 ---@field onChange? fun(self: gui.TextBox)
+---@field onKey? fun(self: gui.TextBox, key: string, text: string): boolean? sees each key first; true keeps it from the box
+---@field onHover? fun(self: gui.TextBox, pos: integer?) the mouse resting on text at pos, as cursor counts; nil when it moves on
 
 local TextBox = {}
+
+--- Puts text in place of what is selected, or at the cursor, leaves the
+--- cursor after it, and raises onChange.
+---@param text string
+function TextBox:insert(text) end
+
+--- Where text position pos (as cursor counts) is shown: x and y of its top
+--- left from the box's own, and the height of its line. Nothing when the
+--- box is not on screen.
+---@param pos integer
+---@return integer? x
+---@return integer? y
+---@return integer? height
+function TextBox:pointAt(pos) end
 
 --- Selects bytes i to j, counted as string.sub counts them, and puts the
 --- cursor after them.
@@ -297,6 +313,8 @@ function TextBox:select(i, j) end
 ---@field syntax? ""|"lua"
 ---@field acceptsTab? boolean
 ---@field onChange? fun(self: gui.TextBox)
+---@field onKey? fun(self: gui.TextBox, key: string, text: string): boolean?
+---@field onHover? fun(self: gui.TextBox, pos: integer?)
 
 ---@class gui.CheckBox: gui.Object
 ---@field checked boolean
@@ -696,6 +714,15 @@ function gui.savefile(opts) end
 ---@param opts? string|gui.FileOptions
 ---@return string?
 function gui.choosedir(opts) end
+
+---@class gui.ColorOptions
+---@field title? string
+---@field color? string the colour it starts at, "#rrggbb" or a name
+
+--- Shows a colour chooser; the colour picked, as "#rrggbb", or nil.
+---@param opts? string|gui.ColorOptions
+---@return string?
+function gui.choosecolor(opts) end
 
 --- The text on the clipboard; `gui.clipboard(text)` puts text there instead.
 ---@overload fun(text: string)

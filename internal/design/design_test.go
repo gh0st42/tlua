@@ -106,6 +106,33 @@ assert(project.read(dir, "Form1")[1].name == "cmdOK")`)
 	run(t, r2.L, `local frm = dofile(dir .. "/forms/Form1.lua"); assert(frm.cmdOK.caption == "OK")`)
 }
 
+func TestImagePaths(t *testing.T) {
+	r, _ := newLua(t)
+	dir := t.TempDir()
+	outside := t.TempDir()
+	os.WriteFile(filepath.Join(outside, "logo.png"), []byte("png"), 0o644)
+	r.L.SetGlobal("dir", lua.LString(dir))
+	r.L.SetGlobal("outside", lua.LString(outside))
+	run(t, r.L, `
+local project = require "design.project"
+project.create(dir)
+-- Inside the project, relative to forms/, where gui.load looks.
+assert(project.imagePath(dir, dir .. "/images/a.png") == "../images/a.png")
+assert(project.imagePath(dir, dir .. "/forms/b.png") == "b.png")
+assert(project.imagePath(dir .. "/", dir .. "/c.png") == "../c.png")
+assert(project.imagePath(dir, outside .. "/logo.png") == nil)
+-- Outside it, copied in under a name of its own.
+assert(project.copyIn(dir, outside .. "/logo.png") == "../images/logo.png")
+assert(project.copyIn(dir, outside .. "/logo.png") == "../images/logo2.png")
+local f = assert(io.open(dir .. "/images/logo2.png", "rb"))
+assert(f:read("*a") == "png")
+f:close()
+-- The chooser starts where the image is, or in the project.
+assert(project.imageDir(dir, "../images/logo.png") == dir .. "/forms/../images")
+assert(project.imageDir(dir, "") == dir)
+assert(project.imageDir(dir, "../nowhere/x.png") == dir)`)
+}
+
 func TestCode(t *testing.T) {
 	r, _ := newLua(t)
 	run(t, r.L, `

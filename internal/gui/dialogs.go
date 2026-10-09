@@ -122,6 +122,41 @@ func (a *app) fileFunc(mode string) lua.LGFunction {
 	}
 }
 
+// choosecolor shows a colour chooser, starting at a colour, and returns the
+// colour picked as "#rrggbb", or nil when it was cancelled. It takes a
+// title, or a table of title and color.
+func (a *app) choosecolor(L *lua.LState) int {
+	title, start := "Colour", "#ffffff"
+	switch v := L.Get(1).(type) {
+	case lua.LString:
+		title = string(v)
+	case *lua.LTable:
+		if t := lua.LVAsString(v.RawGetString("title")); t != "" {
+			title = t
+		}
+		if c := lua.LVAsString(v.RawGetString("color")); c != "" {
+			start = c
+		}
+	case *lua.LNilType:
+	default:
+		L.ArgError(1, "title or table of options expected")
+	}
+	r, g, b, err := parseColor(start)
+	if err != nil {
+		L.ArgError(1, err.Error())
+	}
+	color, ok, err := colorDialog(title, r, g, b)
+	if err != nil {
+		L.RaiseError("%s", err.Error())
+	}
+	if !ok {
+		L.Push(lua.LNil)
+	} else {
+		L.Push(lua.LString(color))
+	}
+	return 1
+}
+
 type fileOptions struct {
 	mode, title, filter, dir, file string
 }

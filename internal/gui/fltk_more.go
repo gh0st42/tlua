@@ -62,6 +62,10 @@ func handle(o *guiObject, e fltk.Event) bool {
 		o.mouse.armed = false
 	}
 
+	if o.kind == "TextBox" && textBoxEvent(o, e) {
+		return true
+	}
+
 	if e == fltk.KEY && fltk.EventKey() == fltk.TAB && !propBool(o, "acceptsTab") && tabNavigate(o) {
 		return true
 	}
