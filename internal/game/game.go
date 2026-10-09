@@ -24,7 +24,7 @@ import (
 	"tlua/internal/sound"
 )
 
-const usage = `usage: tlua play [options] [script | directory] [args...]
+const usage = `usage: tlua play [options] [script | directory | bundle] [args...]
 
 Runs a Lua program in a window, with the console API described in
 docs/pico.md: cls, spr, btn, print and the rest. The program draws in
@@ -37,7 +37,8 @@ Options:
   -h           print this help
 
 Given a directory, the file run is its main.lua; given nothing, the
-main.lua in the current directory.
+main.lua in the current directory. A bundle (.ztl, .zip or .app, made
+by "tlua bundle") is run from the main.lua inside it.
 
 While it runs:
   alt-enter, F11   fullscreen
@@ -71,6 +72,15 @@ func Command(args []string) int {
 	if opts.help {
 		fmt.Print(usage)
 		return 0
+	}
+	if payload.IsBundle(opts.Script) {
+		p, err := payload.OpenBundle(opts.Script)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "tlua play: %v\n", err)
+			return 1
+		}
+		defer p.Close()
+		return RunAttached(p, opts.Script, opts)
 	}
 	return Run(opts)
 }
@@ -230,32 +240,43 @@ func load(opts Options) (*session, error) {
 // RunFused shows a program attached to this binary, which is what a game built
 // with `tlua fuse -play` runs when it is started.
 //
+// A fused program is handed the whole command line, as a .love executable
+// is, so there are no options of ours to read here.
+func RunFused(p *payload.Payload, exe string) int {
+	return RunAttached(p, exe, Options{Args: os.Args[1:]})
+}
+
+// RunAttached shows a program that came as a payload: one attached to this
+// binary, or a bundle (`tlua play app.ztl`). name is the file it came in,
+// which the window and the saves are named after.
+//
 // It is the same session as a program read off disk: the difference is only
 // where the program and its modules come from, which the interpreter has
 // already been told.
-func RunFused(p *payload.Payload, exe string) int {
-	f, err := interp.OpenFused(p, exe)
+func RunAttached(p *payload.Payload, name string, opts Options) int {
+	f, err := interp.OpenPayload(p, name, opts.ArgIdx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", filepath.Base(exe), err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", filepath.Base(name), err)
 		return 1
 	}
 	defer f.Close()
 
-	read, write := savesFor(titleFor(exe))
+	title := opts.Title
+	if title == "" {
+		title = titleFor(name)
+	}
+	read, write := savesFor(title)
 
-	s := &session{interp: f.Interp, sound: sound.New()}
-	// A fused program is handed the whole command line, as a .love executable
-	// is, so there are no options of ours to read here.
-	args := os.Args[1:]
+	s := &session{opts: opts, interp: f.Interp, sound: sound.New()}
 	s.start = func() error {
 		chunk, err := f.Chunk()
 		if err != nil {
 			return err
 		}
-		return s.rt.Start(chunk, args)
+		return s.rt.Start(chunk, opts.Args)
 	}
 	s.rt = picolua.New(f.L, picolua.Options{
-		Title:       titleFor(exe),
+		Title:       title,
 		Out:         os.Stdout,
 		FPS:         ebiten.ActualFPS,
 		SetTPS:      s.setRate,

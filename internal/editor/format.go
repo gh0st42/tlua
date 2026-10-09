@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"tlua/internal/lsp"
+	"tlua/library"
 )
 
 // How long the editor is prepared to wait for a language server: long enough
@@ -39,7 +40,9 @@ func (e *Editor) startLanguageServer() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), lspStartTimeout)
 		defer cancel()
-		client, err := lsp.Start(ctx, command, args, root)
+		// The server is told of tlua's own modules, so that require "gui"
+		// completes too; a .luarc.json in the folder still has its say.
+		client, err := lsp.StartWith(ctx, command, args, root, library.Settings())
 		e.app.QueueUpdateDraw(func() {
 			if err != nil {
 				e.lspNote = fmt.Sprintf("%s did not start: %v", filepath.Base(command), err)

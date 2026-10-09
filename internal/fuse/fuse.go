@@ -10,20 +10,20 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"tlua/internal/payload"
 )
 
-const usage = `usage: tlua fuse [-o output] [-play] [--base interpreter] <main.lua | directory | archive.zip>
+const usage = `usage: tlua fuse [-o output] [-play] [--base interpreter] <main.lua | directory | archive.zip | bundle.ztl>
 
 Attaches a Lua program to a copy of the interpreter, producing a standalone
 executable that runs the program instead of reading options.
 
   main.lua      embed a single Lua file
   directory     zip the directory (it must contain main.lua) and embed it
-  archive.zip   embed an existing archive (it must contain main.lua)
+  archive.zip   embed an existing archive (it must contain main.lua); a
+                bundle (.ztl, .app) made by "tlua bundle" works the same
 
 Options:
   -o output     where to write the executable (default: named after the source)
@@ -112,10 +112,10 @@ func buildPayload(src string) (payload.Kind, []byte, error) {
 
 	switch {
 	case st.IsDir():
-		data, err := zipDir(src)
+		data, err := zipDir(src, "", "")
 		return payload.Zip, data, err
 
-	case strings.EqualFold(filepath.Ext(src), ".zip"):
+	case payload.IsBundleName(src):
 		data, err := os.ReadFile(src)
 		if err != nil {
 			return 0, nil, err
@@ -127,6 +127,10 @@ func buildPayload(src string) (payload.Kind, []byte, error) {
 		if _, err := payload.NewArchive(zr); err != nil {
 			return 0, nil, err
 		}
+		// A bundle made with -play is fused as a game without saying so again.
+		if strings.TrimSpace(zr.Comment) == payload.PlayMarker {
+			return payload.ZipGame, data, nil
+		}
 		return payload.Zip, data, nil
 
 	default:
@@ -136,7 +140,9 @@ func buildPayload(src string) (payload.Kind, []byte, error) {
 }
 
 // zipDir packs a directory, which must hold main.lua at its top level.
-func zipDir(dir string) ([]byte, error) {
+// comment is the zip's comment, which is how a bundle says -play; skip is a
+// file left out, the bundle being written when it is written inside dir.
+func zipDir(dir, comment, skip string) ([]byte, error) {
 	if _, err := os.Stat(filepath.Join(dir, payload.EntryName)); err != nil {
 		return nil, fmt.Errorf("%s has no %s", dir, payload.EntryName)
 	}
@@ -163,6 +169,11 @@ func zipDir(dir string) ([]byte, error) {
 		}
 		if d.IsDir() {
 			return nil
+		}
+		if skip != "" {
+			if abs, err := filepath.Abs(p); err == nil && abs == skip {
+				return nil
+			}
 		}
 		info, err := d.Info()
 		if err != nil {
@@ -192,6 +203,11 @@ func zipDir(dir string) ([]byte, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	if comment != "" {
+		if err := zw.SetComment(comment); err != nil {
+			return nil, err
+		}
 	}
 	if err := zw.Close(); err != nil {
 		return nil, err
@@ -245,24 +261,11 @@ func fatal(format string, args ...any) int {
 	return 1
 }
 
-// gameCallbacks is what a program written for the console defines, and nothing
-// else much does: the two functions the frame loop calls.
-var gameCallbacks = regexp.MustCompile(`(?:^|[^\w])(?:function\s+)?_(?:draw|update)\s*[=(]`)
+// looksLikeAGame and asksForAWindow are only ever used to offer a hint, so a
+// wrong guess costs a line of output and nothing else.
+func looksLikeAGame(src []byte) bool { return payload.LooksLikeAGame(src) }
 
-// looksLikeAGame reports whether a program appears to be written for the
-// console. It is only ever used to offer a hint, so a wrong guess costs a line
-// of output and nothing else.
-func looksLikeAGame(src []byte) bool {
-	return src != nil && gameCallbacks.Match(src)
-}
-
-// asksForAWindow reports whether a program calls boot(), which is how one says
-// for itself that it wants the console. Used only to hold back the hint above.
-var bootCall = regexp.MustCompile(`(?:^|[^\w.:])boot\s*[({"']`)
-
-func asksForAWindow(src []byte) bool {
-	return src != nil && bootCall.Match(src)
-}
+func asksForAWindow(src []byte) bool { return payload.AsksForAWindow(src) }
 
 // mainSource reports the program's main chunk, for looking at before it is
 // attached. It gives up quietly: this is only used for the hint above.

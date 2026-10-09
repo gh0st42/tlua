@@ -345,3 +345,22 @@ func TestTriggerCharacters(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 }
+
+func TestSettingsAreFoundBySection(t *testing.T) {
+	settings := map[string]any{"Lua": map[string]any{
+		"runtime":   map[string]any{"version": "Lua 5.1"},
+		"workspace": map[string]any{"library": []string{"/lib"}},
+	}}
+	if got := setting(settings, "Lua.runtime.version"); got != "Lua 5.1" {
+		t.Errorf("Lua.runtime.version = %v", got)
+	}
+	if got, ok := setting(settings, "Lua.workspace").(map[string]any); !ok || got["library"] == nil {
+		t.Errorf("Lua.workspace = %v", got)
+	}
+	if got := setting(settings, "files.associations"); got != nil {
+		t.Errorf("a section there is none of is nil, not %v", got)
+	}
+	if got := setting(nil, "Lua"); got != nil {
+		t.Errorf("no settings at all is nil, not %v", got)
+	}
+}
