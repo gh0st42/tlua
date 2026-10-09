@@ -28,8 +28,8 @@ require("forms.%s"):show()
 end
 
 local function codeLua(name)
-  return ([[-- The code behind %s.form.lua: its controls are fields of the form, by
--- the names the layout gives them, as frm.Button1.
+  return ([[-- The code behind %s.form.lua: the controls are fields of the form, by
+-- the names the layout gives them.
 
 local gui = require "gui"
 local frm = gui.load "%s"
@@ -93,6 +93,26 @@ function M.save(dir, name, doc)
   gui.save(doc, M.layoutPath(dir, name))
   local code = dir .. "/forms/" .. name .. ".lua"
   if not exists(code) then write(code, codeLua(name)) end
+end
+
+-- startup is the form main.lua shows first, by name.
+function M.startup(dir)
+  local f = io.open(dir .. "/main.lua", "r")
+  if not f then return nil end
+  local text = f:read("*a")
+  f:close()
+  return text:match('require%s*%(?%s*["\']forms%.([%a_][%w_]*)["\']'), text
+end
+
+-- setStartup makes main.lua show another form first, if main.lua is still
+-- as the designer wrote it; otherwise it says what to change by hand.
+function M.setStartup(dir, name)
+  local current, text = M.startup(dir)
+  if text and current and text ~= mainLua(current) then
+    return false, ("main.lua has been changed by hand, so it is left alone: make it require \"forms.%s\""):format(name)
+  end
+  write(dir .. "/main.lua", mainLua(name))
+  return true
 end
 
 M.exists = exists

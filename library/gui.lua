@@ -39,6 +39,7 @@ function bootgui() end
 ---@field font? gui.Font
 ---@field fontSize? integer
 ---@field grow boolean stretches with a resizable form; given when it is made
+---@field tabIndex? integer its place in the order Tab goes in; controls that take the keyboard
 ---@field onDrop? fun(self: self, text: string, lines: string[]) something was dropped on it; files arrive as one path per line
 ---@field onDrag? fun(self: self): string? the user drags out of it; return the text to carry
 ---@field [string] any fields of the script's own, which controls written in Lua keep their state in
@@ -95,6 +96,7 @@ function Object:redraw() end
 ---@field font? gui.Font
 ---@field fontSize? integer
 ---@field grow? boolean
+---@field tabIndex? integer
 ---@field parent? gui.Container where `gui.Button{}` and the like go, instead of the latest Form
 ---@field onDrop? fun(self: gui.Object, text: string, lines: string[])
 ---@field onDrag? fun(self: gui.Object): string?
@@ -226,6 +228,7 @@ function Form:Menu(items) end
 
 ---@class gui.Menu: gui.Object
 ---@field items gui.MenuItem[] assign it again after changing it
+---@field onClick? fun(self: gui.Menu, name: string?, caption: string, checked: boolean) every item picked, by its name
 
 --- `{"&Open", fn, shortcut = "Cmd+O"}`, `{"&File", {...}}` for a submenu, or
 --- "-" for a line between items. Cmd is Command on a Mac and Ctrl elsewhere.
@@ -235,6 +238,7 @@ function Form:Menu(items) end
 ---@field [1] string the caption; & marks the letter to underline
 ---@field [2]? fun(caption: string, checked: boolean)|gui.MenuItem[]
 ---@field shortcut? string
+---@field name? string what the Menu's onClick calls it
 ---@field checked? boolean makes it a toggle
 ---@field enabled? boolean
 ---@field onClick? fun(caption: string, checked: boolean)
@@ -413,7 +417,7 @@ function TextBox:select(i, j) end
 ---@field transparent boolean draws only what onDraw draws, over what is under it; given when it is made
 ---@field onKey? fun(self: gui.Canvas, key: string, text: string): boolean? clicking it takes the keyboard
 ---@field onDraw? fun(self: gui.Canvas, g: gui.Graphics)
----@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer, double: boolean) button 1 is left, 2 middle, 3 right; double for a double click
+---@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer, double: boolean, mods: string) button 1 is left, 2 middle, 3 right; double for a double click; mods as "Shift" or "Ctrl+Shift"
 ---@field onMouseUp? fun(self: gui.Canvas, x: integer, y: integer, button: integer)
 ---@field onMouseDrag? fun(self: gui.Canvas, x: integer, y: integer)
 ---@field onMouseMove? fun(self: gui.Canvas, x: integer, y: integer)
@@ -425,7 +429,7 @@ function TextBox:select(i, j) end
 ---@field transparent? boolean draws only what onDraw draws, over what is under it; given when it is made
 ---@field onKey? fun(self: gui.Canvas, key: string, text: string): boolean? clicking it takes the keyboard
 ---@field onDraw? fun(self: gui.Canvas, g: gui.Graphics)
----@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer, double: boolean)
+---@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer, double: boolean, mods: string)
 ---@field onMouseUp? fun(self: gui.Canvas, x: integer, y: integer, button: integer)
 ---@field onMouseDrag? fun(self: gui.Canvas, x: integer, y: integer)
 ---@field onMouseMove? fun(self: gui.Canvas, x: integer, y: integer)

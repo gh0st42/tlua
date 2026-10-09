@@ -65,13 +65,13 @@ var kinds = map[string]*kind{
 	"Button": {
 		w: 120, h: 28,
 		events: []string{"onClick"},
-		props:  map[string]lua.LValue{"default": lua.LFalse, "image": lua.LString("")},
+		props:  map[string]lua.LValue{"tabIndex": lua.LNumber(0), "default": lua.LFalse, "image": lua.LString("")},
 		fixed:  []string{"default"},
 	},
 	"TextBox": {
 		w: 120, h: 28,
 		events: []string{"onChange"},
-		props: map[string]lua.LValue{
+		props: map[string]lua.LValue{"tabIndex": lua.LNumber(0),
 			"text": lua.LString(""), "multiLine": lua.LFalse,
 			"password": lua.LFalse, "readOnly": lua.LFalse,
 			// For editing code: a multi-line box with line numbers, Lua's
@@ -84,45 +84,45 @@ var kinds = map[string]*kind{
 	"CheckBox": {
 		w: 120, h: 28,
 		events:  []string{"onChange"},
-		props:   map[string]lua.LValue{"checked": lua.LFalse},
+		props:   map[string]lua.LValue{"tabIndex": lua.LNumber(0), "checked": lua.LFalse},
 		aliases: map[string]string{"value": "checked"},
 	},
 	"RadioButton": {
 		w: 120, h: 28,
 		events:  []string{"onChange"},
-		props:   map[string]lua.LValue{"checked": lua.LFalse},
+		props:   map[string]lua.LValue{"tabIndex": lua.LNumber(0), "checked": lua.LFalse},
 		aliases: map[string]string{"value": "checked"},
 	},
 	"ComboBox": {
 		w: 120, h: 28,
 		events: []string{"onChange"},
-		props:  map[string]lua.LValue{"selected": lua.LNumber(0)},
+		props:  map[string]lua.LValue{"tabIndex": lua.LNumber(0), "selected": lua.LNumber(0)},
 	},
 	"ListBox": {
 		w: 160, h: 120,
 		events: []string{"onChange", "onDoubleClick"},
-		props:  map[string]lua.LValue{"selected": lua.LNumber(0)},
+		props:  map[string]lua.LValue{"tabIndex": lua.LNumber(0), "selected": lua.LNumber(0)},
 	},
 	"Tree": {
 		w: 200, h: 160,
 		events: []string{"onChange", "onDoubleClick", "onToggle"},
-		props:  map[string]lua.LValue{"path": lua.LString("")},
+		props:  map[string]lua.LValue{"tabIndex": lua.LNumber(0), "path": lua.LString("")},
 	},
 	"Table": {
 		w: 320, h: 160,
 		events: []string{"onChange", "onDoubleClick"},
-		props:  map[string]lua.LValue{"selected": lua.LNumber(0)},
+		props:  map[string]lua.LValue{"tabIndex": lua.LNumber(0), "selected": lua.LNumber(0)},
 	},
 	"Canvas": {
 		w: 200, h: 150,
 		events: []string{"onDraw", "onMouseDown", "onMouseUp", "onMouseMove", "onMouseDrag", "onMouseWheel", "onMouseEnter", "onMouseLeave", "onKey"},
-		props:  map[string]lua.LValue{"color": lua.LString("#ffffff"), "transparent": lua.LFalse},
+		props:  map[string]lua.LValue{"tabIndex": lua.LNumber(0), "color": lua.LString("#ffffff"), "transparent": lua.LFalse},
 		fixed:  []string{"transparent"},
 	},
 	"Slider": {
 		w: 160, h: 28,
 		events: []string{"onChange"},
-		props: map[string]lua.LValue{
+		props: map[string]lua.LValue{"tabIndex": lua.LNumber(0),
 			"min": lua.LNumber(0), "max": lua.LNumber(100), "step": lua.LNumber(1),
 			"value": lua.LNumber(0), "vertical": lua.LFalse,
 		},
@@ -131,7 +131,7 @@ var kinds = map[string]*kind{
 	"Spinner": {
 		w: 80, h: 28,
 		events: []string{"onChange"},
-		props: map[string]lua.LValue{
+		props: map[string]lua.LValue{"tabIndex": lua.LNumber(0),
 			"min": lua.LNumber(0), "max": lua.LNumber(100), "step": lua.LNumber(1),
 			"value": lua.LNumber(0),
 		},
@@ -150,10 +150,11 @@ var kinds = map[string]*kind{
 		w: 200, h: 120,
 		holds: controls,
 	},
-	// A Panel is a Frame with no border or caption: a group of controls.
+	// A Panel is a Frame with no border or caption: a group of controls. It
+	// can hold a Menu as well, as a stand-in for a form.
 	"Panel": {
 		w: 200, h: 120,
-		holds: controls,
+		holds: append([]string{"Menu"}, controls...),
 	},
 	// A Scroll shows part of what it holds, with scrollbars for the rest.
 	"Scroll": {
@@ -170,14 +171,15 @@ var kinds = map[string]*kind{
 		w: 320, h: 200,
 		events: []string{"onChange"},
 		holds:  []string{"Page"},
-		props:  map[string]lua.LValue{"selected": lua.LNumber(1)},
+		props:  map[string]lua.LValue{"tabIndex": lua.LNumber(0), "selected": lua.LNumber(1)},
 	},
 	"Page": {
 		holds: controls,
 	},
 	"Menu": {
-		// A width of 0 is the whole width of the form.
+		// A width of 0 is the whole width of what holds it.
 		w: 0, h: 25,
+		events: []string{"onClick"},
 	},
 }
 

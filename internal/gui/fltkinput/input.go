@@ -56,6 +56,13 @@ const (
 // Click presses and releases mouse button 1 at x, y.
 func Click(x, y int) { click(x, y, 0) }
 
+// ClickWith clicks at x, y with modifier keys held (fltk.SHIFT and the
+// like).
+func ClickWith(x, y, state int) {
+	Send(Event{Type: fltk.PUSH, X: x, Y: y, Key: button + 1, State: button1Held | state})
+	Send(Event{Type: fltk.RELEASE, X: x, Y: y, Key: button + 1, State: state, IsClick: true})
+}
+
 // DoubleClick is the second click of a double click at x, y.
 func DoubleClick(x, y int) { click(x, y, 1) }
 

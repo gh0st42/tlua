@@ -54,13 +54,46 @@ new project there.
   them: `Button1`, `TextBox1`, ...
 - **Selecting:** click a control to select it, or the form around the
   controls to select the form.
+  - Several controls are selected by dragging a rubber band round them (it
+    takes what it touches), or by Shift-clicking each.
+  - The one selected last has solid handles: it is the one the others line
+    up with.
+  - Cmd-A selects them all.
+- **Changing several at once:** dragging any selected control drags them all,
+  and the arrow keys move them all. A property typed in the grid goes to
+  every selected control that has it, except `name`.
+- **Arranging (Format menu):**
+  - Align: lefts, centres, rights, tops, middles, bottoms, all to the control
+    with solid handles.
+  - Make Same Size: width, height or both.
+  - Center in Form, horizontally or vertically.
+  - Make the spacing between three or more controls equal, across or down.
+- **The grid:** View > Show Grid draws VB6's dots, and Snap to Grid puts what
+  is drawn, moved and sized on them, every 8 pixels.
 - **Moving and sizing:** drag a control to move it, and drag its handles to
   size it. The arrow keys move it a pixel at a time; Shift and the arrows
   size it.
 - **The form:** the handles on its right and bottom edges size the form
   itself.
-- **Deleting and stacking:** Delete removes the selected control. Edit has
+- **Deleting and stacking:** Delete removes the selected controls. Format has
   Bring to Front and Send to Back.
+- **Undo and redo** (Cmd-Z, Cmd-Shift-Z) go back and forward through what was
+  done to the form. A caption typed a letter at a time, or a run of arrow
+  keys, is one step. In a text box, Cmd-Z undoes the typing instead.
+- **Cut, copy, paste and duplicate** (Cmd-X, C, V, D). Pasted controls come
+  in a little below and right of the originals, with new names where theirs
+  are taken. The designer keeps what was copied itself, so it can be pasted
+  into another form, and the system clipboard is left alone.
+- **Tab order:** Format > Tab Order numbers the controls that take the
+  keyboard. Click them in the order Tab is to visit them, and Escape when
+  done. It is saved as each control's `tabIndex`.
+- **Menus:** Tools > Menu Editor (Cmd-E) is VB6's.
+  - Type an item's caption, a name for the code to know it by, and a
+    shortcut such as `Cmd+O`.
+  - `>` makes it part of the submenu of the item above, and `<` takes it out
+    again. A caption of `-` is a line between items.
+  - In the code, the menu's `onClick(name, caption, checked)` says which item
+    was picked: double-click the menu to write it.
 - **Properties:** a property changes as it is typed. A value the control will
   not take turns red, with the reason in the status line. Empty means the
   default.
@@ -72,6 +105,13 @@ new project there.
   `*` while there is something to save, and closing asks first.
 - **Running:** F5 saves and runs `main.lua` in its own process, with what it
   prints below; Shift-F5 stops it.
+- **Several forms:** Project > Add Form adds one. Project > Set as Startup
+  Form makes `main.lua` show the open form first. That is done only while
+  `main.lua` is as the designer wrote it; one changed by hand is left alone,
+  with a note of what to change. The form `main.lua` starts with is named
+  under the list of forms.
+- **Make EXE:** File > Make EXE saves everything and packs the project into
+  one executable with `tlua fuse`, images and all.
 
 ## Code
 
@@ -100,10 +140,7 @@ new project there.
 
 ## Not yet
 
-These are later phases of the plan:
+These are the plan's last phase:
 - placing controls inside a Frame or on a Tabs page;
-- multiple selection, alignment and the grid;
-- undo;
-- the menu editor;
-- tab order;
-- Make EXE.
+- your own `gui.define` controls in the toolbox;
+- language-server stubs for each form, so `frm.Button1.` completes.

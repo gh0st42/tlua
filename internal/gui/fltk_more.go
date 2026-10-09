@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	goruntime "runtime"
+	"sort"
 	"strings"
 
 	"github.com/pwiecz/go-fltk"
@@ -59,6 +60,10 @@ func handle(o *guiObject, e fltk.Event) bool {
 		}
 	case fltk.RELEASE:
 		o.mouse.armed = false
+	}
+
+	if e == fltk.KEY && fltk.EventKey() == fltk.TAB && !propBool(o, "acceptsTab") && tabNavigate(o) {
+		return true
 	}
 
 	switch o.kind {
@@ -509,7 +514,8 @@ func canvasEvent(o *guiObject, e fltk.Event) bool {
 			b.TakeFocus()
 		}
 		x, y := at()
-		a.fire(o, "onMouseDown", x, y, lua.LNumber(fltk.EventButton()), lua.LBool(fltk.EventClicks() > 0))
+		a.fire(o, "onMouseDown", x, y, lua.LNumber(fltk.EventButton()), lua.LBool(fltk.EventClicks() > 0),
+			lua.LString(modNames(fltk.EventState())))
 		return true // so that the drag and the release come here too
 	case fltk.FOCUS, fltk.UNFOCUS:
 		// A Canvas with onKey can have the keyboard.
@@ -723,4 +729,65 @@ func codeKey(o *guiObject, e fltk.Event) bool {
 		return true
 	}
 	return false
+}
+
+// tabNavigate moves the focus on from o with Tab, or back with Shift-Tab,
+// in the order of the form's tabIndex: controls with one first, by it, and
+// then the rest as the form holds them. A form whose controls have no
+// tabIndex is left to FLTK, which goes in the order they were made.
+func tabNavigate(o *guiObject) bool {
+	f := o.form()
+	if f == nil || fltk.EventState()&(fltk.CTRL|fltk.ALT|fltk.META) != 0 {
+		return false
+	}
+	var order []*guiObject
+	ordered := false
+	var walk func(p *guiObject)
+	walk = func(p *guiObject) {
+		for _, c := range p.children {
+			if _, ok := c.spec.props["tabIndex"]; ok && c.widget != nil {
+				if w, ok := c.widget.(interface {
+					Visible() bool
+					IsActive() bool
+				}); ok && w.Visible() && w.IsActive() {
+					order = append(order, c)
+					if propInt(c, "tabIndex", 0) > 0 {
+						ordered = true
+					}
+				}
+			}
+			walk(c)
+		}
+	}
+	walk(f)
+	if !ordered || len(order) < 2 {
+		return false
+	}
+	rank := func(c *guiObject) int {
+		if i := propInt(c, "tabIndex", 0); i > 0 {
+			return i
+		}
+		return 1 << 30
+	}
+	sort.SliceStable(order, func(i, j int) bool { return rank(order[i]) < rank(order[j]) })
+	at := -1
+	for i, c := range order {
+		if c == o {
+			at = i
+		}
+	}
+	if at < 0 {
+		return false
+	}
+	step := 1
+	if fltk.EventState()&fltk.SHIFT != 0 {
+		step = len(order) - 1
+	}
+	for n := 1; n < len(order); n++ {
+		next := order[(at+step*n)%len(order)]
+		if w, ok := next.widget.(interface{ TakeFocus() int }); ok && w.TakeFocus() != 0 {
+			return true
+		}
+	}
+	return true
 }

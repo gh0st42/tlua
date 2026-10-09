@@ -88,6 +88,10 @@ behind its siblings, which is also the order a layout lists them in.
 | `Splitter`    | holds controls that tile it edge to edge; the user drags the lines between them | — |
 | `Tabs`        | holds Pages, made with `tabs:Page{caption = ...}`; `selected` | `onChange` |
 
+The controls that take the keyboard also have `tabIndex`. Once any control
+on a form has one, Tab goes in that order: those with an index first, by
+it, then the rest as the form holds them. Shift-Tab goes back.
+
 Every object also has `name` (see [Forms in files](#forms-in-files)), `caption`, `left`, `top`, `width`, `height`, `visible`,
 `enabled` and `tooltip`, plus `color`, `textColor`, `font` (`"sans"`,
 `"serif"`, `"mono"`) and `fontSize`. Colours are `"#rrggbb"`, `"#rgb"`, or one
@@ -182,6 +186,20 @@ form:Menu {
 }
 ```
 
+A Menu also raises `onClick(self, name, caption, checked)` for every item
+picked, after the item's own function if it has one. `name` is the item's
+`name` field. That is how the code tells the items of a menu written down in
+a layout apart, since a layout has no functions in it:
+
+```lua
+form:Menu { { "&File", { { "&Open...", name = "mnuOpen", shortcut = "Cmd+O" } } } }
+function form.Menu1:onClick(name)
+  if name == "mnuOpen" then ... end
+end
+```
+
+A Panel can hold a Menu too, across its own width.
+
 A toggle writes `checked` back into its item as the user changes it. So a
 menu changed after it is made (renamed, enabled, checked) is the items
 table changed and assigned again, and it keeps what the user left it as.
@@ -250,9 +268,10 @@ works inside `onDraw`:
 | `g:image(file, x, y [, w, h])` | an image, scaled to w by h if given |
 
 Mouse handlers get positions in the same coordinates:
-- `onMouseDown(self, x, y, button, double)` and
-  `onMouseUp(self, x, y, button)`. Button 1 is left, 2 middle, 3 right;
-  `double` is true for the second click of a double click.
+- `onMouseDown(self, x, y, button, double, mods)` and
+  `onMouseUp(self, x, y, button)`. Button 1 is left, 2 middle, 3 right.
+  `double` is true for the second click of a double click. `mods` names the
+  modifier keys held, as `"Shift"` or `"Ctrl+Shift"`, and `""` for none.
 - `onMouseDrag(self, x, y)` while a button is held down.
 - `onMouseMove(self, x, y)` when no button is held.
 - `onMouseWheel(self, dx, dy)`.

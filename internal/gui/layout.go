@@ -44,7 +44,7 @@ var propSchema = map[string]propInfo{
 	"align": {typ: "choice", choices: []string{"left", "center", "right"}},
 	"text":  {typ: "string"}, "path": {typ: "string"}, "file": {typ: "file"}, "image": {typ: "file"},
 	"transparent": {typ: "boolean"}, "lineNumbers": {typ: "boolean"}, "acceptsTab": {typ: "boolean"},
-	"syntax":    {typ: "choice", choices: []string{"lua"}},
+	"syntax": {typ: "choice", choices: []string{"lua"}}, "tabIndex": {typ: "integer"},
 	"multiLine": {typ: "boolean"}, "password": {typ: "boolean"}, "readOnly": {typ: "boolean"},
 	"default": {typ: "boolean"}, "vertical": {typ: "boolean"}, "resizable": {typ: "boolean"},
 	"checked": {typ: "boolean"}, "fit": {typ: "boolean"},

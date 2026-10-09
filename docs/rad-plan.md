@@ -1,9 +1,9 @@
 # A VB6-style form designer: plan
 
-Status: phases 1 to 3 are built (2026-10-08). Phase 1 added names,
+Status: phases 1 to 4 are built (2026-10-08). Phase 1 added names,
 `gui.load`, `gui.dump`, `gui.save` and `gui.kinds`, described in docs/gui.md
-under "Forms in files". Phases 2 and 3 are `tlua design` with its code
-window, described in docs/design.md. The rest is proposed.
+under "Forms in files". Phases 2 to 4 are `tlua design`, described in
+docs/design.md. Phase 5 is proposed.
 
 ## What it is
 
@@ -234,7 +234,25 @@ The original phase 3 list follows.
 - **Done when:** a form can be designed, wired up and debugged without
   leaving the designer.
 
-### Phase 4: the comforts VB6 had
+### Phase 4: the comforts VB6 had — done
+
+Built with these notes:
+- **The runtime** gained modifier keys in a Canvas's `onMouseDown` (for
+  Shift-click) and `tabIndex` (R11).
+- **Menus in layouts** gained a Menu `onClick(name, caption, checked)`. A
+  layout's menu has no functions in it, so its items are told apart by
+  `name` in the code. A Panel can hold a Menu, so the designer shows it.
+- **Undo** keeps a copy of the layout before each change, not a list of
+  edits: forms are small, and undoing is then a matter of building the form
+  again.
+- **The clipboard** for controls is the designer's own, so copying controls
+  leaves the system clipboard alone.
+- **The startup form** is read from main.lua, and main.lua is rewritten only
+  while it is as the designer wrote it.
+- **Make EXE** has a test that packs a project and runs the executable.
+
+The original phase 4 list follows.
+
 
 - **Selection:** rubber-band and Shift-click multi-select.
 - **Arranging:** align (lefts, tops, centres), make the same size, centre in

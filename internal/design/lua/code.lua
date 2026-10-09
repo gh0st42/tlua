@@ -13,7 +13,7 @@ local defaults = {
   Button = "onClick", TextBox = "onChange", CheckBox = "onChange",
   RadioButton = "onChange", ComboBox = "onChange", ListBox = "onChange",
   Tree = "onChange", Table = "onChange", Slider = "onChange", Spinner = "onChange",
-  Tabs = "onChange", Canvas = "onDraw", Form = "onClose",
+  Tabs = "onChange", Canvas = "onDraw", Form = "onClose", Menu = "onClick",
 }
 
 function M.defaultEvent(kind)
@@ -28,8 +28,11 @@ local params = {
   onToggle = "path, open",
 }
 
-function M.params(event)
-  return params[event] or ""
+-- A Menu's onClick says which item; a Button's says nothing.
+local kindParams = { Menu = { onClick = "name, caption, checked" } }
+
+function M.params(event, kind)
+  return kindParams[kind] and kindParams[kind][event] or params[event] or ""
 end
 
 local function escape(s)
@@ -72,7 +75,7 @@ end
 -- addHandler adds an empty handler, before the line that returns the form
 -- if there is one, and returns the new text and the line inside the
 -- handler, where the programmer starts typing.
-function M.addHandler(text, var, name, event)
+function M.addHandler(text, var, name, event, kind)
   local lines = {}
   for line in (text .. "\n"):gmatch("(.-)\n") do lines[#lines + 1] = line end
   while lines[#lines] == "" do lines[#lines] = nil end
@@ -88,7 +91,7 @@ function M.addHandler(text, var, name, event)
   -- A blank line on either side of it.
   if #out > 0 and out[#out] ~= "" then out[#out + 1] = "" end
   local start = #out + 1
-  out[#out + 1] = ("function %s:%s(%s)"):format(target(var, name), event, M.params(event))
+  out[#out + 1] = ("function %s:%s(%s)"):format(target(var, name), event, M.params(event, kind))
   out[#out + 1] = "  "
   out[#out + 1] = "end"
   if at <= #lines then

@@ -64,7 +64,8 @@ func withDesigner(t *testing.T, steps func(s *scene)) {
 		r, _ := newLua(t)
 		s := &scene{t: t, L: r.L, dir: dir}
 		r.L.SetGlobal("dir", lua.LString(dir))
-		if err := r.L.DoString(`bootgui(); D = require("design.main").start{dir = dir, create = true}`); err != nil {
+		// Questions answer themselves "no" unless a test says otherwise.
+		if err := r.L.DoString(`bootgui(); D = require("design.main").start{dir = dir, create = true}; D.answer = "no"`); err != nil {
 			t.Errorf("start: %v", err)
 			return
 		}
@@ -376,6 +377,7 @@ func TestDesignerOffersToRename(t *testing.T) {
 	withDesigner(t, func(s *scene) {
 		s.pickTool("Button")
 		s.drag(20, 20, 120, 50)
+		s.lua(`D.answer = nil -- this question is answered by a key`)
 		s.lua(`D:openHandler(D.doc[1], "onClick"); D.codeBox.text = D.codeBox.text .. "frm.Button1.caption = 'x'\n"; D:showDesign()`)
 		s.lua(`D.surface:selectNode(D.doc[1])`)
 		s.lua(`D.props.editors.name.obj.text = ""; D.props.editors.name.obj:focus()`)
@@ -439,5 +441,220 @@ D:showDesign()`)
 		}
 		s.expect(`D.output.items[#D.output.items]:find("^> exited with")`)
 		s.expect(`D.views.selected == 2 and D.codeBox.line == 4`)
+	})
+}
+
+// place draws a control of a kind on the form, and names it.
+func (s *scene) place(kind string, x0, y0, x1, y1 int, name string) {
+	s.pickTool(kind)
+	s.drag(x0, y0, x1, y1)
+	s.lua(fmt.Sprintf(`D.props.editors.name.obj.text = ""; D.props.editors.name.obj:focus()`))
+	in.Type(name)
+	s.pump()
+}
+
+func (s *scene) shiftClick(x, y int) {
+	ox, oy := s.at("D.surface.overlay", 0, 0)
+	in.ClickWith(ox+x, oy+y, fltk.SHIFT)
+	s.pump()
+}
+
+func TestDesignerSelectsSeveral(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.place("Button", 20, 20, 120, 50, "a")
+		s.place("Button", 20, 80, 120, 110, "b")
+		s.place("Button", 300, 200, 400, 230, "c")
+
+		// A rubber band round the first two selects them.
+		s.drag(10, 10, 200, 150)
+		s.expect(`#D.surface.sels == 2 and D.statusLine.caption:find("2 controls selected")`)
+		s.shiftClick(350, 215)
+		s.expect(`#D.surface.sels == 3 and D.surface.sel.node.name == "c"`)
+		s.shiftClick(350, 215)
+		s.expect(`#D.surface.sels == 2`)
+
+		// Dragging one of them drags both.
+		s.drag(60, 30, 90, 50)
+		s.expect(`D.doc[1].left == 50 and D.doc[1].top == 40 and D.doc[2].left == 50 and D.doc[2].top == 100`)
+
+		// The grid's properties change both; a name is one control's own.
+		s.lua(`D.props.editors.caption.obj.text = ""; D.props.editors.caption.obj:focus()`)
+		in.Type("Go")
+		// (Each was Button1 when made: a renamed control's name is free again.)
+		s.expect(`D.doc[1].caption == "Go" and D.doc[2].caption == "Go" and D.doc[3].caption == "Button1"`)
+
+		in.Key(fltk.DELETE, "", 0)
+		// The caption box had the keyboard; the surface takes it back with a click.
+		s.click(60, 45)
+		s.drag(10, 10, 200, 150)
+		in.Key(fltk.DELETE, "", 0)
+		s.expect(`#D.doc == 1 and D.doc[1].name == "c"`)
+	})
+}
+
+func TestDesignerAlignsAndSnaps(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.place("Button", 20, 20, 120, 50, "a")
+		s.place("Button", 47, 80, 127, 110, "b")
+		s.click(60, 30)      // a ...
+		s.shiftClick(70, 90) // ... then b, which the others line up with
+		s.lua(`D.surface:arrange("lefts")`)
+		s.expect(`D.doc[1].left == 47 and D.doc[2].left == 47`)
+		s.lua(`D.surface:arrange("width")`)
+		s.expect(`D.doc[1].width == 80`)
+
+		s.lua(`D.snap = true; D.gridShown = true`)
+		s.pickTool("Label")
+		s.drag(13, 150, 101, 181)
+		s.expect(`D.doc[3].left == 16 and D.doc[3].top == 152 and D.doc[3].width == 88 and D.doc[3].height == 32`)
+	})
+}
+
+func TestDesignerUndoes(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.pickTool("Button")
+		s.drag(20, 20, 120, 50)
+		s.lua(`D.props.editors.caption.obj.text = ""; D.props.editors.caption.obj:focus()`)
+		in.Type("Click me")
+		s.expect(`D.doc[1].caption == "Click me"`)
+		s.lua(`D:undo()`)
+		s.expect(`D.doc[1].caption == "Button1" and D.surface.entries[1].obj.caption == "Button1"`)
+		s.lua(`D:undo()`)
+		s.expect(`#D.doc == 0 and #D.surface.entries == 0`)
+		s.lua(`D:redo(); D:redo()`)
+		s.expect(`#D.doc == 1 and D.doc[1].caption == "Click me" and D.surface.sel.node == D.doc[1]`)
+
+		s.drag(60, 30, 100, 60)
+		s.expect(`D.doc[1].left == 60`)
+		mod, _ := cmdKey()
+		in.Key('z', "z", mod)
+		s.expect(`D.doc[1].left == 20`)
+		// With Shift held a keyboard types "Z", which is what tells Redo
+		// from Undo: FLTK matches a shortcut without Shift on the text too.
+		in.Key('z', "Z", mod|fltk.SHIFT)
+		s.expect(`D.doc[1].left == 60`)
+	})
+}
+
+func TestDesignerCopiesAndPastes(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.place("Button", 20, 20, 120, 50, "cmdOK")
+		s.click(60, 30)
+		mod, _ := cmdKey()
+		in.Key('c', "c", mod)
+		in.Key('v', "v", mod)
+		s.expect(`#D.doc == 2 and D.doc[2].name == "Button1" and D.doc[2].left == 28 and D.doc[2].top == 28`)
+		in.Key('v', "v", mod)
+		s.expect(`#D.doc == 3 and D.doc[3].name == "Button2" and D.doc[3].left == 36`)
+		in.Key('d', "d", mod)
+		s.expect(`#D.doc == 4 and D.doc[4].left == 44 and D.surface.sel.node == D.doc[4]`)
+		in.Key('x', "x", mod)
+		s.expect(`#D.doc == 3`)
+		in.Key('a', "a", mod)
+		s.expect(`#D.surface.sels == 3`)
+	})
+}
+
+func TestDesignerTabOrder(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.place("TextBox", 20, 20, 120, 48, "txtA")
+		s.place("TextBox", 20, 80, 120, 108, "txtB")
+		s.place("Label", 20, 140, 120, 168, "lblC")
+		s.lua(`D:setTabOrder(true)`)
+		s.click(60, 90)  // txtB first
+		s.click(60, 30)  // then txtA
+		s.click(60, 150) // a Label takes no keyboard: nothing
+		s.expect(`D.doc[2].tabIndex == 1 and D.doc[1].tabIndex == 2 and D.doc[3].tabIndex == nil`)
+		in.Key(fltk.ESCAPE, "", 0)
+		s.expect(`not D.surface.tabMode`)
+		s.lua(`D:save()`)
+		data, _ := os.ReadFile(filepath.Join(s.dir, "forms/Form1.form.lua"))
+		if !strings.Contains(string(data), `name = "txtB", left = 20, top = 80, width = 100, height = 28, tabIndex = 1`) {
+			s.t.Errorf("saved:\n%s", data)
+		}
+	})
+}
+
+func TestDesignerMenuEditor(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.lua(`E = {}; D.menuEditorHooks = E`)
+		click := func(obj string) {
+			x, y := s.at(obj, 10, 10)
+			in.Click(x, y)
+			s.pump()
+		}
+		later(func() {
+			s.lua(`E.caption:focus()`)
+			in.Type("&File")
+			click("E.next")
+			in.Type("&Open")
+			s.lua(`E.shortcut:focus()`)
+			in.Type("Cmd+O")
+			s.lua(`E.name:focus()`)
+			in.Type("mnuOpen")
+			click("E.indent")
+			click("E.next")
+			in.Type("-")
+			click("E.next")
+			in.Type("&Quit")
+			s.lua(`E.name:focus()`)
+			in.Type("mnuQuit")
+			click("E.ok")
+		})
+		s.lua(`D:editMenu()`)
+		s.expect(`D.doc[1].kind == "Menu" and D.doc[1].name == "Menu1"`)
+		s.expect(`require("design.model").literal(D.doc[1].items) == '{ { "&File", { { "&Open", name = "mnuOpen", shortcut = "Cmd+O" }, "-", { "&Quit", name = "mnuQuit" } } } }'`)
+		s.expect(`D.surface.entries[1].obj.width == 480`)
+
+		// Opening it again shows what there is; deleting every item takes the menu away.
+		later(func() {
+			s.lua(`E.list.selected = 1; E.list.onChange(E.list)`)
+			for i := 0; i < 4; i++ {
+				click("E.delete")
+			}
+			click("E.ok")
+		})
+		s.lua(`D:editMenu()`)
+		s.expect(`#D.doc == 0`)
+	})
+}
+
+func TestDesignerStartupForm(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.expect(`D.startupLine.caption == "Starts with Form1"`)
+		s.lua(`require("design.project").addForm(D.dir, "About"); D:openForm("About"); D:setStartup()`)
+		s.expect(`D.startupLine.caption == "Starts with About"`)
+		data, _ := os.ReadFile(filepath.Join(s.dir, "main.lua"))
+		if !strings.Contains(string(data), `require("forms.About"):show()`) {
+			s.t.Errorf("main.lua:\n%s", data)
+		}
+	})
+}
+
+func TestDesignerMakesAnExe(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds tlua")
+	}
+	exe := filepath.Join(t.TempDir(), "tlua")
+	if out, err := exec.Command("go", "build", "-o", exe, "tlua/cmd/tlua").CombinedOutput(); err != nil {
+		t.Fatalf("building tlua: %v\n%s", err, out)
+	}
+	app := filepath.Join(t.TempDir(), "app")
+	withDesigner(t, func(s *scene) {
+		os.WriteFile(filepath.Join(s.dir, "main.lua"), []byte(`print("made by tlua design")`), 0o644)
+		s.L.SetGlobal("exe", lua.LString(exe))
+		s.L.SetGlobal("app", lua.LString(app))
+		s.lua(`require("gui").interpreter = exe; D:makeExeTo(app)`)
+		for i := 0; i < 300; i++ {
+			s.pump()
+			if err := s.L.DoString(`__done = D.output.items[#D.output.items]:find("^> made") or D.output.items[#D.output.items]:find("^> fuse exited")`); err == nil && lua.LVAsBool(s.L.GetGlobal("__done")) {
+				break
+			}
+		}
+		s.expect(`D.output.items[#D.output.items] == "> made " .. app`)
+		out, err := exec.Command(app).CombinedOutput()
+		if err != nil || strings.TrimSpace(string(out)) != "made by tlua design" {
+			s.t.Errorf("running the exe: %v %q", err, out)
+		}
 	})
 }

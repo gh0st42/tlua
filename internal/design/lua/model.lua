@@ -183,4 +183,158 @@ function M.parse(text)
   return v
 end
 
+-- copy is a deep copy of a layout, or of any part of one.
+function M.copy(v)
+  if type(v) ~= "table" then return v end
+  local c = {}
+  for k, x in pairs(v) do c[k] = M.copy(x) end
+  return c
+end
+
+---------------------------------------------------------------- arranging
+
+M.GRID = 8
+
+-- snap rounds a coordinate to the grid.
+function M.snap(v, grid)
+  grid = grid or M.GRID
+  return math.floor(v / grid + 0.5) * grid
+end
+
+-- arrange works out where controls go for one of the Format menu's
+-- commands. rects are {node =, l =, t =, w =, h =}; ref is the one the
+-- others are lined up with (VB6's, with the solid handles); formW and formH
+-- size the form. It returns the new rects, by node.
+function M.arrange(op, rects, ref, formW, formH)
+  local out = {}
+  for _, r in ipairs(rects) do out[r.node] = { l = r.l, t = r.t, w = r.w, h = r.h } end
+  local function each(fn)
+    for _, r in ipairs(rects) do fn(out[r.node], r) end
+  end
+  if op == "lefts" then each(function(o) o.l = ref.l end)
+  elseif op == "rights" then each(function(o) o.l = ref.l + ref.w - o.w end)
+  elseif op == "tops" then each(function(o) o.t = ref.t end)
+  elseif op == "bottoms" then each(function(o) o.t = ref.t + ref.h - o.h end)
+  elseif op == "centers" then each(function(o) o.l = math.floor(ref.l + ref.w / 2 - o.w / 2) end)
+  elseif op == "middles" then each(function(o) o.t = math.floor(ref.t + ref.h / 2 - o.h / 2) end)
+  elseif op == "width" then each(function(o) o.w = ref.w end)
+  elseif op == "height" then each(function(o) o.h = ref.h end)
+  elseif op == "size" then each(function(o) o.w, o.h = ref.w, ref.h end)
+  elseif op == "centerH" or op == "centerV" then
+    -- The selection moves as one, into the middle of the form.
+    local l, t, r, b = math.huge, math.huge, -math.huge, -math.huge
+    each(function(o) l, t = math.min(l, o.l), math.min(t, o.t); r, b = math.max(r, o.l + o.w), math.max(b, o.t + o.h) end)
+    local dx = op == "centerH" and math.floor((formW - (r - l)) / 2) - l or 0
+    local dy = op == "centerV" and math.floor((formH - (b - t)) / 2) - t or 0
+    each(function(o) o.l, o.t = o.l + dx, o.t + dy end)
+  elseif op == "spaceH" or op == "spaceV" then
+    -- The first and last stay; those between are spread so that the gaps
+    -- between them are the same.
+    local pos, size = op == "spaceH" and "l" or "t", op == "spaceH" and "w" or "h"
+    local sorted = {}
+    for _, r in ipairs(rects) do sorted[#sorted + 1] = out[r.node] end
+    table.sort(sorted, function(a, b) return a[pos] < b[pos] end)
+    if #sorted > 2 then
+      local first, last = sorted[1], sorted[#sorted]
+      local total = 0
+      for _, o in ipairs(sorted) do total = total + o[size] end
+      local gap = ((last[pos] + last[size]) - first[pos] - total) / (#sorted - 1)
+      local at = first[pos]
+      for _, o in ipairs(sorted) do
+        o[pos] = math.floor(at + 0.5)
+        at = at + o[size] + gap
+      end
+    end
+  end
+  return out
+end
+
+---------------------------------------------------------------- copying controls
+
+local CLIP = "-- tlua design: controls\n"
+
+-- copyText writes controls as text to paste: a Lua list of their layouts.
+function M.copyText(nodes)
+  local list = {}
+  for i, n in ipairs(nodes) do list[i] = M.copy(n) end
+  return CLIP .. M.literal(list)
+end
+
+-- rename gives a pasted control, and anything in it, names that are free.
+local function rename(doc, node, taken)
+  if node.name then
+    if taken[node.name] then
+      local n = 1
+      while taken[node.kind .. n] do n = n + 1 end
+      if node.caption == node.name then node.caption = node.kind .. n end
+      node.name = node.kind .. n
+    end
+    taken[node.name] = true
+  end
+  for _, child in ipairs(node) do rename(doc, child, taken) end
+end
+
+-- pasteNodes reads copied controls back, renamed where their names are
+-- taken and moved by offset; nil if the text is not copied controls.
+function M.pasteNodes(text, doc, offset)
+  if type(text) ~= "string" or text:sub(1, #CLIP) ~= CLIP then return nil end
+  local list = M.parse(text:sub(#CLIP + 1))
+  if type(list) ~= "table" then return nil end
+  local taken = M.names(doc)
+  for _, node in ipairs(list) do
+    if type(node) ~= "table" or not M.kinds()[node.kind] then return nil end
+    rename(doc, node, taken)
+    node.left = (node.left or 0) + (offset or 0)
+    node.top = (node.top or 0) + (offset or 0)
+  end
+  return list
+end
+
+---------------------------------------------------------------- menus
+
+-- flattenMenu turns a Menu's items into a list the Menu Editor shows a line
+-- at a time: each with its level, and "-" for a separator.
+function M.flattenMenu(items, level, out)
+  out, level = out or {}, level or 0
+  for _, item in ipairs(items or {}) do
+    if item == "-" then
+      out[#out + 1] = { level = level, caption = "-" }
+    elseif type(item) == "table" then
+      local e = {
+        level = level, caption = item[1] or "", name = item.name, shortcut = item.shortcut,
+        checked = item.checked, enabled = item.enabled,
+      }
+      out[#out + 1] = e
+      if type(item[2]) == "table" then M.flattenMenu(item[2], level + 1, out) end
+    end
+  end
+  return out
+end
+
+-- unflattenMenu turns the Menu Editor's list back into items; an entry with
+-- entries a level deeper after it is a submenu.
+function M.unflattenMenu(list)
+  local root = {}
+  local stack = { { level = -1, items = root } }
+  for i, e in ipairs(list) do
+    while stack[#stack].level >= e.level do stack[#stack] = nil end
+    local into = stack[#stack].items
+    if e.caption == "-" then
+      into[#into + 1] = "-"
+    else
+      local item = { e.caption, name = e.name, shortcut = e.shortcut, checked = e.checked, enabled = e.enabled }
+      if item.name == "" then item.name = nil end
+      if item.shortcut == "" then item.shortcut = nil end
+      if item.enabled ~= false then item.enabled = nil end
+      into[#into + 1] = item
+      local nextEntry = list[i + 1]
+      if nextEntry and nextEntry.level > e.level then
+        item[2] = {}
+        stack[#stack + 1] = { level = e.level, items = item[2] }
+      end
+    end
+  end
+  return root
+end
+
 return M

@@ -762,3 +762,51 @@ form:show()`, func(s *scene) {
 		s.expect(`empty.selected == 0`)
 	})
 }
+
+func TestPhase4Runtime(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 400, height = 300}
+canvas = form:Canvas{left = 10, top = 40, width = 100, height = 60,
+  onMouseDown = function(self, x, y, b, double, mods) held = mods end}
+a = form:TextBox{left = 150, top = 40, width = 100, tabIndex = 3}
+b = form:TextBox{left = 150, top = 80, width = 100, tabIndex = 1}
+c = form:TextBox{left = 150, top = 120, width = 100}
+d = form:Button{caption = "d", left = 150, top = 160, tabIndex = 2}
+panel = form:Panel{left = 260, top = 40, width = 130, height = 100}
+menu = panel:Menu{ {"&File", { {"&Open", name = "mnuOpen", shortcut = "F6"} }} }
+function menu:onClick(name, caption) picked = name .. ":" .. caption end
+form:show()`, func(s *scene) {
+		x, y := s.at("canvas", 10, 10)
+		in.ClickWith(x, y, 0)
+		s.expect(`held == ""`)
+		in.ClickWith(x, y, fltk.SHIFT)
+		s.expect(`held == "Shift"`)
+		in.ClickWith(x, y, fltk.SHIFT|fltk.CTRL)
+		s.expect(`held == "Ctrl+Shift"`)
+
+		// Tab goes b (1), d (2), a (3), then c, which has none, then round.
+		s.focus("b")
+		order := ""
+		for i := 0; i < 5; i++ {
+			in.Key(fltk.TAB, "\t", 0)
+			s.pump()
+			for _, n := range []string{"a", "b", "c", "d"} {
+				if w, ok := s.obj(n).widget.(interface{ HasFocus() bool }); ok && w.HasFocus() {
+					order += n
+				}
+			}
+		}
+		if order != "dacbd" {
+			s.t.Errorf("tab order: %s, want dacbd", order)
+		}
+		in.Send(in.Event{Type: fltk.KEY, Key: fltk.TAB, Text: "\t", State: fltk.SHIFT})
+		s.pump()
+		if w := s.obj("b").widget.(interface{ HasFocus() bool }); !w.HasFocus() {
+			s.t.Error("Shift-Tab should go back to b")
+		}
+
+		in.Key(fltk.F6, "", 0)
+		s.expect(`picked == "mnuOpen:&Open"`)
+		s.expect(`menu.width == 130`)
+	})
+}

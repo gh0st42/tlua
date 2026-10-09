@@ -92,6 +92,11 @@ assert(project.read(dir, "Form1")[1].name == "cmdOK")`)
 	}
 	// What was made runs: the code loads the layout, and finds its button.
 	code, _ := os.ReadFile(filepath.Join(dir, "forms/Form1.lua"))
+	// The code it starts with names no control: a name there would make
+	// renaming that control offer to rename it in the code.
+	if strings.Contains(strings.ReplaceAll(string(code), "local frm", ""), "frm.") {
+		t.Errorf("the code it starts with mentions a control:\n%s", code)
+	}
 	if !strings.Contains(string(code), `gui.load "Form1"`) {
 		t.Errorf("Form1.lua:\n%s", code)
 	}
@@ -122,6 +127,8 @@ assert(code.findHandler(t3, "frm", "Canvas1", "onMouseDown") + 1 == line3)
 
 local t4 = code.addHandler(text, "frm", nil, "onClose")
 assert(t4:find("function frm:onClose%(%)") and code.findHandler(t4, "frm", nil, "onClose"))
+assert(code.addHandler(text, "frm", "Menu1", "onClick", "Menu"):find("function frm.Menu1:onClick%(name, caption, checked%)"))
+assert(code.defaultEvent("Menu") == "onClick")
 assert(code.findHandler("frm.Button1.onClick = function() end", "frm", "Button1", "onClick") == 1)
 
 -- No return at the end: the handler goes at the end.
@@ -136,4 +143,84 @@ assert(n == 2 and renamed == "frm.cmdOK.caption = 1\nfrm.Button10.caption = 2\nf
 assert(select(1, code.errorAt("tlua: ./forms/Main.lua:12: attempt to call a nil value")) == "Main")
 assert(select(2, code.errorAt("/tmp/p/forms/Main.lua:12: boom")) == 12)
 assert(code.errorAt("main.lua:3: boom") == nil and code.errorAt("forms/Main.form.lua:3: x") == nil)`)
+}
+
+func TestArranging(t *testing.T) {
+	r, _ := newLua(t)
+	run(t, r.L, `
+local model = require "design.model"
+local a, b, c = {}, {}, {}
+local rects = {
+  { node = a, l = 10, t = 10, w = 50, h = 20 },
+  { node = b, l = 40, t = 50, w = 30, h = 40 },
+  { node = c, l = 100, t = 30, w = 20, h = 10 },
+}
+local ref = rects[1]
+local o = model.arrange("lefts", rects, ref, 400, 300)
+assert(o[a].l == 10 and o[b].l == 10 and o[c].l == 10 and o[b].t == 50)
+o = model.arrange("rights", rects, ref)
+assert(o[b].l == 30 and o[c].l == 40)
+o = model.arrange("bottoms", rects, ref)
+assert(o[b].t == -10 and o[c].t == 20)
+o = model.arrange("centers", rects, ref)
+assert(o[b].l == 20 and o[c].l == 25)
+o = model.arrange("size", rects, ref)
+assert(o[c].w == 50 and o[c].h == 20)
+o = model.arrange("centerH", rects, ref, 400, 300)
+-- the group spans 10..120, 110 wide: it starts at (400 - 110) / 2 = 145
+assert(o[a].l == 145 and o[c].l == 235)
+o = model.arrange("spaceH", rects, ref)
+-- from 10 to 120, with 100 of controls: gaps of 5
+assert(o[a].l == 10 and o[b].l == 65 and o[c].l == 100, o[b].l)
+assert(model.snap(13) == 16 and model.snap(11) == 8 and model.snap(-3) == 0)`)
+}
+
+func TestCopyAndPaste(t *testing.T) {
+	r, _ := newLua(t)
+	run(t, r.L, `
+local model = require "design.model"
+local doc = model.newForm("F")
+doc[1] = { kind = "Button", name = "Button1", caption = "Button1", left = 10, top = 10 }
+doc[2] = { kind = "Tabs", name = "Tabs1", left = 0, top = 50, { kind = "Page", name = "Page1", caption = "One" } }
+local text = model.copyText({ doc[1], doc[2] })
+local pasted = model.pasteNodes(text, doc, 8)
+assert(#pasted == 2 and pasted[1].name == "Button2" and pasted[1].caption == "Button2" and pasted[1].left == 18)
+assert(pasted[2].name == "Tabs2" and pasted[2][1].name == "Page2" and pasted[2].top == 58)
+assert(doc[1].left == 10, "the copy is a copy")
+assert(model.pasteNodes("hello", doc) == nil and model.pasteNodes("-- tlua design: controls\n{ { kind = 'Nope' } }", doc) == nil)
+local fresh = model.newForm("G")
+assert(model.pasteNodes(text, fresh, 0)[1].name == "Button1", "free names are kept")`)
+}
+
+func TestMenuFlattening(t *testing.T) {
+	r, _ := newLua(t)
+	run(t, r.L, `
+local model = require "design.model"
+local items = {
+  { "&File", { { "&Open", name = "mnuOpen", shortcut = "Cmd+O" }, "-", { "&Quit", name = "mnuQuit" } } },
+  { "&View", { { "&Wrap", checked = true }, { "&More", { { "Deep", enabled = false } } } } },
+  { "&Help" },
+}
+local flat = model.flattenMenu(items)
+assert(#flat == 9)
+assert(flat[1].caption == "&File" and flat[1].level == 0 and flat[2].level == 1 and flat[3].caption == "-")
+assert(flat[8].caption == "Deep" and flat[8].level == 2 and flat[8].enabled == false)
+local back = model.unflattenMenu(flat)
+assert(model.literal(back) == model.literal(items), model.literal(back))`)
+}
+
+func TestStartupForm(t *testing.T) {
+	r, _ := newLua(t)
+	dir := t.TempDir()
+	r.L.SetGlobal("dir", lua.LString(dir))
+	run(t, r.L, `
+local project = require "design.project"
+project.create(dir)
+project.addForm(dir, "About")
+assert(project.startup(dir) == "Form1")
+assert(project.setStartup(dir, "About"))
+assert(project.startup(dir) == "About")
+local f = io.open(dir .. "/main.lua", "a"); f:write("print('mine')\n"); f:close()
+local ok, why = project.setStartup(dir, "Form1")
+assert(not ok and why:find("changed by hand") and project.startup(dir) == "About")`)
 }

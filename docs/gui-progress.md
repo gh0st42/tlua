@@ -41,6 +41,16 @@ Done
 - [x] docs/gui.md; examples README.
 - [x] library/gui.lua declares the module for lua-language-server, as library/pico.lua does the console; the examples check clean against it. Unknown keys in the table a control is made from are not flagged; lua-language-server does not check table literals for those.
 - [x] Forms in files (phase 1 of docs/rad-plan.md): control names reached as `frm.<name>` and `find`, unique per form; `gui.load` from a table or a sandboxed layout file (beside the calling script, or in a fused archive); `gui.dump` from what is on screen, defaults left out; `gui.save` in a steady order that round-trips; `gui.kinds()` with property types, defaults, fixed flags and choices; `gui.define` takes `props`. `examples/gui/layout` is two forms written this way.
+- [x] VB6's comforts, phase 4 of docs/rad-plan.md:
+  - rubber-band and Shift-click selection;
+  - the Format menu's aligning, sizing, centring and spacing;
+  - a grid with snapping;
+  - undo and redo;
+  - cut, copy, paste and duplicate;
+  - tab order (`tabIndex` in the runtime);
+  - the Menu Editor (a Menu's `onClick` by item `name`);
+  - a startup form;
+  - Make EXE.
 - [x] The code window, phase 3 of docs/rad-plan.md:
   - double-clicking a control writes or finds its handler;
   - VB6's object and event boxes;

@@ -131,8 +131,12 @@ func bounds(o *guiObject) (x, y, w, h int) {
 	x, y = ox+propInt(o, "left", 0), oy+propInt(o, "top", 0)
 	w, h = propInt(o, "width", o.spec.w), propInt(o, "height", o.spec.h)
 	if o.kind == "Menu" && w <= 0 {
-		if win := window(o.form()); win != nil {
-			w = win.W()
+		if o.parent != nil && o.parent.kind == "Form" {
+			if win := window(o.parent); win != nil {
+				w = win.W()
+			}
+		} else if g, ok := o.parent.widget.(geometry); ok {
+			w = g.W()
 		}
 	}
 	return x, y, w, h
@@ -1171,6 +1175,7 @@ func addMenu(o *guiObject, mb *fltk.MenuBar, prefix string, items *lua.LTable) e
 				flags |= fltk.MENU_VALUE
 			}
 		}
+		name := item.RawGetString("name")
 		mb.AddEx(path, shortcut, func() {
 			on := mb.Mode(mb.Value())&fltk.MENU_VALUE != 0
 			if flags&fltk.MENU_TOGGLE != 0 {
@@ -1181,6 +1186,9 @@ func addMenu(o *guiObject, mb *fltk.MenuBar, prefix string, items *lua.LTable) e
 			if fn != nil {
 				o.app.call(fn, lua.LString(text), lua.LBool(on))
 			}
+			// A menu written down in a layout has no functions in it; its
+			// items are told apart by name in the Menu's onClick.
+			o.app.fire(o, "onClick", name, lua.LString(text), lua.LBool(on))
 		}, flags)
 	}
 	return nil
@@ -1208,24 +1216,32 @@ func keyName(key, state int) string {
 			base = fmt.Sprintf("Key%d", key)
 		}
 	}
-	mods := ""
+	if mods := modNames(state); mods != "" {
+		return mods + "+" + base
+	}
+	return base
+}
+
+// modNames names the modifier keys held, as "Ctrl+Shift"; "" for none.
+func modNames(state int) string {
+	var mods []string
 	if state&fltk.CTRL != 0 {
-		mods += "Ctrl+"
+		mods = append(mods, "Ctrl")
 	}
 	if state&fltk.ALT != 0 {
-		mods += "Alt+"
+		mods = append(mods, "Alt")
 	}
 	if state&fltk.META != 0 {
 		if goruntime.GOOS == "darwin" {
-			mods += "Cmd+"
+			mods = append(mods, "Cmd")
 		} else {
-			mods += "Meta+"
+			mods = append(mods, "Meta")
 		}
 	}
 	if state&fltk.SHIFT != 0 {
-		mods += "Shift+"
+		mods = append(mods, "Shift")
 	}
-	return mods + base
+	return strings.Join(mods, "+")
 }
 
 // parseShortcut reads "Cmd+O", "Ctrl+Shift+Z" or "F5". Cmd is Command on a
