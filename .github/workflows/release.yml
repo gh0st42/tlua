@@ -20,6 +20,9 @@ jobs:
         include:
           - { name: linux-amd64, runner: ubuntu-24.04 }
           - { name: linux-arm64, runner: ubuntu-24.04-arm }
+          # musl, for Alpine: built and tried in an Alpine container.
+          - { name: linux-amd64-musl, runner: ubuntu-24.04, alpine: true }
+          - { name: linux-arm64-musl, runner: ubuntu-24.04-arm, alpine: true }
           - { name: macos-arm64, runner: macos-14 }
           # Untested by hand; a release goes out without it if it fails.
           - { name: windows-amd64, runner: windows-2022, optional: true }
@@ -28,6 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
+        if: ${{ !matrix.alpine }}
 
       - name: The tag is the version
         shell: bash
@@ -40,9 +44,14 @@ jobs:
           fi
 
       - name: Build
-        if: runner.os != 'Windows'
+        if: ${{ runner.os != 'Windows' && !matrix.alpine }}
         shell: bash
         run: scripts/build-release.sh "${GITHUB_REF_NAME#v}"
+
+      # Built, and tried, where musl is.
+      - name: Build (Alpine)
+        if: ${{ matrix.alpine }}
+        run: docker run --rm -v "$PWD":/src -w /src alpine:3.22 scripts/build-alpine.sh "${GITHUB_REF_NAME#v}"
 
       - name: Build (MinGW)
         if: runner.os == 'Windows'
@@ -50,6 +59,7 @@ jobs:
         run: scripts/build-release.sh "${GITHUB_REF_NAME#v}"
 
       - name: Smoke test
+        if: ${{ !matrix.alpine }}
         shell: bash
         run: |
           cd dist

@@ -2,7 +2,10 @@
 # Builds tlua for the machine it runs on and packs it for a release, into
 # dist/: tlua-VERSION-OS-ARCH.tar.gz (.zip on Windows), with the GUI. On
 # Linux it also packs tlua-VERSION-linux-ARCH-static.tar.gz, built without
-# cgo: one file that runs anywhere, everything but the gui module.
+# cgo: one file that runs anywhere, everything but the gui module. On a
+# musl Linux, Alpine's, it packs tlua-VERSION-linux-ARCH-musl.tar.gz, with
+# the GUI, built with -tags musl (see internal/gui/muslcompat);
+# scripts/build-alpine.sh runs it in an Alpine container.
 #
 #   scripts/build-release.sh 0.3.2
 #
@@ -30,14 +33,14 @@ pack() {
   )
 }
 
-# build NAME CGO [LDFLAGS]: one build into dist/NAME, packed.
+# build NAME CGO [LDFLAGS [TAGS]]: one build into dist/NAME, packed.
 build() {
-  name=$1 cgo=$2 extra=${3:-}
+  name=$1 cgo=$2 extra=${3:-} tags=${4:-}
   exe=tlua
   [ "$os" = windows ] && exe=tlua.exe
   rm -rf "dist/$name"
   mkdir -p "dist/$name"
-  CGO_ENABLED=$cgo go build -trimpath -ldflags "-s -w $extra" -o "dist/$name/$exe" ./cmd/tlua
+  CGO_ENABLED=$cgo go build -trimpath -tags "$tags" -ldflags "-s -w $extra" -o "dist/$name/$exe" ./cmd/tlua
   cp README.md "dist/$name/"
   mkdir -p "dist/$name/docs"
   cp docs/*.md "dist/$name/docs/"
@@ -55,8 +58,12 @@ windows)
   build "tlua-$version-$os-$arch" 1 "-extldflags '-static -Wl,--subsystem,console'"
   ;;
 linux)
-  build "tlua-$version-$os-$arch" 1
-  build "tlua-$version-$os-$arch-static" 0
+  if ldd --version 2>&1 | grep -qi musl; then
+    build "tlua-$version-$os-$arch-musl" 1 "" musl
+  else
+    build "tlua-$version-$os-$arch" 1
+    build "tlua-$version-$os-$arch-static" 0
+  fi
   ;;
 *)
   build "tlua-$version-$os-$arch" 1

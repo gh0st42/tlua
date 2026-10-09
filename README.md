@@ -52,11 +52,15 @@ hyphen, as `v0.4.0-rc1`, makes a pre-release.
 |---------|----------|-------|
 | `tlua-V-linux-amd64.tar.gz`, `-linux-arm64` | Ubuntu 24.04 | with the GUI; needs a desktop's X11, Pango and OpenGL libraries |
 | `tlua-V-linux-amd64-static.tar.gz`, `-arm64-static` | Ubuntu 24.04 | no cgo: runs on any Linux, all but the gui module |
+| `tlua-V-linux-amd64-musl.tar.gz`, `-arm64-musl` | Alpine 3.22 | with the GUI, for musl; needs Alpine's `libx11`, `pango`, `mesa-gl` and the like |
 | `tlua-V-darwin-arm64.tar.gz` | macOS 14 | with the GUI; unsigned, so `xattr -d com.apple.quarantine tlua` after downloading |
 | `tlua-V-windows-amd64.zip` | Windows, MinGW-w64 | with the GUI; built but untested, and a release goes out without it if it fails |
 
 `scripts/build-release.sh VERSION` builds the same archives for the machine
-it runs on, into `dist/`.
+it runs on, into `dist/`, and `scripts/build-alpine.sh VERSION` the musl one
+in an Alpine container. go-fltk's FLTK is built for glibc; on musl the six
+glibc file functions it calls are given by `internal/gui/muslcompat`, built
+in with `-tags musl`.
 
 ## Use
 
