@@ -204,6 +204,44 @@ func TestDesignerContextMenus(t *testing.T) {
 	})
 }
 
+// A container is deleted with what it holds, once that has been agreed to:
+// a Table in it as well, which once stopped the designer.
+func TestDesignerDeletesAContainerWithWhatItHolds(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.pickTool("Frame")
+		s.drag(20, 20, 300, 260)
+		s.pickTool("Table")
+		s.drag(40, 50, 200, 150)
+		s.pickTool("Button")
+		s.drag(40, 170, 140, 200)
+		s.expect(`#D.doc == 1 and #D.doc[1] == 2`)
+
+		// Asked, and told no, it stays.
+		s.click(280, 240)
+		s.expect(`D.selection == D.doc[1]`)
+		in.Key(fltk.DELETE, "", 0)
+		s.expect(`#D.doc == 1 and D.asked == "Delete Frame1 and the 2 controls in it?"`)
+
+		// Told yes, it goes, and all that was in it.
+		s.lua(`D.answer = "yes"`)
+		in.Key(fltk.DELETE, "", 0)
+		s.expect(`#D.doc == 0 and #D.surface.entries == 0`)
+
+		// Undone, it all comes back, and goes again.
+		s.lua(`D:undo()`)
+		s.expect(`#D.doc == 1 and #D.doc[1] == 2 and D.doc[1][1].kind == "Table"`)
+		s.lua(`D.surface:selectNode(D.doc[1]); D.surface:deleteSelected()`)
+		s.expect(`#D.doc == 0`)
+
+		// An empty container goes without asking.
+		s.lua(`D.answer = "no"; D.asked = nil`)
+		s.pickTool("Panel")
+		s.drag(20, 20, 200, 200)
+		in.Key(fltk.DELETE, "", 0)
+		s.expect(`#D.doc == 0 and D.asked == nil`)
+	})
+}
+
 func TestDesignerPlacesMovesResizesAndDeletes(t *testing.T) {
 	withDesigner(t, func(s *scene) {
 		s.expect(`D.formName == "Form1" and D.win.caption:find("Form1") and #D.doc == 0`)
@@ -934,11 +972,14 @@ func TestDesignerNestsControls(t *testing.T) {
 		s.drag(340, 214, 100, 74)
 		s.expect(`#D.doc == 1 and D.doc[1][1].name == "chkBold" and D.doc[1][1].left == 20 and D.doc[1][1].top == 40`)
 
-		// Deleting the frame deletes what is in it; undo brings both back.
+		// Deleting the frame deletes what is in it, once that is agreed to;
+		// undo brings both back.
 		s.click(30, 150)
 		s.expect(`D.surface.sel.node.name == "fraOpts"`)
+		s.lua(`D.answer = "yes"`)
 		in.Key(fltk.DELETE, "", 0)
-		s.expect(`#D.doc == 0 and D.surface.host:find("chkBold") == nil`)
+		s.expect(`#D.doc == 0 and D.surface.host:find("chkBold") == nil and D.asked:find("fraOpts and the 1 control")`)
+		s.lua(`D.answer = "no"`)
 		s.lua(`D:undo()`)
 		s.expect(`#D.doc == 1 and D.doc[1][1].name == "chkBold" and D.surface.host:find("chkBold") ~= nil`)
 

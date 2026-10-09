@@ -646,9 +646,30 @@ function M:setRect(e, l, t, w, h)
   self.d:moved(e.node)
 end
 
+-- inside counts the controls a node holds, all the way down.
+local function inside(node)
+  local n = 0
+  model.walk(node, function() n = n + 1 end)
+  return n
+end
+
 function M:deleteSelected()
   local list = self:outermost()
   if #list == 0 then return end
+  -- A container goes with what it holds, so that is asked first.
+  local held, names = 0, {}
+  for _, e in ipairs(list) do
+    local n = inside(e.node)
+    if n > 0 then
+      held = held + n
+      names[#names + 1] = e.node.name or e.node.kind
+    end
+  end
+  if held > 0 then
+    local what = #names == 1 and names[1] or (#names .. " containers")
+    local question = ("Delete %s and the %d control%s in it?"):format(what, held, held == 1 and "" or "s")
+    if self.d:ask(question, "yesno", "Delete") ~= "yes" then return end
+  end
   self.d:checkpoint()
   for _, e in ipairs(list) do
     e.obj:remove()

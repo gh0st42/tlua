@@ -112,3 +112,23 @@ form:show()`, func(s *scene) {
 		s.expect(`picked == nil`)
 	})
 }
+
+// A Table goes with the container it is in, without a word: the events
+// its widget is sent on its way out find nothing to answer.
+func TestRemovingAContainerOfATable(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 300, height = 200}
+frame = form:Frame{caption = "box", left = 10, top = 10, width = 280, height = 180}
+grid = frame:Table{left = 10, top = 20, width = 200, height = 100, columns = {"A"}, rows = {{"1"}}, editable = true}
+frame:Button{caption = "b", left = 10, top = 130}
+form:show()`, func(s *scene) {
+		s.focus("grid")
+		in.Click(s.at("grid", 20, 24+11))
+		s.lua(`frame:remove()`)
+		s.pump()
+		in.Click(150, 100)
+		in.RightClick(150, 100)
+		// remove() raising, or a handler failing, fails the test.
+		s.expect(`grid.rows[1][1] == "1"`)
+	})
+}

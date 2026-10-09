@@ -42,6 +42,11 @@ var startDrag = fltk.DragAndDrop
 const dragDistance = 5
 
 func handle(o *guiObject, e fltk.Event) bool {
+	// A widget being destroyed is sent a last event or two; what it was is
+	// already forgotten, and there is nothing to answer.
+	if o.widget == nil {
+		return false
+	}
 	a := o.app
 	has := func(event string) bool { return o.events[event] != nil }
 
@@ -486,7 +491,10 @@ func propStrings(o *guiObject, name string) []string {
 
 // setTable fits the table to its columns and rows.
 func setTable(o *guiObject) {
-	t := o.widget.(*fltk.TableRow)
+	t, ok := o.widget.(*fltk.TableRow)
+	if !ok {
+		return
+	}
 	cols := propStrings(o, "columns")
 	n := len(cols)
 	rows, _ := o.props["rows"].(*lua.LTable)
@@ -531,7 +539,10 @@ func setTable(o *guiObject) {
 }
 
 func tableSelected(o *guiObject) int {
-	t := o.widget.(*fltk.TableRow)
+	t, ok := o.widget.(*fltk.TableRow)
+	if !ok {
+		return 0
+	}
 	for r := 0; r < t.RowCount(); r++ {
 		if t.IsRowSelected(r) {
 			return r + 1
@@ -541,7 +552,10 @@ func tableSelected(o *guiObject) int {
 }
 
 func setTableSelected(o *guiObject, i int) {
-	t := o.widget.(*fltk.TableRow)
+	t, ok := o.widget.(*fltk.TableRow)
+	if !ok {
+		return
+	}
 	t.SelectAllRows(fltk.Deselect)
 	if i >= 1 && i <= t.RowCount() {
 		t.SelectRow(i-1, fltk.Select)
