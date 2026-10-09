@@ -16,5 +16,8 @@ func Open(L *lua.LState) {
 	installPopen(L)
 	L.PreloadModule("lfs", openLfs)
 	L.PreloadModule("mime.core", openMimeCore)
+	L.PreloadModule("zlib", openZlib)
+	L.PreloadModule("png", openPng)
+	L.PreloadModule("zip", openZip)
 	preloadSocket(L)
 }

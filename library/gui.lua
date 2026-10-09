@@ -592,7 +592,16 @@ function Graphics:text(s, x, y, w, h, align) end
 ---@return integer width, integer height
 function Graphics:measure(s) end
 
----@param file string
+--- How the images drawn after it are made bigger or smaller: "smooth"
+--- blends their pixels, as at the start of each draw; "nearest" repeats
+--- them, sharp, for pixel art. Nearest works for PNG, JPEG and GIF files
+--- and png module pictures, at the screen's own pixels, Retina included.
+---@param how "smooth"|"nearest"
+function Graphics:scaling(how) end
+
+--- Draws a picture file, or an image from the png module as it is now, at
+--- x, y, scaled to w by h when they are given.
+---@param file string|png.Image
 ---@param x number
 ---@param y number
 ---@param w? number

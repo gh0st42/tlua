@@ -135,3 +135,25 @@ gui.after(0.3, function() print("shown"); frm:close() end)
 		t.Errorf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
 	}
 }
+
+// A bundled program's pictures and archives are read out of the bundle.
+func TestABundleReadsItsOwnPicturesAndArchives(t *testing.T) {
+	dir := t.TempDir()
+	mkdirs(t, filepath.Join(dir, "art"))
+	// Made with tlua itself, so the test needs nothing else.
+	got := runCLI(t, dir, "", "-e", `
+		require("png").new(3, 2, "#00ff00"):save("art/pic.png")
+		local z = require("zip").create("data.zip"); z:add("note.txt", "packed"); z:close()`)
+	if got.code != 0 {
+		t.Fatalf("making the files: %s", got.stderr)
+	}
+	write(t, filepath.Join(dir, "main.lua"), `
+		local pic = assert(require("png").load("art/pic.png"))
+		local arc = assert(require("zip").open("data.zip"))
+		print(pic.width, pic.height, arc:read("note.txt"))`)
+	app := bundleApp(t, dir, "pics.ztl")
+	got = runCLI(t, t.TempDir(), "", app)
+	if got.code != 0 || strings.TrimSpace(got.stdout) != "3\t2\tpacked" {
+		t.Errorf("exit %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
+	}
+}

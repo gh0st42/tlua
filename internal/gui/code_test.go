@@ -3,6 +3,7 @@
 package gui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -69,4 +70,70 @@ form:show()`, func(s *scene) {
 func luaNumber(s *scene, name string) float64 {
 	s.t.Helper()
 	return float64(lua.LVAsNumber(s.L.GetGlobal(name)))
+}
+
+func TestACanvasDrawsAPicture(t *testing.T) {
+	onScreen(t, `
+png = require "png"
+pic = png.new(20, 10, "#ff0000")
+form = gui.Form{width = 200, height = 100}
+draws = 0
+canvas = form:Canvas{left = 10, top = 10, width = 100, height = 50,
+  onDraw = function(self, g) draws = draws + 1; g:image(pic, 5, 5); g:image(pic, 40, 5, 40, 20) end}
+form:show()`, func(s *scene) {
+		s.expect(`draws >= 1`)
+		pictures := func() []string {
+			var keys []string
+			for k := range canvasOf(s.obj("canvas")).images {
+				if strings.HasPrefix(k, "png:") {
+					keys = append(keys, k)
+				}
+			}
+			return keys
+		}
+		if n := len(pictures()); n != 2 {
+			s.t.Errorf("the picture at two sizes is %d images: %v", n, pictures())
+		}
+		// A change is drawn, and what was made of the picture before it is
+		// let go.
+		s.lua(`before = draws; pic:set(0, 0, "#00ff00"); canvas:redraw()`)
+		s.expect(`draws > before`)
+		for _, k := range pictures() {
+			if !strings.Contains(k, ":1@") {
+				s.t.Errorf("an image of the picture before it changed is kept: %s", k)
+			}
+		}
+		if n := len(pictures()); n != 2 {
+			s.t.Errorf("after the change, %d images: %v", n, pictures())
+		}
+	})
+}
+
+func TestNearestScalingDrawsWholePixels(t *testing.T) {
+	onScreen(t, `
+png = require "png"
+pic = png.new(4, 4, "#ffffff")
+pic:set(0, 0, "#000000")
+form = gui.Form{width = 200, height = 120}
+canvas = form:Canvas{left = 10, top = 10, width = 180, height = 100,
+  onDraw = function(self, g)
+    g:scaling("nearest"); g:image(pic, 0, 0, 64, 64)
+    g:scaling("smooth"); g:image(pic, 80, 0, 64, 64)
+    ok, why = pcall(g.scaling, g, "blurry")
+  end}
+form:show()`, func(s *scene) {
+		s.expect(`ok == false and tostring(why):find("nearest")`)
+		var nearest, smooth int
+		for k := range canvasOf(s.obj("canvas")).images {
+			switch {
+			case strings.Count(k, "@") == 2:
+				nearest++ // made pixel for pixel: its size, and the pixels'
+			case strings.HasPrefix(k, "png:"):
+				smooth++
+			}
+		}
+		if nearest != 1 || smooth != 1 {
+			s.t.Errorf("%d nearest and %d smooth images, want one of each", nearest, smooth)
+		}
+	})
 }

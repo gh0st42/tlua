@@ -757,9 +757,12 @@ directory copied from a LuaRocks tree works with its `.so` files left behind.
 | `lfs` | LuaFileSystem 1.9 | anything that walks directories |
 | `mime.core` | LuaSocket 3.1's MIME core | `mime`, `ltn12` filters |
 | `socket.core` | LuaSocket 3.1's core, Linux and macOS | `socket`, `socket.http`, `socket.smtp`, `socket.ftp`, `socket.tp`, `socket.url`, `socket.headers` |
+| `zlib` | lua-zlib 1.2's API, with lzlib's `compress` and `decompress` | anything using either rock: deflate, inflate, gzip, crc32, adler32 |
+| `zip` | LuaZip's reading API, and writing | `zip.open(path)`, `zfile:files()`, `zfile:open(name)` |
 
 They give the same results as the C modules, error messages included: each
-was run against the C build side by side. What differs:
+was run against the C build side by side. `zlib` and `zip` were checked
+against Python's zlib, gzip and zipfile instead, both ways round. What differs:
 
 - `lfs.lock` and `lfs.unlock` report that they are not supported; `lfs.lock_dir`
   works.
@@ -768,6 +771,25 @@ was run against the C build side by side. What differs:
   resolved by Go, from the same `/etc/hosts` and `resolv.conf`, and
   `socket.dns.toip` and `tohostname` list no aliases. There is no
   `socket.unix` or `socket.serial`, and no `socket.core` on Windows.
+
+### tlua's own modules
+
+These have no LuaRocks original. Like the ones above, a program `require`s
+them.
+
+- `png`: pictures to read (PNG, JPEG, GIF), make, change pixel by pixel,
+  crop and write as PNG, in any program, not only the console's. A gui
+  Canvas draws one with `g:image(img, x, y)`. `examples/gui/paint.lua` is a
+  small pixel editor built on it.
+- `zip`: besides LuaZip's way of reading, `arc:list()`, `arc:read(name)`,
+  `arc:info(name)`, `zip.load(bytes)`, and `zip.create([path])` to write an
+  archive to a file or into a string.
+- `zlib` adds `zlib.gzip(s)`, `zlib.gunzip(s)` and `zlib.crc32(s)` for a
+  string at once.
+
+In a fused program or a bundle, `png.load` and `zip.open` read the
+program's own files out of it first, as `require` does. `library/png.lua`,
+`zlib.lua` and `zip.lua` declare them for lua-language-server.
 
 ## Compatibility notes
 
@@ -790,14 +812,18 @@ back the command's exit status. Files `io.open` creates are readable by
 everyone the umask allows, as `fopen` makes them.
 
 gopher-lua is carried as a patched copy in `third_party/gopher-lua`, for
-three bugs that broke ordinary programs: a generic `for` over an expression
+bugs that broke ordinary programs: a generic `for` over an expression
 containing a call could crash or skip its loop, closures lost track of their
-enclosing locals once any error had been caught, and `string.format` was Go's
-`Sprintf` (so `%q` wrote strings Lua could not read back). Its `PATCHES.md`
-has the details. What remains different from Lua 5.1: `tostring` writes large
-whole numbers out in full (`1e15` is `1000000000000000`) and infinity as
-`+Inf`, `pairs` visits keys in a different order, and errors raised by
-library functions carry the position of the Lua line that called them.
+enclosing locals once any error had been caught, `string.format` was Go's
+`Sprintf` (so `%q` wrote strings Lua could not read back), strings were read
+as numbers by Go's rules (`tonumber("1e5")` was nil, `"010" + 0` was 8), and
+assigning to more than one variable could change one before the others had
+read it (`a, b = b, a` gave `2 2`). Its `PATCHES.md` has the details. What
+remains different from Lua 5.1: `tostring` writes numbers in full rather than
+with 14 digits (`1e15` is `1000000000000000`, `0.1 + 0.2` is
+`0.30000000000000004`), `pairs` visits keys in a different order, and errors
+raised by library functions carry the position of the Lua line that called
+them.
 
 ## Layout
 

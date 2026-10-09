@@ -69,6 +69,7 @@ func (r *Interp) Close() {
 	if r.interrupt != nil {
 		signal.Stop(r.interrupt)
 	}
+	lualib.Forget(r.L)
 	r.L.Close()
 }
 
@@ -201,6 +202,11 @@ func (r *Interp) setupInterrupt() {
 	r.interrupt = make(chan os.Signal, 1)
 	signal.Notify(r.interrupt, os.Interrupt, syscall.SIGTERM)
 }
+
+// Protect runs fn as a chunk is run: Ctrl-C or SIGTERM cancels the state's
+// context while it does. A GUI's event loop runs after the program's main
+// chunk this way, and stops when the program is told to.
+func (r *Interp) Protect(fn func() error) error { return r.protect(fn) }
 
 // protect runs fn with a context that a signal cancels; a cancelled chunk
 // surfaces as an ordinary Lua error.

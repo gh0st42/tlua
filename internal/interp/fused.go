@@ -9,6 +9,7 @@ import (
 
 	lua "github.com/yuin/gopher-lua"
 
+	"tlua/internal/lualib"
 	"tlua/internal/payload"
 )
 
@@ -123,6 +124,13 @@ func (r *Interp) installSource(src []byte) {
 // the fused archive: a package.loaders entry in front of the disk loaders, an
 // "embed" module, and loadfile/dofile that fall back to the archive.
 func (r *Interp) installArchive(fs *payload.Archive) {
+	// png.load and zip.open read the program's own files out of it too.
+	lualib.SetReader(r.L, func(name string) ([]byte, error) {
+		if data, err := fs.Read(name); err == nil {
+			return data, nil
+		}
+		return os.ReadFile(name)
+	})
 	r.insertLoader(r.L.NewFunction(func(L *lua.LState) int {
 		name := L.CheckString(1)
 		base := strings.ReplaceAll(name, ".", "/")

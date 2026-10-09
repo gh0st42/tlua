@@ -3,14 +3,21 @@
 package gui
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/draw"
 	"math"
+	"os"
 	goruntime "runtime"
 	"sort"
 	"strings"
 
 	"github.com/pwiecz/go-fltk"
 	lua "github.com/yuin/gopher-lua"
+
+	"tlua/internal/gui/fltkscale"
+	"tlua/internal/lualib"
 )
 
 // listen gives a widget the one event handler every object has: drops,
@@ -934,6 +941,128 @@ type canvas struct {
 	g       *lua.LTable
 	drawing bool
 	images  map[string]scalable
+	// nearest is g:scaling("nearest"): images are drawn bigger by
+	// repeating their pixels, not smoothed. sources are the files read for
+	// that, by path.
+	nearest bool
+	sources map[string]*image.NRGBA
+}
+
+// picture is a png module image made ready to draw, at width w and height
+// h when they are given. It is made again only when the image has changed
+// since, and what was made of an older version is freed.
+func (c *canvas) picture(pic *lualib.Image, w, h int) (scalable, error) {
+	prefix := fmt.Sprintf("png:%p:", pic)
+	key := fmt.Sprintf("%s%d@%dx%d", prefix, pic.Version, w, h)
+	if img, ok := c.images[key]; ok {
+		return img, nil
+	}
+	c.forgetOlder(prefix, pic.Version)
+	b := pic.Pix.Rect
+	img, err := fltk.NewRgbImage(pic.Pix.Pix, b.Dx(), b.Dy(), 4)
+	if err != nil {
+		return nil, err
+	}
+	if w > 0 && h > 0 {
+		img.Scale(w, h, false, true)
+	}
+	c.images[key] = img
+	return img, nil
+}
+
+// forgetOlder frees what was made of a png picture before its version.
+func (c *canvas) forgetOlder(prefix string, version int) {
+	current := fmt.Sprintf("%s%d@", prefix, version)
+	for k, old := range c.images {
+		if strings.HasPrefix(k, prefix) && !strings.HasPrefix(k, current) {
+			old.Destroy()
+			delete(c.images, k)
+		}
+	}
+}
+
+// nearestImage is src made w by h units big by repeating its pixels, at as
+// many pixels as the screen has for that, so that it is drawn pixel for
+// pixel and nothing smooths it: twice as many on a Retina screen.
+func (c *canvas) nearestImage(o *guiObject, key string, src *image.NRGBA, w, h int) (scalable, error) {
+	if w <= 0 || h <= 0 {
+		w, h = src.Rect.Dx(), src.Rect.Dy()
+	}
+	scale := deviceScale(o)
+	pw, ph := int(math.Round(float64(w)*scale)), int(math.Round(float64(h)*scale))
+	if pw < 1 || ph < 1 {
+		return nil, fmt.Errorf("an image %dx%d is too small to draw", w, h)
+	}
+	key = fmt.Sprintf("%s@%dx%d@%dx%d", key, w, h, pw, ph)
+	if img, ok := c.images[key]; ok {
+		return img, nil
+	}
+	img, err := fltk.NewRgbImage(repeatPixels(src, pw, ph).Pix, pw, ph, 4)
+	if err != nil {
+		return nil, err
+	}
+	if pw != w || ph != h {
+		img.Scale(w, h, false, true)
+	}
+	c.images[key] = img
+	return img, nil
+}
+
+// repeatPixels scales src to w by h, each pixel the nearest of src's.
+func repeatPixels(src *image.NRGBA, w, h int) *image.NRGBA {
+	sw, sh := src.Rect.Dx(), src.Rect.Dy()
+	dst := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		sy := y * sh / h
+		srow := src.Pix[sy*src.Stride:]
+		drow := dst.Pix[y*dst.Stride:]
+		for x := 0; x < w; x++ {
+			sx := x * sw / w
+			copy(drow[x*4:x*4+4], srow[sx*4:sx*4+4])
+		}
+	}
+	return dst
+}
+
+// deviceScale is how many screen pixels make one of the form's units:
+// what the drawing says on macOS, FLTK's screen scale elsewhere.
+func deviceScale(o *guiObject) float64 {
+	if s := fltkscale.DeviceScale(); s > 0 {
+		return s
+	}
+	if f := o.form(); f != nil {
+		if win := window(f); win != nil {
+			if s := float64(fltk.ScreenScale(fltk.ScreenNum(win.X()+win.W()/2, win.Y()+win.H()/2))); s > 0 {
+				return s
+			}
+		}
+	}
+	return 1
+}
+
+// source is a picture file read for drawing pixel for pixel, or nil when
+// Go cannot read it (an SVG, say), which is then drawn the smooth way.
+func (c *canvas) source(a *app, path string) *image.NRGBA {
+	if src, ok := c.sources[path]; ok {
+		return src
+	}
+	var data []byte
+	var err error
+	if a.read != nil {
+		data, err = a.read(path)
+	} else {
+		data, err = os.ReadFile(path)
+	}
+	var src *image.NRGBA
+	if err == nil {
+		if decoded, _, derr := image.Decode(bytes.NewReader(data)); derr == nil {
+			b := decoded.Bounds()
+			src = image.NewNRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+			draw.Draw(src, src.Rect, decoded, b.Min, draw.Src)
+		}
+	}
+	c.sources[path] = src
+	return src
 }
 
 func drawCanvas(o *guiObject, b *fltk.Box) {
@@ -945,6 +1074,7 @@ func drawCanvas(o *guiObject, b *fltk.Box) {
 	fltk.SetDrawColor(black)
 	fltk.SetDrawFont(fltk.HELVETICA, 14)
 	fltk.SetLineStyle(fltk.SOLID, 1)
+	c.nearest = false
 	c.drawing = true
 	o.app.fire(o, "onDraw", c.g)
 	c.drawing = false
@@ -956,7 +1086,7 @@ func canvasOf(o *guiObject) *canvas {
 	if c, ok := o.state.(*canvas); ok {
 		return c
 	}
-	c := &canvas{images: map[string]scalable{}}
+	c := &canvas{images: map[string]scalable{}, sources: map[string]*image.NRGBA{}}
 	c.g = drawingAPI(o, c)
 	o.state = c
 	return c
@@ -1144,10 +1274,53 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 		L.Push(lua.LNumber(h))
 		return 2
 	})
+	// scaling("nearest") draws the images after it bigger by repeating
+	// their pixels, as pixel art wants; scaling("smooth"), as at the start
+	// of each draw, blends them.
+	def("scaling", func(L *lua.LState, _, _ int) int {
+		switch L.CheckString(2) {
+		case "nearest":
+			c.nearest = true
+		case "smooth":
+			c.nearest = false
+		default:
+			L.ArgError(2, "scaling must be \"nearest\" or \"smooth\"")
+		}
+		return 0
+	})
 	def("image", func(L *lua.LState, x0, y0 int) int {
-		path := o.app.besideCaller(L, L.CheckString(2))
 		x, y := x0+n(L, 3), y0+n(L, 4)
 		w, h := int(L.OptNumber(5, 0)), int(L.OptNumber(6, 0))
+		if c.nearest {
+			var src *image.NRGBA
+			var key string
+			if pic, ok := lualib.ToImage(L.Get(2)); ok {
+				prefix := fmt.Sprintf("png:%p:", pic)
+				c.forgetOlder(prefix, pic.Version)
+				src, key = pic.Pix, fmt.Sprintf("%s%d", prefix, pic.Version)
+			} else {
+				path := o.app.besideCaller(L, L.CheckString(2))
+				src, key = c.source(o.app, path), "near:"+path
+			}
+			if src != nil {
+				img, err := c.nearestImage(o, key, src, w, h)
+				if err != nil {
+					L.RaiseError("gui: cannot draw the image: %v", err)
+				}
+				img.Draw(x, y, img.W(), img.H())
+				return 0
+			}
+		}
+		// A picture from the png module, drawn as it is now.
+		if pic, ok := lualib.ToImage(L.Get(2)); ok {
+			img, err := c.picture(pic, w, h)
+			if err != nil {
+				L.RaiseError("gui: cannot draw the image: %v", err)
+			}
+			img.Draw(x, y, img.W(), img.H())
+			return 0
+		}
+		path := o.app.besideCaller(L, L.CheckString(2))
 		key := fmt.Sprintf("%s@%dx%d", path, w, h)
 		img, ok := c.images[key]
 		if !ok {

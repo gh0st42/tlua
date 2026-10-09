@@ -321,7 +321,8 @@ works inside `onDraw`:
 | `g:text(s, x, y)` | text with its top left at x, y |
 | `g:text(s, x, y, w, h [, align])` | text in a box, `"left"`, `"center"` or `"right"` |
 | `g:measure(s)` | returns the width and height of s in the current font |
-| `g:image(file, x, y [, w, h])` | an image, scaled to w by h if given |
+| `g:image(file, x, y [, w, h])` | an image file, or a picture from `require "png"`, scaled to w by h if given |
+| `g:scaling(how)` | how the images after it are drawn bigger or smaller: `"smooth"` blends their pixels, as at the start of each draw; `"nearest"` repeats them, sharp, as pixel art wants |
 
 Mouse handlers get positions in the same coordinates:
 - `onMouseDown(self, x, y, button, double, mods)` and

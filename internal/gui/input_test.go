@@ -18,6 +18,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	in "tlua/internal/gui/fltkinput"
+	"tlua/internal/lualib"
 )
 
 var guiTests = os.Getenv("TLUA_GUI_TESTS") != ""
@@ -62,6 +63,7 @@ func onScreen(t *testing.T, script string, steps func(s *scene)) {
 		defer close(done)
 		L := lua.NewState()
 		defer L.Close()
+		lualib.Open(L) // png, zlib and the rest, as a program has them
 		a := Open(L)
 		a.booted = true // show() returns at once; the test runs the loop
 		s := &scene{t: t, L: L, a: a}
