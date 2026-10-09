@@ -47,7 +47,7 @@ var propSchema = map[string]propInfo{
 	"syntax": {typ: "choice", choices: []string{"lua"}}, "tabIndex": {typ: "integer"},
 	"multiLine": {typ: "boolean"}, "password": {typ: "boolean"}, "readOnly": {typ: "boolean"},
 	"default": {typ: "boolean"}, "vertical": {typ: "boolean"}, "resizable": {typ: "boolean"},
-	"checked": {typ: "boolean"}, "fit": {typ: "boolean"},
+	"checked": {typ: "boolean"}, "fit": {typ: "boolean"}, "editable": {typ: "boolean"},
 	"selected": {typ: "integer"}, "min": {typ: "number"}, "max": {typ: "number"},
 	"step": {typ: "number"}, "value": {typ: "number"},
 	"items": {typ: "list"}, "columns": {typ: "list"}, "rows": {typ: "rows"}, "columnWidths": {typ: "list"},

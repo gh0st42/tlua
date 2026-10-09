@@ -110,8 +110,8 @@ var kinds = map[string]*kind{
 	},
 	"Table": {
 		w: 320, h: 160,
-		events: []string{"onChange", "onDoubleClick"},
-		props:  map[string]lua.LValue{"tabIndex": lua.LNumber(0), "selected": lua.LNumber(0)},
+		events: []string{"onChange", "onDoubleClick", "onStartEdit", "onEdit", "onEditButton"},
+		props:  map[string]lua.LValue{"tabIndex": lua.LNumber(0), "selected": lua.LNumber(0), "editable": lua.LFalse},
 	},
 	"Canvas": {
 		w: 200, h: 150,
@@ -216,6 +216,8 @@ func init() {
 		"remove":    guiRemove,
 		"raise":     guiRaise,
 		"lower":     guiLower,
+		"edit":      guiEdit,
+		"editing":   guiEditing,
 	}
 }
 
@@ -637,6 +639,12 @@ func (a *app) checkProp(L *lua.LState, name string, value lua.LValue) (lua.LValu
 		if _, ok := value.(*lua.LTable); !ok {
 			return nil, fmt.Errorf("gui: %s must be a table, not a %s", name, value.Type())
 		}
+	case "editable":
+		switch value.(type) {
+		case lua.LBool, *lua.LTable:
+		default:
+			return nil, fmt.Errorf("gui: editable is true, false or a list of columns, not a %s", value.Type())
+		}
 	case "columnWidths":
 		if _, ok := value.(*lua.LTable); !ok && value != lua.LNil {
 			return nil, fmt.Errorf("gui: columnWidths must be a table, not a %s", value.Type())
@@ -988,6 +996,34 @@ func guiSelect(L *lua.LState) int {
 	i, j := L.CheckInt(2), L.OptInt(3, L.CheckInt(2)-1)
 	selectText(obj, i, j)
 	return 0
+}
+
+// edit starts editing a Table's cell, as a click on it would; with no
+// arguments it finishes the edit there is, keeping what was typed.
+func guiEdit(L *lua.LState) int {
+	obj := checkObject(L, 1)
+	if obj.kind != "Table" {
+		L.RaiseError("gui: only a Table has cells to edit, not a %s", obj.displayKind())
+	}
+	if obj.widget != nil {
+		tableEdit(obj, L.OptInt(2, 0), L.OptInt(3, 0))
+	}
+	return 0
+}
+
+// editing reports the row and column of the cell being edited, or nothing.
+func guiEditing(L *lua.LState) int {
+	obj := checkObject(L, 1)
+	if obj.kind != "Table" || obj.widget == nil {
+		return 0
+	}
+	row, col := tableEditing(obj)
+	if row == 0 {
+		return 0
+	}
+	L.Push(lua.LNumber(row))
+	L.Push(lua.LNumber(col))
+	return 2
 }
 
 // redraw asks for an object to be drawn again: a Canvas whose picture has

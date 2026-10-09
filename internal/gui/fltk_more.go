@@ -330,16 +330,74 @@ var (
 	white          = fltk.ColorFromRgb(255, 255, 255)
 )
 
+// tableState is what a Table keeps beside its widget: the selected row, as
+// the script last heard of it, and the editor laid over a cell while one is
+// being edited.
+type tableState struct {
+	selected int
+	// cols is how many columns there are, which FLTK does not say.
+	cols int
+
+	// row and col are the cell being edited, from 1; row is 0 when none is.
+	row, col int
+	// session counts the edits, so that one finished late — the editor
+	// losing the focus, after another has started — leaves the new one be.
+	session int
+	choices []string
+	button  bool
+	// before is the cell's text when the edit started.
+	before string
+	// finishing is set while onEdit is asked: what it does to the table
+	// (its rows assigned again, the grid shown afresh) does not finish the
+	// edit a second time.
+	finishing bool
+
+	input *fltk.Input
+	pick  *fltk.MenuButton
+	dots  *fltk.Button
+}
+
+func tableStateOf(o *guiObject) *tableState {
+	st, _ := o.state.(*tableState)
+	if st == nil {
+		st = &tableState{}
+		o.state = st
+	}
+	return st
+}
+
+// rowHeight is how high a Table's rows are.
+const rowHeight = 22
+
 func buildTable(o *guiObject, x, y, w, h int) {
 	t := fltk.NewTableRow(x, y, w, h)
 	t.SetType(fltk.SelectSingle)
-	t.SetRowHeightAll(22)
+	t.SetRowHeightAll(rowHeight)
 	t.SetColumnHeaderHeight(24)
 	t.SetDrawCellCallback(func(ctx fltk.TableContext, r, c, x, y, w, h int) {
 		drawCell(o, t, ctx, r, c, x, y, w, h)
 	})
+	// The editors are made while the table is still taking children, so
+	// they are inside it: drawn over its cells, after them.
+	st := &tableState{}
+	st.input = fltk.NewInput(x, y, 0, 0)
+	st.input.Hide()
+	st.input.SetEventHandler(func(e fltk.Event) bool { return editorEvent(o, e) })
+	st.pick = fltk.NewMenuButton(x, y, 0, 0, "@-22>")
+	st.pick.Hide()
+	st.pick.ClearVisibleFocus()
+	st.dots = fltk.NewButton(x, y, 0, 0, "...")
+	st.dots.Hide()
+	st.dots.ClearVisibleFocus()
+	st.dots.SetCallback(func() { editButton(o) })
+	// FLTK keeps the part of a table that holds children hidden until it
+	// has some, and go-fltk's End is the group's, which does not show it.
+	if p := st.input.Parent(); p != nil {
+		p.Show()
+	}
 	t.End()
 	o.widget = t
+	o.state = st
 }
 
 // cell is what a Table shows at row r and column c, counting from 0.
@@ -360,6 +418,10 @@ func cell(o *guiObject, r, c int) string {
 
 func drawCell(o *guiObject, t *fltk.TableRow, ctx fltk.TableContext, r, c, x, y, w, h int) {
 	switch ctx {
+	case fltk.ContextStartPage:
+		// The table may have scrolled, or been made larger: the editor goes
+		// with its cell.
+		placeEditor(o)
 	case fltk.ContextColHeader:
 		fltk.PushClip(x, y, w, h)
 		fltk.DrawBox(fltk.THIN_UP_BOX, x, y, w, h, fltk.BACKGROUND_COLOR)
@@ -371,6 +433,11 @@ func drawCell(o *guiObject, t *fltk.TableRow, ctx fltk.TableContext, r, c, x, y,
 		}
 		fltk.PopClip()
 	case fltk.ContextCell:
+		// FLTK draws the cells after the widgets in the table, so the cell
+		// under the editor is left for the editor.
+		if st, _ := o.state.(*tableState); st != nil && st.row == r+1 && st.col == c+1 && st.input.Visible() {
+			return
+		}
 		fltk.PushClip(x, y, w, h)
 		bg, fg := white, black
 		if t.IsRowSelected(r) {
@@ -419,6 +486,16 @@ func setTable(o *guiObject) {
 	}
 	t.SetColumnCount(n)
 	t.SetRowCount(nrows)
+	// Rows FLTK adds are its own height, not the one asked for when there
+	// were none.
+	t.SetRowHeightAll(rowHeight)
+	st := tableStateOf(o)
+	st.cols = n
+	// An edit of a cell that is no longer there is over, and so is one
+	// whose cell the script has just changed under it.
+	if st.row > nrows || st.col > n || (st.row > 0 && cell(o, st.row-1, st.col-1) != st.before) {
+		finishEdit(o, false, false)
+	}
 	widths, _ := o.props["columnWidths"].(*lua.LTable)
 	for c := 0; c < n; c++ {
 		w := 0
@@ -449,34 +526,388 @@ func setTableSelected(o *guiObject, i int) {
 	if i >= 1 && i <= t.RowCount() {
 		t.SelectRow(i-1, fltk.Select)
 	}
-	o.state = i
+	tableStateOf(o).selected = i
 	t.Redraw()
 }
 
-// tableEvent notices the selection changing. The table moves it while
-// handling the event, after this handler, so the look comes a moment later.
+// noticeSelection tells the script the selection moved, if it did.
+func noticeSelection(o *guiObject) {
+	st := tableStateOf(o)
+	if now := tableSelected(o); now != st.selected {
+		st.selected = now
+		o.app.fire(o, "onChange")
+	}
+}
+
+// tableEvent notices the selection changing, and starts editing a cell. The
+// table moves the selection while handling the event, after this handler,
+// so the look comes a moment later.
 func tableEvent(o *guiObject, e fltk.Event) bool {
+	t := o.widget.(*fltk.TableRow)
 	switch e {
-	case fltk.PUSH, fltk.RELEASE, fltk.KEY:
-	default:
+	case fltk.PUSH:
+		r, c := t.RowAndColumnFromCursor()
+		double := fltk.EventClicks() > 0 && r >= 0
+		fltk.AddTimeout(0, func() {
+			if o.widget != t {
+				return
+			}
+			noticeSelection(o)
+			if r >= 0 && c >= 0 && cellEditable(o, c+1) {
+				startEdit(o, r+1, c+1, "")
+				return
+			}
+			if double && tableSelected(o) > 0 {
+				o.app.fire(o, "onDoubleClick")
+			}
+		})
+	case fltk.KEY:
+		// F2 and Enter edit the selected row's first cell that can be, and
+		// typing starts an edit with what was typed.
+		if row := tableSelected(o); row > 0 && tableStateOf(o).row == 0 {
+			if col := firstEditable(o); col > 0 {
+				key, text := fltk.EventKey(), fltk.EventText()
+				switch {
+				case key == fltk.F2 || key == fltk.ENTER_KEY || key == kpEnter:
+					startEdit(o, row, col, "")
+					return true
+				case len(text) == 1 && text[0] >= ' ' && text[0] != 127 &&
+					fltk.EventState()&(fltk.CTRL|fltk.META|fltk.ALT) == 0:
+					startEdit(o, row, col, text)
+					return true
+				}
+			}
+		}
+		fltk.AddTimeout(0, func() {
+			if o.widget == t {
+				noticeSelection(o)
+			}
+		})
+	case fltk.RELEASE:
+		fltk.AddTimeout(0, func() {
+			if o.widget == t {
+				noticeSelection(o)
+			}
+		})
+	}
+	return false
+}
+
+// ---------------------------------------------------------------- editing a Table's cells
+
+// kpEnter is the keypad's Enter, which go-fltk has no name for.
+const kpEnter = 0xff80 + 'r'
+
+// refusedColor is the editor's when onEdit has said no to what is in it.
+var refusedColor = fltk.ColorFromRgb(255, 214, 214)
+
+// cellEditable says whether column col can be edited: editable is true for
+// all of them, or a list of the ones that can.
+func cellEditable(o *guiObject, col int) bool {
+	switch v := o.props["editable"].(type) {
+	case lua.LBool:
+		return bool(v)
+	case *lua.LTable:
+		for i := 1; i <= v.Len(); i++ {
+			if int(lua.LVAsNumber(v.RawGetInt(i))) == col {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func firstEditable(o *guiObject) int {
+	for c := 1; c <= tableStateOf(o).cols; c++ {
+		if cellEditable(o, c) {
+			return c
+		}
+	}
+	return 0
+}
+
+// startEdit lays the editor over a cell, once the script's onStartEdit has
+// agreed to it and said how. Whatever was being edited is finished first.
+// typed, when there is some, replaces the cell's text: the key that
+// started the edit.
+func startEdit(o *guiObject, row, col int, typed string) {
+	t, ok := o.widget.(*fltk.TableRow)
+	if !ok || row < 1 || row > t.RowCount() || col < 1 || col > tableStateOf(o).cols {
+		return
+	}
+	st := tableStateOf(o)
+	if st.row != 0 {
+		if st.row == row && st.col == col {
+			return
+		}
+		finishEdit(o, true, false)
+	}
+	if tableSelected(o) != row {
+		setTableSelected(o, row)
+		st.selected = 0 // so that the script hears of it
+		noticeSelection(o)
+	}
+
+	how := o.app.fire(o, "onStartEdit", lua.LNumber(row), lua.LNumber(col))
+	if how == lua.LFalse || o.app.err != nil || o.widget != t {
+		return
+	}
+	st.choices, st.button = nil, false
+	readOnly := false
+	if spec, ok := how.(*lua.LTable); ok {
+		if list, ok := spec.RawGetString("choices").(*lua.LTable); ok {
+			for i := 1; i <= list.Len(); i++ {
+				st.choices = append(st.choices, lua.LVAsString(list.RawGetInt(i)))
+			}
+		}
+		st.button = lua.LVAsBool(spec.RawGetString("button"))
+		readOnly = lua.LVAsBool(spec.RawGetString("readOnly"))
+	}
+
+	st.session++
+	st.row, st.col = row, col
+	st.before = cell(o, row-1, col-1)
+	st.pick.Clear()
+	for _, choice := range st.choices {
+		choice := choice
+		st.pick.Add(itemText(choice), func() {
+			st.input.SetValue(choice)
+			finishEdit(o, true, true)
+		})
+	}
+
+	// Keep the cell in sight.
+	if top, _, bottom, _ := t.VisibleCells(); row-1 < top || row-1 > bottom {
+		t.SetTopRow(row - 1)
+	}
+	text := st.before
+	if typed != "" && !readOnly {
+		text = typed
+	}
+	st.input.SetValue(text)
+	if readOnly {
+		st.input.Deactivate()
+	} else {
+		st.input.Activate()
+	}
+	st.input.SetColor(white)
+	placeEditor(o)
+	if readOnly {
+		st.dots.TakeFocus()
+	} else {
+		st.input.TakeFocus()
+		if typed != "" {
+			st.input.SetInsertPosition(len(text), len(text))
+		} else {
+			st.input.SetInsertPosition(len(text), 0)
+		}
+	}
+	t.Redraw()
+}
+
+// placeEditor puts the editor over its cell, and its button at the cell's
+// right; out of sight when the cell has scrolled away.
+func placeEditor(o *guiObject) {
+	t, ok := o.widget.(*fltk.TableRow)
+	st, _ := o.state.(*tableState)
+	if !ok || st == nil {
+		return
+	}
+	if st.row == 0 {
+		st.input.Hide()
+		st.pick.Hide()
+		st.dots.Hide()
+		return
+	}
+	top, left, bottom, right := t.VisibleCells()
+	x, y, w, h, err := t.FindCell(fltk.ContextCell, st.row-1, st.col-1)
+	if err != nil || st.row-1 < top || st.row-1 > bottom || st.col-1 < left || st.col-1 > right {
+		st.input.Hide()
+		st.pick.Hide()
+		st.dots.Hide()
+		return
+	}
+	// FLTK hides the part of the table that holds the editors again when
+	// it lays itself out; it has to be showing for them to be drawn.
+	if p := st.input.Parent(); p != nil && !p.Visible() {
+		p.Show()
+	}
+	bw := 0
+	if st.button || len(st.choices) > 0 {
+		bw = h
+	}
+	st.input.Resize(x, y, w-bw, h)
+	st.input.Show()
+	var b, other interface {
+		Resize(x, y, w, h int)
+		Show()
+		Hide()
+	} = st.pick, st.dots
+	if st.button {
+		b, other = st.dots, st.pick
+	}
+	other.Hide()
+	if bw > 0 {
+		b.Resize(x+w-bw, y, bw, h)
+		b.Show()
+	} else {
+		b.Hide()
+	}
+}
+
+// finishEdit takes the editor away, with its text as the cell's new value
+// when keep is set and the script's onEdit agrees. Refused, the editor stays
+// where it is when stay is set, in red, for the user to put right; it is put
+// away otherwise, the cell as it was.
+func finishEdit(o *guiObject, keep, stay bool) bool {
+	t, ok := o.widget.(*fltk.TableRow)
+	st, _ := o.state.(*tableState)
+	if !ok || st == nil || st.row == 0 || st.finishing {
+		return true
+	}
+	row, col, text := st.row, st.col, st.input.Value()
+	if keep && text != st.before {
+		st.finishing = true
+		answer := o.app.fire(o, "onEdit", lua.LNumber(row), lua.LNumber(col), lua.LString(text))
+		st.finishing = false
+		if o.widget != t || st.row != row {
+			return true // the handler finished it itself, or closed the form
+		}
+		if answer == lua.LFalse || o.app.err != nil {
+			if stay && o.app.err == nil {
+				st.input.SetColor(refusedColor)
+				st.input.Redraw()
+				st.input.TakeFocus()
+				return false
+			}
+		} else {
+			if s, ok := answer.(lua.LString); ok {
+				text = string(s)
+			}
+			setCell(o, row, col, text)
+		}
+	}
+	hadFocus := st.input.HasFocus() || st.dots.HasFocus() || st.pick.HasFocus()
+	st.row, st.col = 0, 0
+	placeEditor(o)
+	if hadFocus {
+		t.TakeFocus()
+	}
+	t.Redraw()
+	return true
+}
+
+// setCell writes an edited cell back into the script's rows.
+func setCell(o *guiObject, row, col int, text string) {
+	rows, _ := o.props["rows"].(*lua.LTable)
+	if rows == nil {
+		return
+	}
+	r, _ := rows.RawGetInt(row).(*lua.LTable)
+	if r == nil {
+		r = o.app.L.NewTable()
+		rows.RawSetInt(row, r)
+	}
+	r.RawSetInt(col, lua.LString(text))
+}
+
+// editorEvent is the cell editor's keys: Enter keeps what was typed, Escape
+// puts it back, Up and Down keep it and edit the cell above or below, and
+// Tab keeps it and leaves. A double click on a cell with choices takes the
+// next one, as Delphi's did. Losing the focus keeps what was typed.
+func editorEvent(o *guiObject, e fltk.Event) bool {
+	st, _ := o.state.(*tableState)
+	if st == nil || st.row == 0 {
 		return false
 	}
-	double := false
-	if e == fltk.PUSH && fltk.EventClicks() > 0 {
-		r, _ := o.widget.(*fltk.TableRow).RowAndColumnFromCursor()
-		double = r >= 0
+	switch e {
+	case fltk.KEY:
+		switch fltk.EventKey() {
+		case fltk.ENTER_KEY, kpEnter:
+			finishEdit(o, true, true)
+			return true
+		case fltk.ESCAPE:
+			finishEdit(o, false, false)
+			return true
+		case fltk.UP, fltk.DOWN:
+			row, col := st.row, st.col
+			if fltk.EventKey() == fltk.UP {
+				row--
+			} else {
+				row++
+			}
+			if finishEdit(o, true, true) && row >= 1 {
+				startEdit(o, row, col, "")
+			}
+			return true
+		case fltk.TAB:
+			finishEdit(o, true, false)
+			return true
+		}
+	case fltk.PUSH:
+		if fltk.EventClicks() > 0 && len(st.choices) > 0 {
+			next := st.choices[0]
+			for i, c := range st.choices {
+				if c == st.input.Value() && i+1 < len(st.choices) {
+					next = st.choices[i+1]
+				}
+			}
+			st.input.SetValue(next)
+			finishEdit(o, true, true)
+			return true
+		}
+	case fltk.UNFOCUS:
+		session := st.session
+		fltk.AddTimeout(0, func() {
+			// The focus has gone to the editor's own button, or another
+			// edit has begun: either way this one is not over.
+			if st.session != session || st.row == 0 || st.input.HasFocus() ||
+				st.dots.HasFocus() || st.pick.HasFocus() {
+				return
+			}
+			finishEdit(o, true, false)
+		})
 	}
-	fltk.AddTimeout(0, func() {
-		now := tableSelected(o)
-		if last, _ := o.state.(int); now != last {
-			o.state = now
-			o.app.fire(o, "onChange")
-		}
-		if double && now > 0 {
-			o.app.fire(o, "onDoubleClick")
-		}
-	})
 	return false
+}
+
+// editButton is the "..." at a cell's right: the script's onEditButton
+// edits the value its own way, in a dialog of its own, mostly.
+func editButton(o *guiObject) {
+	st, _ := o.state.(*tableState)
+	if st == nil || st.row == 0 {
+		return
+	}
+	row, col, session := st.row, st.col, st.session
+	o.app.fire(o, "onEditButton", lua.LNumber(row), lua.LNumber(col))
+	if st.session != session || st.row == 0 {
+		return
+	}
+	// The handler has changed the cell, if it changed anything; the edit
+	// goes on from there.
+	st.before = cell(o, row-1, col-1)
+	st.input.SetValue(st.before)
+	if st.input.IsActive() {
+		st.input.TakeFocus()
+	}
+}
+
+// tableEdit is grid:edit(row, col): an edit started from the script. With
+// no row, it finishes the one there is, keeping what was typed.
+func tableEdit(o *guiObject, row, col int) {
+	if row == 0 {
+		finishEdit(o, true, false)
+		return
+	}
+	startEdit(o, row, col, "")
+}
+
+// tableEditing is the cell being edited, or 0, 0.
+func tableEditing(o *guiObject) (int, int) {
+	if st, ok := o.state.(*tableState); ok {
+		return st.row, st.col
+	}
+	return 0, 0
 }
 
 // ---------------------------------------------------------------- Canvas

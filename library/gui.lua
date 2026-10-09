@@ -354,16 +354,42 @@ function TextBox:select(i, j) end
 ---@field rows any[][] each row a table of cells; assign it again after changing it
 ---@field columnWidths? integer[]
 ---@field selected integer 1 for the first row, 0 for none
+---@field editable boolean|integer[] true, or the columns whose cells are edited in place
 ---@field onChange? fun(self: gui.Table)
 ---@field onDoubleClick? fun(self: gui.Table)
+---@field onStartEdit? fun(self: gui.Table, row: integer, col: integer): false|gui.CellEditor|nil
+---@field onEdit? fun(self: gui.Table, row: integer, col: integer, text: string): false|string|nil
+---@field onEditButton? fun(self: gui.Table, row: integer, col: integer)
+local Table = {}
+
+--- Edits a cell, as a click on it would; with no arguments, finishes the
+--- edit there is, keeping what was typed.
+---@param row? integer
+---@param col? integer
+function Table:edit(row, col) end
+
+--- The cell being edited, or nothing.
+---@return integer? row
+---@return integer? col
+function Table:editing() end
+
+--- How a cell is edited, as onStartEdit says: typed, by default.
+---@class gui.CellEditor
+---@field choices? string[] a list to pick from, beside what is typed
+---@field button? boolean a "..." at the cell's right, which raises onEditButton
+---@field readOnly? boolean nothing typed: only the button changes it
 
 ---@class gui.TableOptions: gui.Options
 ---@field columns? string[]
 ---@field rows? any[][]
 ---@field columnWidths? integer[]
 ---@field selected? integer
+---@field editable? boolean|integer[]
 ---@field onChange? fun(self: gui.Table)
 ---@field onDoubleClick? fun(self: gui.Table)
+---@field onStartEdit? fun(self: gui.Table, row: integer, col: integer): false|gui.CellEditor|nil
+---@field onEdit? fun(self: gui.Table, row: integer, col: integer, text: string): false|string|nil
+---@field onEditButton? fun(self: gui.Table, row: integer, col: integer)
 
 ---@class gui.Slider: gui.Object
 ---@field min number

@@ -30,6 +30,8 @@ func releaseForm(f *guiObject, gone func())                       {}
 func destroyWidget(o *guiObject)                                  {}
 func restack(p *guiObject)                                        {}
 func selectText(o *guiObject, i, j int)                           {}
+func tableEdit(o *guiObject, row, col int)                        {}
+func tableEditing(o *guiObject) (int, int)                        { return 0, 0 }
 func getClipboard() (string, error)                               { return "", errNoBackend }
 func setClipboard(text string) error                              { return errNoBackend }
 

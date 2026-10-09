@@ -107,11 +107,17 @@ new project there.
     again. A caption of `-` is a line between items.
   - In the code, the menu's `onClick(name, caption, checked)` says which item
     was picked: double-click the menu to write it.
-- **Properties:** a property changes as it is typed. A value the control will
-  not take turns red, with the reason in the status line. Empty means the
-  default.
-  - Lists (`items`, `columns`) are edited one item a line.
-  - Rows, trees and menus are edited as a Lua table.
+- **Properties:** a grid of names and values, as VB6's, Delphi's and
+  Lazarus's are; it is a Table with editable cells. A click on a value edits
+  it in place. Enter or leaving the cell keeps it, Up and Down keep it and
+  go on to the next property, and Escape puts it back. A value the control
+  will not take stays in the cell, in red, with the reason in the status
+  line. Empty means the default.
+  - True or false, and a choice such as `font` or `align`, are picked from
+    the ▾ at the cell's right, or taken in turn with a double click.
+  - A list shows how many items it has. Its "..." edits `items` and
+    `columns` one item a line, rows and trees as a Lua table, and a Menu's
+    items in the Menu Editor.
   - A property that picks the widget (`multiLine`, `password`, `default`,
     ...) makes the control again.
 - **Saving:** Cmd-S (Ctrl-S elsewhere) saves the form. The title bar shows

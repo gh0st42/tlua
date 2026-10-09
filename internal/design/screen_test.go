@@ -162,12 +162,12 @@ func TestDesignerPlacesMovesResizesAndDeletes(t *testing.T) {
 		s.expect(`#D.doc == 1 and D.doc[1].kind == "Button" and D.doc[1].name == "Button1"`)
 		s.expect(`D.doc[1].left == 20 and D.doc[1].top == 30 and D.doc[1].width == 100 and D.doc[1].height == 30`)
 		s.expect(`D:tool() == nil and D.selection == D.doc[1] and D.dirty and D.win.caption:find("%*")`)
-		s.expect(`D.props.editors.caption.obj.text == "Button1"`)
+		s.expect(`D.props:text("caption") == "Button1"`)
 
 		// Move it.
 		s.drag(40, 40, 70, 70)
 		s.expect(`D.doc[1].left == 50 and D.doc[1].top == 60`)
-		s.expect(`D.props.editors.left.obj.text == "50"`)
+		s.expect(`D.props:text("left") == "50"`)
 
 		// Size it from its bottom right handle.
 		s.drag(150, 90, 170, 100)
@@ -203,46 +203,82 @@ func TestDesignerPropertyGrid(t *testing.T) {
 		s.pickTool("Button")
 		s.drag(10, 10, 110, 40)
 
-		// Typing a caption changes the button as it is typed.
-		s.lua(`D.props.editors.caption.obj.text = ""; D.props.editors.caption.obj:focus()`)
-		in.Type("OK")
+		// A caption typed into the grid is the button's on Enter.
+		s.typeProp("caption", "OK")
 		s.expect(`D.doc[1].caption == "OK" and D.surface.entries[1].obj.caption == "OK"`)
+		s.expect(`D.props:text("caption") == "OK" and D.props.grid:editing() == nil`)
 
-		// A number that is not one is refused, and said so.
-		s.lua(`D.props.editors.left.obj.text = ""; D.props.editors.left.obj:focus()`)
-		in.Type("x")
+		// A number that is not one is refused, and said so; the cell stays
+		// as it was typed until Escape puts it back.
+		s.typeProp("left", "x")
 		s.expect(`D.doc[1].left == 10 and D.statusLine.caption:find("left must be a number")`)
+		s.expect(`D.props.grid:editing() == D.props:row("left")`)
+		in.Key(fltk.ESCAPE, "", 0)
+		s.expect(`D.props.grid:editing() == nil and D.props:text("left") == "10"`)
+
+		// Up and Down keep what was typed and go on to the next property.
+		s.lua(`D.props.grid:edit(D.props:row("top"), 2)`)
+		in.Type("12")
+		in.Key(fltk.UP, "", 0)
+		s.expect(`D.doc[1].top == 12 and D.props.grid:editing() == D.props:row("left")`)
+		in.Key(fltk.ESCAPE, "", 0)
 
 		// A name that is taken is refused by the control itself.
 		s.lua(`D.surface:place("Label", 10, 60)`)
 		s.lua(`D.surface:selectNode(D.doc[1])`)
-		s.lua(`D.props.editors.name.obj.text = ""; D.props.editors.name.obj:focus()`)
-		in.Type("Label1")
+		s.typeProp("name", "Label1")
 		s.expect(`D.doc[1].name ~= "Label1" and D.statusLine.caption:find("already has a control named Label1")`)
 		in.Key(fltk.BACKSPACE, "", 0)
 		in.Type("X")
-		s.expect(`D.doc[1].name == "LabelX"`)
+		in.Key(fltk.ENTER_KEY, "", 0)
+		s.expect(`D.doc[1].name == "LabelX" and D.props:text("name") == "LabelX"`)
 
-		// A property that picks the widget makes the control again.
+		// True or false is picked; a property that picks the widget makes
+		// the control again.
 		s.lua(`before = D.surface.entries[1].obj`)
-		s.lua(`D.props.editors.default.obj:focus()`)
-		ex, ey := s.at("D.props.editors.default.obj", 8, 10)
-		in.Click(ex, ey)
+		s.typeProp("default", "true")
 		s.expect(`D.doc[1].default == true and D.surface.entries[1].obj ~= before`)
 		s.expect(`D.surface.entries[1].obj.caption == "OK" and D.surface.entries[2].node.kind == "Label"`)
+		s.typeProp("default", "maybe")
+		s.expect(`D.doc[1].default == true and D.statusLine.caption:find("default must be true or false")`)
+		in.Key(fltk.ESCAPE, "", 0)
+
+		// A list is edited from its "...".
+		s.lua(`D.surface:place("ListBox", 200, 60)`)
+		s.lua(`D.props.editList = function() return { "one", "two" } end`)
+		s.lua(`D.props.grid:edit(D.props:row("items"), 2); D.props:button(D.props:row("items"))`)
+		s.expect(`#D.doc[3].items == 2 and D.props:text("items") == "(2)"`)
+		s.lua(`D.props.grid:edit()`)
+
+		// Selecting another control keeps an edit begun on the first.
+		s.lua(`D.surface:selectNode(D.doc[1])`)
+		s.lua(`D.props.grid:edit(D.props:row("caption"), 2)`)
+		in.Type("Fine")
+		s.lua(`D.surface:selectNode(D.doc[2])`)
+		s.expect(`D.doc[1].caption == "Fine" and D.doc[2].caption ~= "Fine"`)
 
 		// Bring to front and send to back reorder the layout.
-		s.lua(`D.surface:toFront()`)
-		s.expect(`D.doc[2].name == "LabelX"`)
+		s.lua(`D.surface:selectNode(D.doc[1]); D.surface:toFront()`)
+		s.expect(`D.doc[3].name == "LabelX"`)
 	})
+}
+
+// typeProp types a value into the property grid and keeps it, as Enter
+// does.
+func (s *scene) typeProp(prop, value string) {
+	s.t.Helper()
+	s.lua(fmt.Sprintf(`D.props.grid:edit(D.props:row(%q), 2)`, prop))
+	s.expect(fmt.Sprintf(`D.props.grid:editing() == D.props:row(%q)`, prop))
+	in.Type(value)
+	in.Key(fltk.ENTER_KEY, "", 0)
+	s.pump()
 }
 
 func TestDesignerSavesWhatItShows(t *testing.T) {
 	withDesigner(t, func(s *scene) {
 		s.pickTool("TextBox")
 		s.drag(16, 16, 216, 44)
-		s.lua(`D.props.editors.name.obj.text = ""; D.props.editors.name.obj:focus()`)
-		in.Type("txtName")
+		s.typeProp("name", "txtName")
 		mod, _ := cmdKey()
 		in.Key('s', "s", mod)
 		s.expect(`not D.dirty and not D.win.caption:find("%*")`)
@@ -304,8 +340,7 @@ func TestDesignerRebuildsTheLayoutExample(t *testing.T) {
 			s.drag(x0, y0, x1, y1)
 			for _, p := range []string{"name", "caption"} {
 				if v, ok := props[p]; ok {
-					s.lua(fmt.Sprintf(`D.props.editors.%s.obj.text = ""; D.props.editors.%s.obj:focus()`, p, p))
-					in.Type(v)
+					s.typeProp(p, v)
 				}
 			}
 		}
@@ -399,8 +434,7 @@ func TestDesignerOffersToRename(t *testing.T) {
 		s.lua(`D.answer = "yes"`)
 		s.lua(`D:openHandler(D.doc[1], "onClick"); D.codeBox.text = D.codeBox.text .. "frm.Button1.caption = 'x'\n"; D:showDesign()`)
 		s.lua(`D.surface:selectNode(D.doc[1])`)
-		s.lua(`D.props.editors.name.obj.text = ""; D.props.editors.name.obj:focus()`)
-		in.Type("cmdGo")
+		s.typeProp("name", "cmdGo")
 		s.expect(`D.doc[1].name == "cmdGo"`)
 		s.click(400, 280) // selecting the form ends the renaming
 		s.expect(`D.asked == "Rename frm.Button1 to frm.cmdGo in the code? It is there 2 times."`)
@@ -467,8 +501,7 @@ func (s *scene) place(kind string, x0, y0, x1, y1 int, name string) {
 	} else {
 		s.drag(x0, y0, x1, y1)
 	}
-	s.lua(fmt.Sprintf(`D.props.editors.name.obj.text = ""; D.props.editors.name.obj:focus()`))
-	in.Type(name)
+	s.typeProp("name", name)
 	s.pump()
 }
 
@@ -497,8 +530,7 @@ func TestDesignerSelectsSeveral(t *testing.T) {
 		s.expect(`D.doc[1].left == 50 and D.doc[1].top == 40 and D.doc[2].left == 50 and D.doc[2].top == 100`)
 
 		// The grid's properties change both; a name is one control's own.
-		s.lua(`D.props.editors.caption.obj.text = ""; D.props.editors.caption.obj:focus()`)
-		in.Type("Go")
+		s.typeProp("caption", "Go")
 		// (Each was Button1 when made: a renamed control's name is free again.)
 		s.expect(`D.doc[1].caption == "Go" and D.doc[2].caption == "Go" and D.doc[3].caption == "Button1"`)
 
@@ -533,8 +565,7 @@ func TestDesignerUndoes(t *testing.T) {
 	withDesigner(t, func(s *scene) {
 		s.pickTool("Button")
 		s.drag(20, 20, 120, 50)
-		s.lua(`D.props.editors.caption.obj.text = ""; D.props.editors.caption.obj:focus()`)
-		in.Type("Click me")
+		s.typeProp("caption", "Click me")
 		s.expect(`D.doc[1].caption == "Click me"`)
 		s.lua(`D:undo()`)
 		s.expect(`D.doc[1].caption == "Button1" and D.surface.entries[1].obj.caption == "Button1"`)
@@ -763,7 +794,7 @@ func TestDesignerUsesControlsOfTheProject(t *testing.T) {
 		s.expect(`D.toolbox:rowOf("Counter") ~= nil`)
 		s.place("Counter", 20, 20, 0, 0, "cntClicks") // a click: its own size
 		s.expect(`D.doc[1].kind == "Counter" and D.surface.entries[1].obj.width == 120`)
-		s.expect(`D.props.editors.value ~= nil`)
+		s.expect(`D.props:row("value") ~= nil`)
 		s.lua(`before = D.surface.entries[1].obj; D:setProp(D.doc[1], "value", 7)`)
 		s.expect(`D.doc[1].value == 7 and D.surface.entries[1].obj ~= before and D.surface.entries[1].obj.value == 7`)
 		s.lua(`D:save()`)

@@ -76,7 +76,7 @@ behind its siblings, which is also the order a layout lists them in.
 | `ComboBox`    | `items`, `selected` (1-based, 0 for none), `text`    | `onChange` |
 | `ListBox`     | `items`, `selected`, `text`                          | `onChange`, `onDoubleClick` |
 | `Tree`        | `items` (see below), `path`, `text`                  | `onChange`, `onDoubleClick`, `onToggle` |
-| `Table`       | `columns`, `rows`, `columnWidths`, `selected`        | `onChange`, `onDoubleClick` |
+| `Table`       | `columns`, `rows`, `columnWidths`, `selected`, `editable` | `onChange`, `onDoubleClick`, `onStartEdit`, `onEdit`, `onEditButton` |
 | `Canvas`      | drawn by its `onDraw` (see below); `color` is the background; `transparent` shows what is under it | `onDraw`, `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseDrag`, `onMouseWheel`, `onMouseEnter`, `onMouseLeave`, `onKey` |
 | `Slider`      | `min`, `max`, `step`, `value`, `vertical`            | `onChange` |
 | `Spinner`     | `min`, `max`, `step`, `value`                        | `onChange` |
@@ -242,6 +242,43 @@ local grid = form:Table {
   none. The user picks rows by clicking or with the arrow keys.
 - **Changes.** To change the data, change the tables and assign `rows` again
   (sorting them in place, for instance).
+
+### Editing cells
+
+A Table with `editable` set is a data grid: its cells are edited in place,
+in an input laid over the cell. `editable = true` edits every column, and a
+list such as `editable = { 2, 3 }` edits only those.
+
+- **Starting.** A click on an editable cell edits it. So do F2 and Enter on
+  the selected row, and typing on it, which starts with what was typed.
+  `grid:edit(row, col)` starts one from the script, and `grid:editing()`
+  says which cell is being edited, if any.
+- **Finishing.** Enter keeps what was typed, and so does leaving the cell.
+  Up and Down keep it and edit the cell above or below. Escape puts the cell
+  back. `grid:edit()` with no arguments keeps it from the script.
+- **onStartEdit(self, row, col)** says how a cell is edited before it is.
+  Return `false` to refuse, nothing for a plain input, or a table:
+  - `choices`: a list to pick from, opened with a ▾ at the cell's right. A
+    double click takes the next choice, as Delphi's did.
+  - `button = true`: a "..." at the cell's right, which raises
+    `onEditButton(self, row, col)`. That is where a value is edited in a
+    dialog of the script's own.
+  - `readOnly = true`: nothing typed, so only the button changes the value.
+- **onEdit(self, row, col, text)** is the value being kept. Return `false`
+  to refuse it, and the input stays, in red, for the user to put right. A
+  string is kept in its place, so a value can be tidied up. Otherwise the
+  text goes into the row's table as it is. onEdit is only raised when the
+  text has changed.
+
+```lua
+local grid = form:Table {
+  columns = { "Name", "Year" }, rows = { { "Lua", "1993" } },
+  editable = { 2 },
+  onEdit = function(self, row, col, text)
+    if not tonumber(text) then return false end
+  end,
+}
+```
 
 ## Canvas
 

@@ -173,8 +173,14 @@ function M.start(opts)
   function d:setProp(node, prop, value)
     self:checkpoint("prop:" .. tostring(node) .. ":" .. prop)
     local ok, err = self.surface:setProp(node, prop, value)
-    if ok and prop ~= "name" and node ~= self.doc then
-      for _, other in ipairs(self.surface:selectedNodes()) do
+    -- The other controls selected with it take the value too; not when it
+    -- is no longer selected itself, as with an edit kept as the selection
+    -- moves on.
+    local selected = self.surface:selectedNodes()
+    local among = false
+    for _, n in ipairs(selected) do among = among or n == node end
+    if ok and among and prop ~= "name" and node ~= self.doc then
+      for _, other in ipairs(selected) do
         if other ~= node and model.kinds()[other.kind].props[prop] then
           self.surface:setProp(other, prop, value)
         end

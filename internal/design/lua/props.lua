@@ -1,8 +1,12 @@
 -- The properties pane: a list of the form and its controls at the top, as
--- VB6's object box, and below it one row for each property of the one
--- selected, with an editor that suits its type. A change is made as it is
--- typed; a value the control will not take is shown in red, with why in
--- the status line.
+-- VB6's object box, and below it a grid of the selected one's properties,
+-- as VB6's, Delphi's and Lazarus's have it: names on the left, values on
+-- the right, edited in place. A value is kept on Enter, on leaving the cell
+-- or on Up and Down, which go on to the next property; Escape puts it back.
+-- True or false and the choices of a choice are picked from a list, or
+-- taken in turn with a double click; a list is edited in a dialog of its
+-- own, from the cell's "...". A value the control will not take stays in
+-- the cell, in red, with why in the status line.
 
 local gui = require "gui"
 local model = require "design.model"
@@ -10,18 +14,23 @@ local model = require "design.model"
 local M = {}
 M.__index = M
 
-local ROW = 26
 local LABEL = 108
 
 function M.new(parent, d, opts)
-  local p = setmetatable({ d = d, rows = {}, editors = {}, width = opts.width }, M)
+  local p = setmetatable({ d = d, names = {}, rowOf = {}, width = opts.width }, M)
   p.picker = parent:ComboBox {
     left = opts.left, top = opts.top, width = opts.width,
     onChange = function(self) p:picked(self.selected) end,
   }
-  p.scroll = parent:Scroll {
+  p.grid = parent:Table {
     left = opts.left, top = opts.top + 32, width = opts.width, height = opts.height - 32,
-    grow = true,
+    grow = true, columns = { "Property", "Value" },
+    columnWidths = { LABEL, opts.width - LABEL - 18 },
+    editable = { 2 },
+    onStartEdit = function(_, row) return p:startEdit(row) end,
+    onEdit = function(_, row, _, text) return p:edited(row, text) end,
+    onEditButton = function(_, row) p:button(row) end,
+    onChange = function(self) p:describe(self.selected) end,
   }
   return p
 end
@@ -58,98 +67,98 @@ local function convert(info, text)
     if t == "integer" and n ~= math.floor(n) then return nil, "a whole number" end
     return n
   end
+  if t == "boolean" then
+    if text == "true" then return true end
+    if text == "false" then return false end
+    return nil, "true or false"
+  end
   return text
 end
 
-local function summary(v)
-  if type(v) ~= "table" or next(v) == nil then return "(none)" end
-  return ("(%d)"):format(#v)
+local lists = { list = true, rows = true, tree = true, menu = true }
+
+-- display is how a value reads in the grid.
+local function display(info, v)
+  if lists[info.type] then
+    if type(v) ~= "table" or next(v) == nil then return "(none)" end
+    return ("(%d)"):format(#v)
+  end
+  if v == nil then return "" end
+  return tostring(v)
 end
 
--- show fills the rows for a node: the form's layout, or a control's.
+function M:info(prop)
+  return model.kinds()[self.node.kind].props[prop]
+end
+
+-- show fills the grid for a node: the form's layout, or a control's. An
+-- edit under way is kept first, for the node it was begun on.
 function M:show(node)
-  for _, obj in ipairs(self.rows) do obj:remove() end
-  self.rows, self.editors, self.node = {}, {}, node
+  if self.grid:editing() then self.grid:edit() end
+  self.node = node
   for i, n in ipairs(self.nodes or {}) do
     if n == node then self.picker.selected = i end
   end
-
-  local kinds = model.kinds()
-  local width = self.width - LABEL - 24
-  for i, prop in ipairs(model.propNames(node.kind)) do
-    local info = kinds[node.kind].props[prop]
-    local y = (i - 1) * ROW + 2
-    local label = self.scroll:Label {
-      caption = prop, left = 4, top = y, width = LABEL - 8, height = ROW - 4,
-      tooltip = info.type .. (info.fixed and ", rebuilds the control" or ""),
-    }
-    self.rows[#self.rows + 1] = label
-    local editor = self:editor(node, prop, info, LABEL, y, width)
-    self.rows[#self.rows + 1] = editor
-    self.editors[prop] = { obj = editor, info = info }
+  self.names, self.rowOf = model.propNames(node.kind), {}
+  local rows = {}
+  for i, prop in ipairs(self.names) do
+    self.rowOf[prop] = i
+    rows[i] = { prop, display(self:info(prop), model.value(node, prop)) }
   end
+  self.grid.rows = rows
 end
 
-function M:editor(node, prop, info, x, y, w)
-  local v = model.value(node, prop)
-  local s = self.scroll
-  local apply = function(obj, value)
+-- describe says what the selected property holds.
+function M:describe(row)
+  local prop = self.names[row]
+  if not prop then return end
+  local info = self:info(prop)
+  self.d:status(prop .. ": " .. info.type .. (info.fixed and ", rebuilds the control" or ""))
+end
+
+-- startEdit is how a property's value is edited: from a list, from a
+-- dialog, or typed.
+function M:startEdit(row)
+  local info = self:info(self.names[row])
+  if info.type == "boolean" then return { choices = { "true", "false" } } end
+  if info.type == "choice" then return { choices = info.choices } end
+  if lists[info.type] then return { button = true, readOnly = true } end
+end
+
+-- edited is a value typed or picked: the control takes it, or it is
+-- refused and said why.
+function M:edited(row, text)
+  local node, prop = self.node, self.names[row]
+  local info = self:info(prop)
+  local value, why = convert(info, text)
+  if why then
+    self.d:status(prop .. " must be " .. why)
+    return false
+  end
+  local ok, err = self.d:setProp(node, prop, value)
+  if not ok then
+    self.d:status(prop .. ": " .. tostring(err))
+    return false
+  end
+  self.d:status("")
+  return display(info, model.value(node, prop))
+end
+
+-- button is a cell's "...": a list edited in a dialog, or the form's menu
+-- in the Menu Editor.
+function M:button(row)
+  local node, prop = self.node, self.names[row]
+  if node.kind == "Menu" and prop == "items" then
+    self.d:editMenu()
+    return
+  end
+  local info = self:info(prop)
+  local value = self:editList(prop, info, model.value(node, prop))
+  if value ~= nil then
     local ok, err = self.d:setProp(node, prop, value)
-    obj.textColor = ok and "black" or "#c00000"
     self.d:status(ok and "" or (prop .. ": " .. tostring(err)))
-    return ok
   end
-
-  if info.type == "boolean" then
-    return s:CheckBox {
-      left = x, top = y, width = w, height = ROW - 4, checked = v == true,
-      onChange = function(obj) apply(obj, obj.checked) end,
-    }
-  end
-
-  if info.type == "choice" then
-    local items, selected = {}, 0
-    if info.default == nil then items[1] = "" end
-    for _, c in ipairs(info.choices) do
-      items[#items + 1] = c
-      if c == v then selected = #items end
-    end
-    if selected == 0 and v == nil then selected = 1 end
-    return s:ComboBox {
-      left = x, top = y, width = w, height = ROW - 4, items = items, selected = selected,
-      onChange = function(obj) apply(obj, obj.text ~= "" and obj.text or nil) end,
-    }
-  end
-
-  if info.type == "list" or info.type == "rows" or info.type == "tree" or info.type == "menu" then
-    local button
-    button = s:Button {
-      left = x, top = y, width = w, height = ROW - 4, caption = summary(v),
-      onClick = function()
-        local value = self:editList(prop, info, model.value(node, prop))
-        if value ~= nil and apply(button, value) then button.caption = summary(value) end
-      end,
-    }
-    return button
-  end
-
-  local box = s:TextBox {
-    left = x, top = y, width = w, height = ROW - 4,
-    text = v ~= nil and tostring(v) or "",
-  }
-  if info.type == "color" and v then box.color = v end
-  box.onChange = function(obj)
-    local value, why = convert(info, obj.text)
-    if why then
-      obj.textColor = "#c00000"
-      self.d:status(prop .. " must be " .. why)
-      return
-    end
-    if apply(obj, value) and info.type == "color" then
-      obj.color = value or "#ffffff"
-    end
-  end
-  return box
+  self:refresh(node)
 end
 
 -- editList edits a list in a form of its own: one item a line for a list,
@@ -193,17 +202,29 @@ function M:editList(prop, info, value)
 end
 
 -- refresh shows a node's values again after the surface changed them,
--- leaving the rows where they are.
+-- leaving the grid where it is.
 function M:refresh(node)
   if node ~= self.node then return end
-  for prop, ed in pairs(self.editors) do
-    local v = model.value(node, prop)
-    local t = ed.info.type
-    if t == "integer" or t == "number" or t == "string" or t == "name" then
-      local text = v ~= nil and tostring(v) or ""
-      if ed.obj.text ~= text then ed.obj.text = text end
+  local rows, changed = self.grid.rows, false
+  for prop, i in pairs(self.rowOf) do
+    local text = display(self:info(prop), model.value(node, prop))
+    if rows[i][2] ~= text then
+      rows[i][2] = text
+      changed = true
     end
   end
+  if changed then self.grid.rows = rows end
+end
+
+-- row is a property's row in the grid, and text what its value reads as
+-- there; for tests, mostly.
+function M:row(prop)
+  return self.rowOf[prop]
+end
+
+function M:text(prop)
+  local row = self.rowOf[prop]
+  return row and self.grid.rows[row][2]
 end
 
 return M

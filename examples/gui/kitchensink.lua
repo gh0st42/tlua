@@ -265,13 +265,25 @@ local grid = data:Table {
   columnWidths = { 90, 200, 50 },
   rows = languages,
   left = 264, top = 12, width = 348, height = 320, grow = true,
+  -- A click on a "Made by" or "Year" cell edits it in place: Enter keeps
+  -- it, Escape puts it back, Up and Down go on to the next row.
+  editable = { 2, 3 },
+  onEdit = function(self, row, col, text)
+    if col == 3 then
+      local year = tonumber(text)
+      if not year then return false end -- refused: the cell turns red
+      languages[row][3] = year
+      return tostring(year)
+    end
+    languages[row][2] = text
+  end,
   onChange = function(self)
     local row = languages[self.selected]
-    if row then say("%s, %d.", row[1], row[3]) end
+    if row then say("%s, %s.", row[1], row[3]) end
   end,
   onDoubleClick = function(self)
     local row = languages[self.selected]
-    gui.msgbox(string.format("%s was made by %s in %d.", row[1], row[2], row[3]), "ok", "Table")
+    gui.msgbox(string.format("%s was made by %s in %s.", row[1], row[2], row[3]), "ok", "Table")
   end,
 }
 data:Button {
