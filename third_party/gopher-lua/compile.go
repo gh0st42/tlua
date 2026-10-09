@@ -751,10 +751,21 @@ func compileAssignStmtRight(context *funcContext, stmt *ast.AssignStmt, reg int,
 		if expr == nil {
 			expr = stmt.Rhs[namesassigned]
 		}
+		// One local can be computed straight into its register. With more
+		// than one target, every value is computed before any is assigned,
+		// so a local's value goes to a temporary first: written in place,
+		// it would change what the expressions after it read, as in
+		// a, b = b, a or a, b, c = math.floor(a/2), ...
+		if ec.ctype == ecLocal && lennames > 1 {
+			ec = ecnone(0)
+		}
 		idx := reg
 		reginc := compileExpr(context, reg, expr, ec)
 		if ec.ctype == ecTable {
-			if _, ok := expr.(*ast.LogicalOpExpr); !ok {
+			// A field's value may be read straight from a local's register
+			// rather than a copy; with more than one target that local may
+			// be assigned before the field is, so the copy stays.
+			if _, ok := expr.(*ast.LogicalOpExpr); !ok && lennames == 1 {
 				context.Code.PropagateKMV(context.RegTop(), &ac.valuerk, &reg, reginc)
 			} else {
 				ac.valuerk = idx

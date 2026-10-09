@@ -80,3 +80,17 @@ another base reads an integer in it as `strtoul` does, `0x` allowed in base
 infinities and NaN printed as Go writes them (`+Inf`); they are `inf`,
 `-inf` and `nan` now, as in Lua.
 
+## compile.go: assignment to more than one variable
+
+`compileAssignStmtRight` compiled each value straight into the register of
+the local it was for, which saves a move when there is one target. With
+more than one, a local was overwritten before the expressions after it had
+read it: `a, b = b, a` gave `2 2`, and in `a, b, c = math.floor(a/2), ...`
+the function `math.floor`, loaded into `a`'s register to be called, was
+then divided ("cannot perform div operation between function and number").
+A field's value was likewise read from a local's own register rather than
+a copy, so `t.x, a = a, t.x` stored `a` after it had changed.
+
+With more than one target every value now goes to a temporary first, and
+the assignments follow, as Lua does; one target keeps the shortcut.
+

@@ -104,6 +104,28 @@ func TestGopherLuaPatches(t *testing.T) {
 			assert(not pcall(function() return "0b101" + 0 end))
 			assert(tonumber("ff", 16) == 255 and tonumber("0xff", 16) == 255 and tonumber("8", 8) == nil)
 			assert(tonumber("z", 36) == 35 and tonumber("-101", 2) == -5 and not pcall(tonumber, "1", 99))`,
+		"multiple assignment computes every value first": `
+			local a, b = 1, 2
+			a, b = b, a
+			assert(a == 2 and b == 1)
+			local x, y, z = 1, 2, 3
+			x, y, z = z, x, y
+			assert(x == 3 and y == 1 and z == 2)
+			local p, q, r = 8, 6, 3
+			p, q, r = math.floor(p / 2), math.floor(q / 2), r * 2
+			assert(p == 4 and q == 3 and r == 6)
+			local function f(m, n, o)
+				m, n, o = math.floor(m / 2), math.floor(n / 2), o * 2
+				return m, n, o
+			end
+			local m, n, o = f(8, 6, 3)
+			assert(m == 4 and n == 3 and o == 6)
+			local t, v = { k = 1 }, 2
+			t.k, v = v, t.k
+			assert(t.k == 2 and v == 1)
+			local s = { 1, 2 }
+			s[1], s[2] = s[2], s[1]
+			assert(s[1] == 2 and s[2] == 1)`,
 		"math.huge is infinite": `
 			assert(math.huge == 1/0 and tonumber("1e400") == math.huge)
 			assert(tostring(math.huge) == "inf" and tostring(-math.huge) == "-inf")`,
