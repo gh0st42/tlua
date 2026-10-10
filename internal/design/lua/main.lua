@@ -20,8 +20,78 @@ local W, H = 1180, 760
 local MENU, OUTPUT, STATUS = 25, 110, 24
 local LEFT, RIGHT = 210, 300
 
+-- startDialog asks, before the designer opens, whether dir is the folder
+-- the user meant: "here" to open the project in it (or start one there),
+-- "choose" to pick another, "none" for no project for now.
+-- shortPath is a folder as it fits in width at the dialog's font: the
+-- home folder as ~, and what is still too long cut out of the middle.
+local function shortPath(dir, width)
+  local home = os.getenv("HOME")
+  if home and home ~= "" and dir:sub(1, #home) == home then dir = "~" .. dir:sub(#home + 1) end
+  local function fits(s) return (gui.measure(s, "mono", 12)) <= width end
+  local ok, fit = pcall(fits, dir)
+  if not ok or fit then return dir end
+  local keep = #dir
+  while keep > 8 do
+    keep = keep - 1
+    local head = math.floor(keep / 3)
+    local short = dir:sub(1, head) .. "…" .. dir:sub(#dir - (keep - head) + 1)
+    if fits(short) then return short end
+  end
+  return dir
+end
+
+local function startDialog(dir, hasForms)
+  local choice = "none"
+  local f = gui.Form { caption = "tlua design", width = 480, height = 150 }
+  f:Label {
+    left = 16, top = 14, width = 448, height = 24,
+    caption = hasForms and "The current folder has a project:" or "The current folder has no project yet:",
+  }
+  f:Label { left = 16, top = 40, width = 448, height = 24, caption = shortPath(dir, 448), font = "mono", fontSize = 12, textColor = "#404040" }
+  local function pick(c) return function() choice = c; f:close() end end
+  f:Button { caption = hasForms and "Open It" or "Start One Here", left = 16, top = 100, width = 140, default = true, onClick = pick("here") }
+  f:Button { caption = "Choose a Folder...", left = 166, top = 100, width = 160, onClick = pick("choose") }
+  f:Button { caption = "No Project", left = 336, top = 100, width = 128, onClick = pick("none") }
+  function f:onKey(key)
+    if key == "Escape" then self:close() return true end
+  end
+  f:showModal()
+  return choice
+end
+
+-- pickProject is the folder the designer opens when none was named: the
+-- current one, or one the user picks, made into a project when it has
+-- none and the user says so; nil for none. opts.answerStart and
+-- opts.answerDir answer its questions for tests, and then it asks once.
+local function pickProject(dir, opts)
+  while true do
+    local hasForms = project.forms(dir)[1] ~= nil
+    local choice = opts.answerStart or startDialog(dir, hasForms)
+    if choice == "here" then
+      if not hasForms then project.create(dir) end
+      return dir
+    elseif choice == "choose" then
+      local other = opts.answerDir
+      if other == nil then other = gui.choosedir { title = "Open a project, or a folder for a new one" } end
+      if other then
+        if project.forms(other)[1] then return other end
+        if opts.create or gui.msgbox("There is no project in " .. other .. ". Start one there?", "yesno", "tlua design") == "yes" then
+          project.create(other)
+          return other
+        end
+      end
+      if opts.answerStart then return nil end
+      -- Chooser cancelled, or no project wanted there: ask again.
+    else
+      return nil
+    end
+  end
+end
+
 -- start opens the designer on the project in opts.dir: made there first if
--- it has no forms and opts.create says so, or asked about otherwise. It
+-- it has no forms and opts.create says so, or asked about otherwise. With
+-- opts.pick, the folder was not named, and the user picks it first. It
 -- returns the designer, which is what tests hold on to.
 function M.start(opts)
   local d = { dirty = false, undoStack = {}, redoStack = {}, gridShown = false, snap = false }
@@ -900,7 +970,9 @@ function M.start(opts)
   ---------------------------------------------------------------- the project
 
   local dir = opts.dir
-  if dir and not project.forms(dir)[1] then
+  if dir and opts.pick then
+    dir = pickProject(dir, opts)
+  elseif dir and not project.forms(dir)[1] then
     if opts.create or gui.msgbox("Start a new project in " .. dir .. "?", "yesno", "tlua design") == "yes" then
       project.create(dir)
     else

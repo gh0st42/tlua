@@ -39,6 +39,12 @@ return frm
 Opened on a directory with no forms in it, the designer offers to start a
 new project there.
 
+`tlua design` with no directory asks first which project to work on. It
+shows the current folder and offers to open the project in it (or start
+one there, when it has none), to choose another folder, or to start with
+no project. A folder chosen that has no project is offered as a new one.
+`tlua design myapp` opens `myapp` without asking.
+
 ## The window
 
 - **Left:** the project's forms (double-click one to open it), and the
