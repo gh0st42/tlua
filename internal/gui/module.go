@@ -280,7 +280,13 @@ type guiObject struct {
 	// a drop on its way.
 	mouse struct {
 		armed, dropping bool
-		x, y            int
+		// A drop's place: x, y on the object, and on a ListBox or Tree
+		// the line under it, with the line it had selected before the
+		// drag went over it, to put back.
+		dropX, dropY       int
+		dropLine, keepLine int
+		dropOver           bool
+		x, y               int
 		// hover counts the mouse's moves over a TextBox, so that only the
 		// last one's rest is a hover; hovered is set while one is shown.
 		hover   int

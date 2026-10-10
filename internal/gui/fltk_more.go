@@ -16,6 +16,7 @@ import (
 	"github.com/pwiecz/go-fltk"
 	lua "github.com/yuin/gopher-lua"
 
+	"tlua/internal/gui/fltklist"
 	"tlua/internal/gui/fltkread"
 	"tlua/internal/gui/fltkscale"
 	"tlua/internal/lualib"
@@ -116,16 +117,48 @@ func handle(o *guiObject, e fltk.Event) bool {
 // any other event.
 func dropEvent(o *guiObject, e fltk.Event) (used, ok bool) {
 	wants := o.events["onDrop"] != nil
+	list, isList := o.widget.(dropList)
+	isList = isList && (o.kind == "ListBox" || o.kind == "Tree")
 	switch e {
 	case fltk.DND_LEAVE:
+		if isList && o.mouse.dropOver {
+			// The drag went elsewhere: the line selected before comes back.
+			showLine(list, o.mouse.keepLine)
+			o.mouse.dropOver = false
+		}
 		return wants, true
 	case fltk.DND_ENTER, fltk.DND_DRAG:
-		return wants && under(o), true
+		if !wants || !under(o) {
+			return false, true
+		}
+		if isList {
+			if !o.mouse.dropOver {
+				o.mouse.dropOver = true
+				o.mouse.keepLine = list.Value()
+			} else {
+				// A list shows the line a drop would land on.
+				showLine(list, fltklist.LineUnderMouse())
+			}
+		}
+		return true, true
 	case fltk.DND_RELEASE:
 		// A drop nothing under the mouse took is offered to every control
 		// in turn, so each checks that it is the one dropped on.
 		if wants && under(o) {
 			o.mouse.dropping = true
+			o.mouse.dropX, o.mouse.dropY = fltk.EventX(), fltk.EventY()
+			if g, ok := o.widget.(geometry); ok && o.kind != "Form" {
+				o.mouse.dropX -= g.X()
+				o.mouse.dropY -= g.Y()
+			}
+			o.mouse.dropLine = 0
+			if isList {
+				if o.mouse.dropOver {
+					o.mouse.dropLine = fltklist.LineUnderMouse()
+					showLine(list, o.mouse.keepLine)
+				}
+				o.mouse.dropOver = false
+			}
 			return true, true
 		}
 		return false, true
@@ -141,10 +174,41 @@ func dropEvent(o *guiObject, e fltk.Event) (used, ok bool) {
 		for _, l := range strings.Split(strings.TrimRight(text, "\r\n"), "\n") {
 			lines.Append(lua.LString(strings.TrimRight(l, "\r")))
 		}
-		o.app.fire(o, "onDrop", lua.LString(text), lines)
+		// at is where on a list it landed: a Tree's path, a ListBox's line.
+		var at lua.LValue = lua.LNil
+		if n := o.mouse.dropLine; n > 0 {
+			if o.kind == "Tree" {
+				if row, ok := treeRowAt(o, n); ok {
+					at = lua.LString(row.path)
+				}
+			} else {
+				at = lua.LNumber(n)
+			}
+		}
+		o.app.fire(o, "onDrop", lua.LString(text), lines,
+			lua.LNumber(o.mouse.dropX), lua.LNumber(o.mouse.dropY), at)
 		return true, true
 	}
 	return false, false
+}
+
+// dropList is a ListBox's or a Tree's list, as a drop shows its place.
+type dropList interface {
+	Value() int
+	Size() int
+	SetSelected(line int, on bool) bool
+}
+
+// showLine selects a line of a list without telling the program, as a
+// drag over it shows where it would land; 0 selects none.
+func showLine(list dropList, line int) {
+	if line > 0 && line <= list.Size() {
+		list.SetSelected(line, true)
+		return
+	}
+	if cur := list.Value(); cur > 0 {
+		list.SetSelected(cur, false)
+	}
 }
 
 // catchDrops puts an invisible box behind everything on a form, to take

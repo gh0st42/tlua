@@ -40,7 +40,7 @@ function bootgui() end
 ---@field fontSize? integer
 ---@field grow boolean stretches with a resizable form; given when it is made
 ---@field tabIndex? integer its place in the order Tab goes in; controls that take the keyboard
----@field onDrop? fun(self: self, text: string, lines: string[]) something was dropped on it; files arrive as one path per line
+---@field onDrop? fun(self: self, text: string, lines: string[], x: integer, y: integer, at: string|integer|nil) something was dropped on it at x, y; files arrive as one path per line; at is the Tree path or ListBox line it landed on
 ---@field onDrag? fun(self: self): string? the user drags out of it; return the text to carry
 ---@field contextMenu? gui.MenuItem[] what a right click on it shows, at the mouse
 ---@field onContextMenu? fun(self: self, name: any, caption: string, checked: boolean) an item of its contextMenu was picked
@@ -100,7 +100,7 @@ function Object:redraw() end
 ---@field grow? boolean
 ---@field tabIndex? integer
 ---@field parent? gui.Container where `gui.Button{}` and the like go, instead of the latest Form
----@field onDrop? fun(self: gui.Object, text: string, lines: string[])
+---@field onDrop? fun(self: gui.Object, text: string, lines: string[], x: integer, y: integer, at: string|integer|nil)
 ---@field onDrag? fun(self: gui.Object): string?
 ---@field contextMenu? gui.MenuItem[]
 ---@field onContextMenu? fun(self: gui.Object, name: any, caption: string, checked: boolean)

@@ -581,9 +581,16 @@ microword and micronotes, in turboapps, are built on it.
 ## Drag and drop
 
 - **Receiving.** Any control, or the form itself, takes drops once it has
-  `onDrop(self, text, lines)`. `text` is what was dropped. Files dragged in
-  from the desktop arrive as their paths, one per line, which `lines` holds
-  ready split.
+  `onDrop(self, text, lines, x, y, at)`. `text` is what was dropped. Files
+  dragged in from the desktop arrive as their paths, one per line, which
+  `lines` holds ready split. `x` and `y` are where it landed, from the
+  control's corner.
+- **Onto a line.** On a Tree, `at` is the path of the node it landed on, and
+  on a ListBox the number of the line; nil when it landed below them all.
+  While something is dragged over one, the line under it is selected, to
+  show where it would land, and what was selected before comes back
+  afterwards, without `onChange`. A Tree that is both dragged from and
+  dropped on moves its own nodes: a note dragged into a folder, say.
 - **Sending.** A control with `onDrag(self)` can be dragged out of: when the
   user drags from it, `onDrag` returns the text to carry. That text can be
   dropped on another control, or into another program.
