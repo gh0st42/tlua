@@ -3,6 +3,7 @@ package gui
 import (
 	"errors"
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
@@ -11,6 +12,8 @@ import (
 	"unicode"
 
 	lua "github.com/yuin/gopher-lua"
+
+	"tlua/internal/lualib"
 )
 
 // The gui module describes a window as a tree of objects: a Form holding
@@ -225,6 +228,7 @@ func init() {
 		"insert":    guiInsert,
 		"pointAt":   guiPointAt,
 		"editing":   guiEditing,
+		"snapshot":  guiSnapshot,
 	}
 }
 
@@ -330,6 +334,7 @@ func (a *app) open(L *lua.LState) int {
 		"choosecolor": a.choosecolor,
 		"popup":       a.popup,
 		"measure":     a.measure,
+		"paint":       a.paintFunc,
 		"clipboard":   a.clipboard,
 		"load":        a.load,
 		"dump":        a.dump,
@@ -1085,6 +1090,58 @@ func guiPointAt(L *lua.LState) int {
 	L.Push(lua.LNumber(y))
 	L.Push(lua.LNumber(h))
 	return 3
+}
+
+// checkScale reads the optional scale of a painted picture: its pixels to
+// a unit, 1 unless given.
+func checkScale(L *lua.LState, n int) float64 {
+	k := float64(L.OptNumber(n, 1))
+	if k <= 0 || k > 8 {
+		L.ArgError(n, "scale must be above 0 and at most 8")
+	}
+	return k
+}
+
+// pushPainted pushes what paint made, or raises its error: the drawing
+// code's own, as it gave it, or paint's.
+func pushPainted(L *lua.LState, pix *image.NRGBA, err error) int {
+	if err != nil {
+		if apiErr, ok := err.(*lua.ApiError); ok {
+			L.Error(apiErr.Object, 0)
+		}
+		L.RaiseError("%s", err.Error())
+	}
+	lualib.PushImage(L, pix)
+	return 1
+}
+
+// paintFunc is gui.paint(w, h, fn [, scale]): fn(g) draws, as a Canvas's
+// onDraw does, into a picture of w by h units, which it returns, scale
+// pixels to a unit.
+func (a *app) paintFunc(L *lua.LState) int {
+	w, h := L.CheckInt(1), L.CheckInt(2)
+	fn := L.CheckFunction(3)
+	k := checkScale(L, 4)
+	pix, err := paint(a, w, h, k, func(g *lua.LTable) error {
+		return L.CallByParam(lua.P{Fn: fn, NRet: 0, Protect: true}, g)
+	})
+	return pushPainted(L, pix, err)
+}
+
+// guiSnapshot is canvas:snapshot([scale]): the Canvas as its onDraw draws
+// it, at its size, as a picture. It need not be on screen.
+func guiSnapshot(L *lua.LState) int {
+	o := checkObject(L, 1)
+	fn := o.events["onDraw"]
+	if fn == nil {
+		L.RaiseError("gui: only a Canvas with an onDraw has a snapshot")
+	}
+	k := checkScale(L, 2)
+	w, h := int(lua.LVAsNumber(o.get("width"))), int(lua.LVAsNumber(o.get("height")))
+	pix, err := paint(o.app, w, h, k, func(g *lua.LTable) error {
+		return L.CallByParam(lua.P{Fn: fn, NRet: 0, Protect: true}, o.ud, g)
+	})
+	return pushPainted(L, pix, err)
 }
 
 // redraw asks for an object to be drawn again: a Canvas whose picture has

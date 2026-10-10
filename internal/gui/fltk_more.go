@@ -16,6 +16,7 @@ import (
 	"github.com/pwiecz/go-fltk"
 	lua "github.com/yuin/gopher-lua"
 
+	"tlua/internal/gui/fltkread"
 	"tlua/internal/gui/fltkscale"
 	"tlua/internal/lualib"
 )
@@ -969,6 +970,25 @@ type canvas struct {
 	// that, by path.
 	nearest bool
 	sources map[string]*image.NRGBA
+	// paint is set while gui.paint or canvas:snapshot draws into a
+	// picture rather than onto the screen.
+	paint *paintArea
+}
+
+// paintArea is a picture being painted: w by h units, at k pixels to a
+// unit. g's calls scale what they are given by k, so code that draws on a
+// Canvas draws the same into a picture at any size.
+type paintArea struct {
+	w, h int
+	k    float64
+}
+
+// scale is the canvas's pixels to a unit: 1 on screen.
+func (c *canvas) scale() float64 {
+	if c.paint != nil {
+		return c.paint.k
+	}
+	return 1
 }
 
 // picture is a png module image made ready to draw, at width w and height
@@ -1009,9 +1029,13 @@ func (c *canvas) forgetOlder(prefix string, version int) {
 // pixel and nothing smooths it: twice as many on a Retina screen.
 func (c *canvas) nearestImage(o *guiObject, key string, src *image.NRGBA, w, h int) (scalable, error) {
 	if w <= 0 || h <= 0 {
-		w, h = src.Rect.Dx(), src.Rect.Dy()
+		k := c.scale()
+		w, h = int(math.Round(float64(src.Rect.Dx())*k)), int(math.Round(float64(src.Rect.Dy())*k))
 	}
-	scale := deviceScale(o)
+	scale := 1.0 // a picture being painted has a pixel to a unit
+	if c.paint == nil {
+		scale = deviceScale(o)
+	}
 	pw, ph := int(math.Round(float64(w)*scale)), int(math.Round(float64(h)*scale))
 	if pw < 1 || ph < 1 {
 		return nil, fmt.Errorf("an image %dx%d is too small to draw", w, h)
@@ -1105,6 +1129,46 @@ func drawCanvas(o *guiObject, b *fltk.Box) {
 	fltk.PopClip()
 }
 
+// paint runs draw with a g that draws into a picture of w by h units, at k
+// pixels to a unit, on a white ground, and returns the picture: gui.paint
+// and canvas:snapshot. The drawing is FLTK's, as on screen, offscreen.
+func paint(a *app, w, h int, k float64, draw func(g *lua.LTable) error) (*image.NRGBA, error) {
+	pw, ph := int(math.Round(float64(w)*k)), int(math.Round(float64(h)*k))
+	if pw < 1 || ph < 1 {
+		return nil, fmt.Errorf("gui: a picture %dx%d is too small to draw", pw, ph)
+	}
+	if pw > 16384 || ph > 16384 {
+		return nil, fmt.Errorf("gui: a picture %dx%d is too big to draw", pw, ph)
+	}
+	off := fltk.NewOffscreen(pw, ph)
+	if !off.IsValid() {
+		return nil, fmt.Errorf("gui: cannot make a picture %dx%d to draw in", pw, ph)
+	}
+	defer off.Delete()
+	c := &canvas{images: map[string]scalable{}, sources: map[string]*image.NRGBA{}, paint: &paintArea{w, h, k}}
+	c.g = drawingAPI(&guiObject{app: a, kind: "Canvas"}, c)
+	defer func() {
+		for _, img := range c.images {
+			img.Destroy()
+		}
+	}()
+	off.Begin()
+	fltk.PushNoClip()
+	fltk.SetDrawColor(white)
+	fltk.DrawRectf(0, 0, pw, ph)
+	fltk.SetDrawColor(black)
+	fltk.SetDrawFont(fltk.HELVETICA, int(math.Round(14*k)))
+	fltk.SetLineStyle(fltk.SOLID, int(math.Round(k)))
+	c.drawing = true
+	err := draw(c.g)
+	c.drawing = false
+	fltk.SetLineStyle(fltk.SOLID, 0)
+	pix := fltkread.Read(pw, ph)
+	fltk.PopClip()
+	off.End()
+	return pix, err
+}
+
 func canvasOf(o *guiObject) *canvas {
 	if c, ok := o.state.(*canvas); ok {
 		return c
@@ -1178,10 +1242,15 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 	L := o.app.L
 	g := L.NewTable()
 	origin := func() (int, int) {
+		if c.paint != nil {
+			return 0, 0
+		}
 		b := o.widget.(*fltk.Box)
 		return b.X(), b.Y()
 	}
-	n := func(L *lua.LState, i int) int { return int(math.Round(float64(L.CheckNumber(i)))) }
+	// n is argument i in the pixels being drawn: units, but for a picture
+	// painted at a scale.
+	n := func(L *lua.LState, i int) int { return int(math.Round(float64(L.CheckNumber(i)) * c.scale())) }
 	def := func(name string, fn func(L *lua.LState, x0, y0 int) int) {
 		g.RawSetString(name, L.NewFunction(func(L *lua.LState) int {
 			if !c.drawing {
@@ -1192,6 +1261,11 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 		}))
 	}
 	def("size", func(L *lua.LState, _, _ int) int {
+		if c.paint != nil {
+			L.Push(lua.LNumber(c.paint.w))
+			L.Push(lua.LNumber(c.paint.h))
+			return 2
+		}
 		b := o.widget.(*fltk.Box)
 		L.Push(lua.LNumber(b.W()))
 		L.Push(lua.LNumber(b.H()))
@@ -1234,7 +1308,7 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 		if italic {
 			f += 2
 		}
-		fltk.SetDrawFont(f, int(L.OptNumber(3, 14)))
+		fltk.SetDrawFont(f, int(math.Round(float64(L.OptNumber(3, 14))*c.scale())))
 		return 0
 	})
 	def("point", func(L *lua.LState, x0, y0 int) int {
@@ -1313,8 +1387,8 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 	})
 	def("measure", func(L *lua.LState, _, _ int) int {
 		w, h := fltk.MeasureText(label(L.CheckString(2)), true)
-		L.Push(lua.LNumber(w))
-		L.Push(lua.LNumber(h))
+		L.Push(lua.LNumber(float64(w) / c.scale()))
+		L.Push(lua.LNumber(float64(h) / c.scale()))
 		return 2
 	})
 	// scaling("nearest") draws the images after it bigger by repeating
@@ -1333,7 +1407,18 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 	})
 	def("image", func(L *lua.LState, x0, y0 int) int {
 		x, y := x0+n(L, 3), y0+n(L, 4)
-		w, h := int(L.OptNumber(5, 0)), int(L.OptNumber(6, 0))
+		w, h := 0, 0
+		if L.GetTop() >= 6 {
+			w, h = n(L, 5), n(L, 6)
+		}
+		// A picture being painted at a scale draws an image without a
+		// size given at its size times the scale.
+		natural := func(iw, ih int) (int, int) {
+			if w > 0 && h > 0 || c.paint == nil || c.paint.k == 1 {
+				return w, h
+			}
+			return int(math.Round(float64(iw) * c.paint.k)), int(math.Round(float64(ih) * c.paint.k))
+		}
 		if c.nearest {
 			var src *image.NRGBA
 			var key string
@@ -1356,6 +1441,7 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 		}
 		// A picture from the png module, drawn as it is now.
 		if pic, ok := lualib.ToImage(L.Get(2)); ok {
+			w, h := natural(pic.Pix.Rect.Dx(), pic.Pix.Rect.Dy())
 			img, err := c.picture(pic, w, h)
 			if err != nil {
 				L.RaiseError("gui: cannot draw the image: %v", err)
@@ -1371,6 +1457,7 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 			if img, err = loadImage(o.app, path); err != nil {
 				L.RaiseError("gui: cannot load image %s: %v", path, err)
 			}
+			w, h := natural(img.W(), img.H())
 			if w > 0 && h > 0 {
 				img.Scale(w, h, false, true)
 			}

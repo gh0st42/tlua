@@ -473,6 +473,15 @@ function Table:editing() end
 ---@field onMouseEnter? fun(self: gui.Canvas)
 ---@field onMouseLeave? fun(self: gui.Canvas)
 
+local Canvas = {}
+
+--- The Canvas as its onDraw draws it, at its size, as a picture to save
+--- with :save(path). It need not be on screen. scale is pixels to a unit:
+--- 2 for a picture twice as big, every line and letter drawn sharp.
+---@param scale? number
+---@return png.Image
+function Canvas:snapshot(scale) end
+
 ---@class gui.CanvasOptions: gui.Options
 ---@field transparent? boolean draws only what onDraw draws, over what is under it; given when it is made
 ---@field onKey? fun(self: gui.Canvas, key: string, text: string): boolean? clicking it takes the keyboard
@@ -756,6 +765,17 @@ function gui.popup(items, near) end
 ---@return integer width
 ---@return integer height
 function gui.measure(text, font, size) end
+
+--- Draws into a picture rather than on screen: fn(g) gets a g as a
+--- Canvas's onDraw does, w by h units on a white ground, and the picture
+--- comes back, at scale pixels to a unit (1 unless given), to save with
+--- :save(path) or draw with g:image.
+---@param w integer
+---@param h integer
+---@param fn fun(g: gui.Graphics)
+---@param scale? number
+---@return png.Image
+function gui.paint(w, h, fn, scale) end
 
 --- What the program runs on, as Go names it: "darwin", "linux", "windows".
 ---@type string

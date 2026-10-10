@@ -401,6 +401,34 @@ Mouse handlers get positions in the same coordinates:
 A Canvas with other controls on top of it is drawn again together with
 them, so redrawing it never paints over them.
 
+### Pictures of drawings
+
+What a Canvas draws can be kept as a picture, a `png` image, to save as a
+PNG file or draw elsewhere:
+
+```lua
+local pic = chart:snapshot(2)          -- the Canvas as its onDraw draws it
+pic:save("chart.png")
+
+local badge = gui.paint(120, 40, function(g)   -- any drawing, no Canvas needed
+  g:color("#2f6fd8") g:fill(0, 0, 120, 40)
+  g:color("white") g:text("tlua", 0, 0, 120, 40, "center")
+end)
+```
+
+- **`canvas:snapshot([scale])`** runs the Canvas's `onDraw` again, into a
+  picture of its size. It need not be on screen.
+- **`gui.paint(w, h, fn [, scale])`** calls `fn(g)` with a `g` that draws
+  into a picture of `w` by `h` units, and returns it. `g:size()` is `w, h`.
+- **Scale.** A picture has `scale` pixels to a unit, 1 unless given. At 2
+  every coordinate, line width and font size is doubled, so the picture is
+  twice as big and as sharp as a Retina screen shows it; `g:measure` still
+  answers in units, so the drawing code is the same at any scale.
+- **What it is drawn by.** FLTK draws it, offscreen, with the fonts and
+  smoothing the screen has. The ground is white: a picture has no
+  transparent pixels. It needs the display, like a window does.
+- An error in the drawing is raised from `snapshot` or `paint`.
+
 A `transparent = true` Canvas draws only what `onDraw` draws, over the
 controls under it, and takes the mouse before they do. That is how a
 designer puts handles over a form.

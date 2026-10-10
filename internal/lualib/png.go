@@ -89,6 +89,16 @@ func openPng(L *lua.LState) int {
 	return 1
 }
 
+// PushImage pushes a picture made elsewhere, the gui's paint, as one of
+// the png module's, whether or not the script has required it.
+func PushImage(L *lua.LState, pix *image.NRGBA) {
+	if L.GetTypeMetatable(imageType) == lua.LNil {
+		openPng(L)
+		L.Pop(1)
+	}
+	pushImage(L, pix)
+}
+
 func pushImage(L *lua.LState, pix *image.NRGBA) {
 	ud := L.NewUserData()
 	ud.Value = &Image{Pix: pix}

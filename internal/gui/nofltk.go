@@ -4,6 +4,7 @@ package gui
 
 import (
 	"errors"
+	"image"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -27,18 +28,21 @@ func addTimeout(secs float64, fn func()) error                      { return err
 func fileDialog(opts fileOptions) ([]string, error)                 { return nil, errNoBackend }
 func colorDialog(title string, r, g, b uint8) (string, bool, error) { return "", false, errNoBackend }
 func redraw(o *guiObject)                                           {}
-func releaseForm(f *guiObject, gone func())                         {}
-func destroyWidget(o *guiObject)                                    {}
-func restack(p *guiObject)                                          {}
-func selectText(o *guiObject, i, j int)                             {}
-func tableEdit(o *guiObject, row, col int)                          {}
-func tableEditing(o *guiObject) (int, int)                          { return 0, 0 }
-func insertText(o *guiObject, text string)                          {}
-func showMenu(o *guiObject, items *lua.LTable) (*menuPick, error)   { return nil, errNoBackend }
-func measureText(text, font string, size int) (int, int, error)     { return 0, 0, errNoBackend }
-func pointAt(o *guiObject, pos int) (int, int, int, bool)           { return 0, 0, 0, false }
-func getClipboard() (string, error)                                 { return "", errNoBackend }
-func setClipboard(text string) error                                { return errNoBackend }
+func paint(a *app, w, h int, k float64, draw func(g *lua.LTable) error) (*image.NRGBA, error) {
+	return nil, errNoBackend
+}
+func releaseForm(f *guiObject, gone func())                       {}
+func destroyWidget(o *guiObject)                                  {}
+func restack(p *guiObject)                                        {}
+func selectText(o *guiObject, i, j int)                           {}
+func tableEdit(o *guiObject, row, col int)                        {}
+func tableEditing(o *guiObject) (int, int)                        { return 0, 0 }
+func insertText(o *guiObject, text string)                        {}
+func showMenu(o *guiObject, items *lua.LTable) (*menuPick, error) { return nil, errNoBackend }
+func measureText(text, font string, size int) (int, int, error)   { return 0, 0, errNoBackend }
+func pointAt(o *guiObject, pos int) (int, int, int, bool)         { return 0, 0, 0, false }
+func getClipboard() (string, error)                               { return "", errNoBackend }
+func setClipboard(text string) error                              { return errNoBackend }
 
 func dialog(title, message string, buttons []string, input bool, deflt string, stop func() bool) (int, string, error) {
 	return -1, "", errNoBackend
