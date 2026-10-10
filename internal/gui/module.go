@@ -121,8 +121,9 @@ var kinds = map[string]*kind{
 	"Canvas": {
 		w: 200, h: 150,
 		events: []string{"onDraw", "onMouseDown", "onMouseUp", "onMouseMove", "onMouseDrag", "onMouseWheel", "onMouseEnter", "onMouseLeave", "onKey"},
-		props:  map[string]lua.LValue{"tabIndex": lua.LNumber(0), "color": lua.LString("#ffffff"), "transparent": lua.LFalse},
-		fixed:  []string{"transparent"},
+		props: map[string]lua.LValue{"tabIndex": lua.LNumber(0), "color": lua.LString("#ffffff"), "transparent": lua.LFalse,
+			"pointer": lua.LString("default")},
+		fixed: []string{"transparent"},
 	},
 	"Slider": {
 		w: 160, h: 28,
@@ -252,8 +253,10 @@ type app struct {
 	// gui.popup shows its menu over when it is not told where.
 	lastEvent *guiObject
 	methods   map[string]*lua.LFunction
-	// custom are the controls the script defined with gui.define.
-	custom map[string]*customKind
+	// custom are the controls the script defined with gui.define, and
+	// tlua's own written the same way, while definingBuiltins.
+	custom           map[string]*customKind
+	definingBuiltins bool
 	// read is where a fused program's own files come from, archive first;
 	// nil for a program on disk.
 	read func(string) ([]byte, error)
@@ -341,10 +344,12 @@ func (a *app) open(L *lua.LState) int {
 		"save":        a.save,
 		"kinds":       a.kindsTable,
 		"spawn":       a.spawn,
+		"openurl":     a.openURL,
 		"after":       a.timerFunc(false),
 		"every":       a.timerFunc(true),
 	})
 	mod.RawSetString("define", L.NewClosure(a.define, mod))
+	a.defineBuiltins(L, mod)
 	if exe, err := os.Executable(); err == nil {
 		// The tlua running this, for running another program with it.
 		mod.RawSetString("interpreter", lua.LString(exe))
@@ -705,6 +710,13 @@ func (a *app) checkProp(L *lua.LState, name string, value lua.LValue) (lua.LValu
 		default:
 			return nil, fmt.Errorf("gui: align must be \"left\", \"center\" or \"right\", not %q", lua.LVAsString(value))
 		}
+	case "pointer":
+		for _, p := range pointers {
+			if lua.LVAsString(value) == p {
+				return value, nil
+			}
+		}
+		return nil, fmt.Errorf("gui: pointer must be one of %s, not %q", strings.Join(pointers, ", "), lua.LVAsString(value))
 	case "file", "image":
 		return lua.LString(a.besideCaller(L, lua.LVAsString(value))), nil
 	}

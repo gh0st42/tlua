@@ -973,6 +973,33 @@ type canvas struct {
 	// paint is set while gui.paint or canvas:snapshot draws into a
 	// picture rather than onto the screen.
 	paint *paintArea
+	// hover is whether the mouse is over it, and pointed whether it has
+	// set the window's mouse pointer to its own.
+	hover, pointed bool
+}
+
+var pointerShapes = map[string]fltk.Cursor{
+	"hand": fltk.CURSOR_HAND, "text": fltk.CURSOR_INSERT, "cross": fltk.CURSOR_CROSS,
+	"move": fltk.CURSOR_MOVE, "wait": fltk.CURSOR_WAIT, "help": fltk.CURSOR_HELP,
+}
+
+// showPointer shows a Canvas's pointer while the mouse is over it, and
+// puts the usual one back when its pointer is "default" again.
+func showPointer(o *guiObject) {
+	c := canvasOf(o)
+	win := window(o.form())
+	if win == nil {
+		return
+	}
+	shape, ok := pointerShapes[propString(o, "pointer")]
+	switch {
+	case ok && c.hover:
+		win.SetCursor(shape)
+		c.pointed = true
+	case c.pointed:
+		win.SetCursor(fltk.CURSOR_DEFAULT)
+		c.pointed = false
+	}
 }
 
 // paintArea is a picture being painted: w by h units, at k pixels to a
@@ -1216,15 +1243,24 @@ func canvasEvent(o *guiObject, e fltk.Event) bool {
 		// FLTK sends the first move over a widget as this, so it is a move
 		// as well.
 		x, y := at()
+		canvasOf(o).hover = true
 		a.fire(o, "onMouseEnter")
 		a.fire(o, "onMouseMove", x, y)
+		if o.widget != nil {
+			showPointer(o)
+		}
 		return true // so that the moves after it come here
 	case fltk.LEAVE:
+		canvasOf(o).hover = false
+		showPointer(o)
 		a.fire(o, "onMouseLeave")
 		return true
 	case fltk.MOVE:
 		x, y := at()
 		a.fire(o, "onMouseMove", x, y)
+		if o.widget != nil {
+			showPointer(o)
+		}
 		return true
 	case fltk.MOUSEWHEEL:
 		if o.events["onMouseWheel"] == nil {

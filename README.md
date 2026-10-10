@@ -248,7 +248,8 @@ What there is:
 
 - **Controls:** Label, Button, TextBox (single, multi-line, password and
   read-only), CheckBox, RadioButton, ComboBox, ListBox, Tree, Table, Slider,
-  Spinner, ProgressBar, Image and Canvas.
+  Spinner, ProgressBar, Image, Canvas, and MarkdownView: formatted text with
+  links, for help pages and wikis.
 - **Containers:** Frame, and Tabs with their Pages, plus a menu bar with
   shortcuts.
 - **Dialogs:** message and input boxes, the system's file choosers, and modal
@@ -786,10 +787,16 @@ them.
   archive to a file or into a string.
 - `zlib` adds `zlib.gzip(s)`, `zlib.gunzip(s)` and `zlib.crc32(s)` for a
   string at once.
+- `markdown`: Markdown read into blocks and written back
+  (`markdown.parse(text)`, `markdown.write(blocks)`), with GitHub's tables,
+  `[[toc]]` for a list of the headings, and `[[Page]]` wiki links. `markdown.layout` and
+  `markdown.render` lay them out and draw them on a gui Canvas, which is
+  what the gui's MarkdownView is made of. A program's own `markdown.lua`,
+  if it has one, is found first.
 
 In a fused program or a bundle, `png.load` and `zip.open` read the
 program's own files out of it first, as `require` does. `library/png.lua`,
-`zlib.lua` and `zip.lua` declare them for lua-language-server.
+`zlib.lua`, `zip.lua` and `markdown.lua` declare them for lua-language-server.
 
 ## Compatibility notes
 

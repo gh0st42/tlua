@@ -16,3 +16,8 @@ need a tlua built with cgo (`make build`, not `make static`).
 - `paint.lua` - a pixel editor: a picture from `require "png"` drawn on a
   Canvas, painted with the mouse, opened and saved as PNG, and packed into
   a zip with `require "zip"`.
+- `help.lua` - a help window: Markdown pages in `help/` shown by a
+  MarkdownView, with the page's headings in a list beside it, back and
+  forward, a search box, a table, a `[[toc]]` list of contents, and links
+  to other pages (`[[wiki links]]` too), to headings, to the web and to
+  the program itself.

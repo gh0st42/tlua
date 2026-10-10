@@ -174,6 +174,11 @@ function Container:Image(opts) end
 ---@return gui.Canvas
 function Container:Canvas(opts) end
 
+--- Formatted text from Markdown, with links: help pages, notes, a wiki.
+---@param opts? gui.MarkdownViewOptions
+---@return gui.MarkdownView
+function Container:MarkdownView(opts) end
+
 ---@param opts? gui.Options
 ---@return gui.Frame
 function Container:Frame(opts) end
@@ -461,8 +466,11 @@ function Table:editing() end
 ---@field file? string
 ---@field fit? boolean
 
+---@alias gui.Pointer "default"|"hand"|"text"|"cross"|"move"|"wait"|"help"
+
 ---@class gui.Canvas: gui.Object
 ---@field transparent boolean draws only what onDraw draws, over what is under it; given when it is made
+---@field pointer gui.Pointer the mouse pointer while the mouse is over it
 ---@field onKey? fun(self: gui.Canvas, key: string, text: string): boolean? clicking it takes the keyboard
 ---@field onDraw? fun(self: gui.Canvas, g: gui.Graphics)
 ---@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer, double: boolean, mods: string) button 1 is left, 2 middle, 3 right; double for a double click; mods as "Shift" or "Ctrl+Shift"
@@ -484,6 +492,7 @@ function Canvas:snapshot(scale) end
 
 ---@class gui.CanvasOptions: gui.Options
 ---@field transparent? boolean draws only what onDraw draws, over what is under it; given when it is made
+---@field pointer? gui.Pointer the mouse pointer while the mouse is over it
 ---@field onKey? fun(self: gui.Canvas, key: string, text: string): boolean? clicking it takes the keyboard
 ---@field onDraw? fun(self: gui.Canvas, g: gui.Graphics)
 ---@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer, double: boolean, mods: string)
@@ -493,6 +502,76 @@ function Canvas:snapshot(scale) end
 ---@field onMouseWheel? fun(self: gui.Canvas, dx: integer, dy: integer)
 ---@field onMouseEnter? fun(self: gui.Canvas)
 ---@field onMouseLeave? fun(self: gui.Canvas)
+
+---@class gui.MarkdownView: gui.Canvas
+---@field text string the Markdown it shows; a page it opens puts its text here
+---@field file string the page it shows: a relative path is looked for next to the script, and links are read from the page's folder
+---@field textSize integer the size of its text: 15 unless given; everything else grows with it
+---@field onLink? fun(self: gui.MarkdownView, url: string): boolean? a link was clicked; true says the program followed it, and the view does nothing more
+---@field onNavigate? fun(self: gui.MarkdownView, file: string) it shows another page: opened, or gone back or forward to
+---@field onHover? fun(self: gui.MarkdownView, url: string?) the mouse is over a link now, or off it (nil)
+local MarkdownView = {}
+
+---@class gui.Heading
+---@field level integer 1 to 6
+---@field text string
+---@field anchor string what a link to it names after #
+
+--- Shows a page: a path read as a link on the page shown would be, with
+--- #anchor after it for a heading. back() comes back.
+---@param path string
+---@return boolean ok
+---@return string? why
+function MarkdownView:open(path) end
+
+---@return boolean went false with nowhere to go
+function MarkdownView:back() end
+
+---@return boolean went
+function MarkdownView:forward() end
+
+---@return boolean
+function MarkdownView:canGoBack() end
+
+---@return boolean
+function MarkdownView:canGoForward() end
+
+--- Does what a click on a link does: for an onLink that leaves some to it.
+---@param url string
+function MarkdownView:follow(url) end
+
+--- The page's headings, in order: for a list of contents.
+---@return gui.Heading[]
+function MarkdownView:headings() end
+
+--- Brings a heading to the top, by its anchor ("#usage" or "usage").
+---@param anchor string
+---@return boolean found
+function MarkdownView:scrollTo(anchor) end
+
+--- Selects where text is next found after the selection, case aside, and
+--- scrolls to it; from the top again at the end.
+---@param text string
+---@return boolean found
+function MarkdownView:search(text) end
+
+--- The text selected, without its formatting; "" for none.
+---@return string
+function MarkdownView:selectedText() end
+
+--- Puts the selected text on the clipboard; false with nothing selected.
+---@return boolean
+function MarkdownView:copy() end
+
+function MarkdownView:selectAll() end
+
+---@class gui.MarkdownViewOptions: gui.Options
+---@field text? string
+---@field file? string
+---@field textSize? integer
+---@field onLink? fun(self: gui.MarkdownView, url: string): boolean?
+---@field onNavigate? fun(self: gui.MarkdownView, file: string)
+---@field onHover? fun(self: gui.MarkdownView, url: string?)
 
 ---@class gui.Frame: gui.Container
 ---@class gui.Panel: gui.Container
@@ -690,6 +769,10 @@ function gui.Image(opts) end
 ---@return gui.Canvas
 function gui.Canvas(opts) end
 
+---@param opts? gui.MarkdownViewOptions
+---@return gui.MarkdownView
+function gui.MarkdownView(opts) end
+
 ---@param opts? gui.Options
 ---@return gui.Frame
 function gui.Frame(opts) end
@@ -785,6 +868,14 @@ gui.platform = nil
 ---@overload fun(text: string)
 ---@return string
 function gui.clipboard() end
+
+--- Opens a web address in the browser, a mail address in the mail
+--- program, or a file in the program it belongs to. It returns once that
+--- program has started.
+---@param target string
+---@return boolean? ok
+---@return string? why
+function gui.openurl(target) end
 
 --- The tlua that is running, for running another program with it.
 ---@type string

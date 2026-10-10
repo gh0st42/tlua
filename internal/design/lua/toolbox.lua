@@ -7,7 +7,7 @@ local model = require "design.model"
 
 local M = {}
 
-local ROW = 22 -- eighteen rows fit the pane
+local ROW = 20 -- twenty rows fit the pane: every kind, and one of the project's
 
 -- glyphs draw each kind in a box 20 wide and 16 high at x, y.
 local glyphs = {}
@@ -109,6 +109,14 @@ function glyphs.Table(g, x, y)
   g:color("#404040"); g:rect(x + 1, y + 1, 18, 14)
   g:line(x + 1, y + 5, x + 19, y + 5); g:line(x + 1, y + 10, x + 19, y + 10)
   g:line(x + 7, y + 1, x + 7, y + 15); g:line(x + 13, y + 1, x + 13, y + 15)
+end
+
+function glyphs.MarkdownView(g, x, y)
+  g:color("white"); g:fill(x + 1, y + 1, 18, 14)
+  g:color("#404040"); g:rect(x + 1, y + 1, 18, 14)
+  g:fill(x + 4, y + 4, 8, 2)
+  g:line(x + 4, y + 8, x + 15, y + 8)
+  g:color("#1a5fb4"); g:line(x + 4, y + 11, x + 11, y + 11)
 end
 
 -- A control of the project's own: VB6's user-control box.

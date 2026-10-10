@@ -127,7 +127,7 @@ end
 -- classOf is the language server's name for what a layout's kind makes.
 local function classOf(kind)
   local info = model.kinds()[kind]
-  if info and not info.defined then return "gui." .. kind end
+  if info and (not info.defined or info.builtin) then return "gui." .. kind end
   return "gui.Object"
 end
 

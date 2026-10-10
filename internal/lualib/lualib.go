@@ -20,4 +20,5 @@ func Open(L *lua.LState) {
 	L.PreloadModule("png", openPng)
 	L.PreloadModule("zip", openZip)
 	preloadSocket(L)
+	installLuaModules(L)
 }

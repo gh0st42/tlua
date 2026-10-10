@@ -685,6 +685,10 @@ func applyProp(o *guiObject, name string, value lua.LValue) error {
 		setNumber(o, name, float64(lua.LVAsNumber(value)))
 	case "cursor":
 		setCursor(o, int(lua.LVAsNumber(value)))
+	case "pointer":
+		if o.kind == "Canvas" {
+			showPointer(o)
+		}
 	case "line":
 		if e, ok := o.widget.(*fltk.TextEditor); ok {
 			n := int(lua.LVAsNumber(value))
@@ -693,10 +697,12 @@ func applyProp(o *guiObject, name string, value lua.LValue) error {
 			}
 			setCursor(o, e.Buffer().SkipLines(0, n-1))
 		}
-	case "file":
-		return setImage(o, lua.LVAsString(value))
-	case "fit":
-		return setImage(o, propString(o, "file"))
+	case "file", "fit":
+		// An Image's picture; a Canvas's file is a field of its own (a
+		// MarkdownView's page).
+		if o.kind == "Image" {
+			return setImage(o, propString(o, "file"))
+		}
 	}
 	return nil
 }

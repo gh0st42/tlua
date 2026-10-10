@@ -49,10 +49,15 @@ var propSchema = map[string]propInfo{
 	"default": {typ: "boolean"}, "vertical": {typ: "boolean"}, "resizable": {typ: "boolean"},
 	"checked": {typ: "boolean"}, "fit": {typ: "boolean"}, "editable": {typ: "boolean"},
 	"contextMenu": {typ: "menu"},
+	"pointer":     {typ: "choice", choices: pointers},
 	"selected":    {typ: "integer"}, "min": {typ: "number"}, "max": {typ: "number"},
 	"step": {typ: "number"}, "value": {typ: "number"},
 	"items": {typ: "list"}, "columns": {typ: "list"}, "rows": {typ: "rows"}, "columnWidths": {typ: "list"},
 }
+
+// pointers are the mouse pointers a Canvas can show while the mouse is
+// over it.
+var pointers = []string{"default", "hand", "text", "cross", "move", "wait", "help"}
 
 // styleProps every kind takes, with no default of their own.
 var styleProps = []string{"color", "textColor", "font", "fontSize"}
@@ -735,6 +740,9 @@ func (a *app) kindsTable(L *lua.LState) int {
 		k.RawSetString("events", stringList(L, append(append([]string{}, ck.events...), commonEvents...)))
 		k.RawSetString("holds", L.NewTable())
 		k.RawSetString("defined", lua.LTrue)
+		if ck.builtin {
+			k.RawSetString("builtin", lua.LTrue)
+		}
 		out.RawSetString(name, k)
 	}
 	L.Push(out)

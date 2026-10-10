@@ -77,7 +77,8 @@ behind its siblings, which is also the order a layout lists them in.
 | `ListBox`     | `items`, `selected`, `text`                          | `onChange`, `onDoubleClick` |
 | `Tree`        | `items` (see below), `path`, `text`                  | `onChange`, `onDoubleClick`, `onToggle` |
 | `Table`       | `columns`, `rows`, `columnWidths`, `selected`, `editable` | `onChange`, `onDoubleClick`, `onStartEdit`, `onEdit`, `onEditButton` |
-| `Canvas`      | drawn by its `onDraw` (see below); `color` is the background; `transparent` shows what is under it | `onDraw`, `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseDrag`, `onMouseWheel`, `onMouseEnter`, `onMouseLeave`, `onKey` |
+| `Canvas`      | drawn by its `onDraw` (see below); `color` is the background; `transparent` shows what is under it; `pointer` is the mouse pointer over it | `onDraw`, `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseDrag`, `onMouseWheel`, `onMouseEnter`, `onMouseLeave`, `onKey` |
+| `MarkdownView` | formatted text with links (see [below](#formatted-text-markdownview)): `text`, `file`, `textSize` | `onLink`, `onNavigate`, `onHover` |
 | `Slider`      | `min`, `max`, `step`, `value`, `vertical`            | `onChange` |
 | `Spinner`     | `min`, `max`, `step`, `value`                        | `onChange` |
 | `ProgressBar` | `min`, `max`, `value`; `caption` is drawn on the bar | — |
@@ -398,6 +399,10 @@ Mouse handlers get positions in the same coordinates:
   focus, and keys are named as a Form's `onKey` names them. Returning true
   keeps the key from going further.
 
+`canvas.pointer` is the mouse pointer while the mouse is over it:
+`"default"`, `"hand"`, `"text"`, `"cross"`, `"move"`, `"wait"` or `"help"`.
+Setting it from `onMouseMove` gives a hand over what can be clicked.
+
 A Canvas with other controls on top of it is drawn again together with
 them, so redrawing it never paints over them.
 
@@ -432,6 +437,97 @@ end)
 A `transparent = true` Canvas draws only what `onDraw` draws, over the
 controls under it, and takes the mouse before they do. That is how a
 designer puts handles over a form.
+
+## Formatted text: MarkdownView
+
+A MarkdownView shows Markdown as formatted text, and follows its links: for
+help pages, notes beside a form, or a small wiki of `.md` files.
+
+```lua
+local help = form:MarkdownView { left = 8, top = 8, width = 400, height = 300,
+                                 file = "help/index.md" }   -- or text = "# Hi\n..."
+function help:onLink(url)
+  if url:match("^app:") then runCommand(url:sub(5)) return true end
+end
+help:open("editing.md#undo")   -- another page, at a heading
+help:back()
+```
+
+- **What it shows.** Headings, paragraphs, **bold**, *italic*, `code`, links,
+  lists (bulleted and numbered, nested), quotes, code blocks, rules,
+  pictures, and tables as GitHub writes them:
+
+  ```markdown
+  | Key    | Does        |
+  |:-------|------------:|
+  | Ctrl+C | copies      |
+  ```
+
+  A table's columns are as wide as their widest cell when they fit, and
+  share out the room when they do not, the text in the cells wrapping. The
+  header row is bold, and `:---`, `:---:` and `---:` align a column left,
+  centred or right. `\|` is a pipe inside a cell.
+- **`[[toc]]`**, on a line of its own, is a list of the page's headings,
+  each a link to its heading, indented by its level.
+- **`[[Page Name]]`** is a link to the page `Page Name.md` beside this one,
+  which is how a wiki links its pages. `[[Page Name|other words]]` shows
+  other words, and `[[Page Name#heading]]` goes to a heading on it. When
+  there is no `Page Name.md`, `Page-Name.md` is shown, as a GitHub wiki
+  names its pages.
+- **`text` and `file`.** `text` is the Markdown shown. Giving `file` reads
+  the page from that file into `text`; a relative path is looked for next to
+  the script, as an Image's is, and out of the program's own files first in
+  a fused program or a bundle. Links and pictures on the page are read from
+  the page's folder.
+- **`textSize`** is the size of its text, 15 unless given. Headings, spaces
+  and indents grow with it. `color` is the background and `textColor` the
+  text's colour.
+- **Links.** A click on a link calls `onLink(self, url)` first. Returning
+  true says the program followed it. Otherwise:
+  - `#anchor` scrolls to the heading on the page with that anchor, which is
+    made as GitHub makes them: `## Getting Started!` is `#getting-started`.
+  - A path to a `.md` file, or with no extension, opens that page in the
+    view, `#anchor` and all, and can be gone back from. A name with no
+    extension is looked for with `.md` after it too.
+  - `http:`, `https:`, `mailto:` and `file:` addresses open with
+    `gui.openurl`, in the browser or the mail program.
+  - Any other file opens with `gui.openurl` too, in its own program.
+  - Any other scheme, such as `app:`, is left to `onLink`.
+- **Pages.** `view:open(path)` shows a page, as a link to it would; it
+  returns false and why when the file cannot be read, and shows that. Then
+  `view:back()`, `view:forward()`, `view:canGoBack()` and
+  `view:canGoForward()` go through the pages seen. `onNavigate(self, file)`
+  says another page is shown, to update buttons or a title.
+  `view:follow(url)` does what a click on the link does, for an `onLink`
+  that handles some links and leaves the rest.
+- **Headings.** `view:headings()` lists the page's headings, each with
+  `level`, `text` and `anchor`, for a list of contents.
+  `view:scrollTo(anchor)` brings one to the top.
+- **Hovering.** Over a link the pointer is a hand, and
+  `onHover(self, url)` says which link; it is called with nil when the mouse
+  leaves it, so a status line can show where a link goes.
+- **Selecting.** Dragging selects text, a double click a word.
+  `view:selectedText()` is the text selected, `view:copy()` puts it on the
+  clipboard, and `view:selectAll()` selects everything.
+  `view:search(text)` selects where text is next found, the case of letters
+  aside, and scrolls to it.
+- **Keys.** Clicked on, it takes the keyboard. Up, Down, Page Up, Page Down,
+  Space, Home and End scroll; Ctrl+C (Cmd+C) copies and Ctrl+A selects all;
+  Alt+Left and Alt+Right (Cmd+[ and Cmd+]) go back and forward.
+
+`examples/gui/help.lua` is a help window built on one: a list of the page's
+headings beside it, back and forward buttons, and a search box.
+
+A MarkdownView is written in Lua, on a Canvas, as a control of your own
+would be, out of three modules any program can use as well:
+
+- `markdown` reads Markdown into blocks, `markdown.parse(text)`, and writes
+  them back, `markdown.write(blocks)`.
+- `markdown.layout` lays the blocks out on a page of a given width.
+- `markdown.render` draws them with a Canvas's `g`.
+
+An editor of your own can be built on them; that is what microword, in
+turboapps, does.
 
 ## Drag and drop
 
@@ -644,6 +740,11 @@ program beside this one:
 
 `gui.interpreter` is the tlua that is running, for running another Lua
 program with it.
+
+`gui.openurl(target)` opens a web address in the browser, a `mailto:`
+address in the mail program, or a file or folder in the program the system
+opens it with. It returns true once that program has started, or nil and
+why.
 
 ## Dialogs and timers
 

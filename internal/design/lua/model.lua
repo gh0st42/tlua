@@ -10,7 +10,7 @@ local M = {}
 M.tools = {
   "Label", "TextBox", "Button", "CheckBox", "RadioButton", "ComboBox",
   "ListBox", "Frame", "Panel", "Image", "Canvas", "Slider", "Spinner",
-  "ProgressBar", "Tree", "Table", "Tabs",
+  "ProgressBar", "Tree", "Table", "Tabs", "MarkdownView",
 }
 
 -- Kinds a new control of which starts with its name as its caption, the way
@@ -32,11 +32,12 @@ function M.refreshKinds()
   kinds = nil
 end
 
--- defined lists the kinds a project defined, by name.
+-- defined lists the kinds a project defined, by name: not tlua's own that
+-- are written the same way, which are among the tools.
 function M.definedKinds()
   local out = {}
   for name, info in pairs(M.kinds()) do
-    if info.defined then out[#out + 1] = name end
+    if info.defined and not info.builtin then out[#out + 1] = name end
   end
   table.sort(out)
   return out

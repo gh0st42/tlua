@@ -32,6 +32,9 @@ type customKind struct {
 	// what a layout keeps, and what is set on the control when it is made
 	// with them.
 	props map[string]customProp
+	// builtin is a control that comes with tlua, written in Lua as a
+	// script's own are, rather than one the script defined.
+	builtin bool
 }
 
 type customProp struct {
@@ -89,7 +92,7 @@ func (a *app) define(L *lua.LState) int {
 			L.RaiseError("gui.define: %s", bad)
 		}
 	}
-	a.custom[name] = &customKind{events: events, build: build, props: props}
+	a.custom[name] = &customKind{events: events, build: build, props: props, builtin: a.definingBuiltins}
 	// gui.Rating{...} goes where gui.Button{...} would.
 	mod := L.Get(lua.UpvalueIndex(1)).(*lua.LTable)
 	mod.RawSetString(name, L.NewFunction(func(L *lua.LState) int {
