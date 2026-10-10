@@ -62,6 +62,30 @@ in an Alpine container. go-fltk's FLTK is built for glibc; on musl the six
 glibc file functions it calls are given by `internal/gui/muslcompat`, built
 in with `-tags musl`.
 
+### Updating
+
+A tlua from a release updates itself:
+
+```sh
+tlua update          # says whether there is a newer release, and asks
+tlua update -check   # only says
+tlua update -y       # updates without asking
+```
+
+It asks GitHub for the latest release, and when that is newer, downloads
+the same archive of it as the one it came from (the musl one for a musl
+build, the static one for a static one), checks it against the release's
+`SHA256SUMS`, runs the new `tlua -v` to see that it works here, and only then
+puts it in its own place. On Windows the old `tlua.exe` is moved aside to
+`tlua.exe.old`, which the next tlua removes. It needs to be able to write to
+the folder tlua is in.
+
+`scripts/build-release.sh` stamps each build with the archive it goes into
+(`-X tlua/internal/version.Build=linux-amd64-musl`, say). A tlua built any
+other way, with `make` or `go build`, has no stamp: `tlua update` says it was
+built from source and leaves it alone. So does a build for a platform the
+releases do not have.
+
 ## Use
 
 ```

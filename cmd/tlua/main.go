@@ -20,6 +20,7 @@ import (
 	"tlua/internal/gui"
 	"tlua/internal/interp"
 	"tlua/internal/payload"
+	"tlua/internal/update"
 	"tlua/internal/version"
 )
 
@@ -33,6 +34,7 @@ const usage = `usage: tlua [options] [script [args]]
        tlua app.ztl [args]
        tlua bundle [-o output] [-play] <main.lua | directory>
        tlua fuse [-o output] [-play] <main.lua | directory | archive.zip>
+       tlua update [-check] [-y]
 
 Options:
   -e stat    execute string 'stat'
@@ -69,6 +71,10 @@ named .ztl, .zip or .app: "tlua app.ztl" runs it the way a fused binary
 runs, as a script, a desktop application or a game, on any platform tlua
 runs on. The bundle subcommand makes one; "tlua bundle -h" explains it.
 
+The update subcommand asks GitHub for tlua's latest release and, when it is
+newer, offers to put it in this tlua's place. Only a release build does
+this; "tlua update -h" explains it.
+
 The fuse subcommand attaches a Lua program to a copy of this binary, producing
 a standalone executable; with -play the executable opens a window and runs the
 program against the console. "tlua fuse -h" explains it. A zip concatenated
@@ -96,6 +102,8 @@ func main() {
 		}
 	}
 
+	update.RemoveOld() // what an update on Windows left behind
+
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "fuse":
@@ -108,6 +116,8 @@ func main() {
 			os.Exit(design.Command(os.Args[2:]))
 		case "play":
 			os.Exit(game.Command(os.Args[2:]))
+		case "update":
+			os.Exit(update.Command(os.Args[2:]))
 		}
 	}
 

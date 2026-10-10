@@ -47,6 +47,10 @@ type Interp struct {
 
 // New creates an interpreter with the standard libraries open and the search
 // path, arg table and signal handling already set up.
+// NoEnv says whether it was told to ignore the environment (-E), which
+// other parts of tlua that read TLUA_* variables follow too.
+func (r *Interp) NoEnv() bool { return r.opts != nil && r.opts.NoEnv }
+
 func New(opts *Options) *Interp {
 	L := lua.NewState(lua.Options{
 		// The standard libraries are what make a plain .lua file run as-is.

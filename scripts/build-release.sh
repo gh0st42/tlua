@@ -40,7 +40,10 @@ build() {
   [ "$os" = windows ] && exe=tlua.exe
   rm -rf "dist/$name"
   mkdir -p "dist/$name"
-  CGO_ENABLED=$cgo go build -trimpath -tags "$tags" -ldflags "-s -w $extra" -o "dist/$name/$exe" ./cmd/tlua
+  # The build knows which archive it is in, so that tlua update can fetch
+  # the same one of a newer release.
+  stamp="-X tlua/internal/version.Build=${name#tlua-$version-}"
+  CGO_ENABLED=$cgo go build -trimpath -tags "$tags" -ldflags "-s -w $stamp $extra" -o "dist/$name/$exe" ./cmd/tlua
   cp README.md "dist/$name/"
   mkdir -p "dist/$name/docs"
   cp docs/*.md "dist/$name/docs/"
