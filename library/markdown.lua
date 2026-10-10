@@ -1,7 +1,8 @@
 ---@meta markdown
 --- Markdown read into blocks and written back, `require "markdown"`: what
 --- a gui MarkdownView shows. `markdown.layout` lays the blocks out on a page
---- and `markdown.render` draws them on a Canvas, for controls of your own.
+--- and `markdown.render` draws them on a Canvas, for controls of your own;
+--- `markdown.editor` edits them, as a gui MarkdownEdit does.
 --- A program's own markdown.lua, if it has one, is found first.
 
 local markdown = {}
@@ -108,5 +109,59 @@ function markdown.prevChar(text, o) end
 ---@param text string
 ---@return string
 function markdown.anchor(text) end
+
+--- A document being edited: `require("markdown.editor").new(blocks)`, or a
+--- MarkdownEdit's `ed`. A position is { b = block, o = byte offset }.
+---@class markdown.Editor
+---@field blocks markdown.Block[]
+---@field caret {b: integer, o: integer}
+---@field anchor {b: integer, o: integer} where the selection starts
+---@field dirty boolean
+local Editor = {}
+
+---@param blocks markdown.Block[]
+function Editor:load(blocks) end
+---@return string
+function Editor:markdown() end
+---@param text string typed at the caret, over the selection
+function Editor:type(text) end
+function Editor:enter() end
+function Editor:backspace() end
+function Editor:undo() end
+function Editor:redo() end
+---@return boolean
+function Editor:canUndo() end
+---@return boolean
+function Editor:canRedo() end
+---@param key "b"|"i"|"code" bold, italic or code, over the selection or for what is typed next
+function Editor:toggle(key) end
+---@param key "b"|"i"|"code"
+---@return boolean
+function Editor:isOn(key) end
+---@param t "p"|"h1"|"h2"|"h3"|"quote"|"code"|"ul"|"ol"
+---@param toggle? boolean back to a paragraph when it is that already
+function Editor:setType(t, toggle) end
+---@return string
+function Editor:blockType() end
+---@param url string "" takes the link off
+function Editor:setLink(url) end
+---@param p? {b: integer, o: integer}
+---@return string? url
+function Editor:linkAt(p) end
+---@param src string
+---@param alt? string
+function Editor:insertImage(src, alt) end
+function Editor:insertRule() end
+---@param text string Markdown, or plain text
+function Editor:paste(text) end
+---@return string Markdown of the selection
+function Editor:copyText() end
+function Editor:deleteSelection() end
+function Editor:selectAll() end
+---@return boolean
+function Editor:hasSelection() end
+---@return integer words
+---@return integer characters
+function Editor:stats() end
 
 return markdown

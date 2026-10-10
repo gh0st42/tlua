@@ -10,7 +10,7 @@ local M = {}
 M.tools = {
   "Label", "TextBox", "Button", "CheckBox", "RadioButton", "ComboBox",
   "ListBox", "Frame", "Panel", "Image", "Canvas", "Slider", "Spinner",
-  "ProgressBar", "Tree", "Table", "Tabs", "MarkdownView",
+  "ProgressBar", "Tree", "Table", "Tabs", "MarkdownView", "MarkdownEdit",
 }
 
 -- Kinds a new control of which starts with its name as its caption, the way

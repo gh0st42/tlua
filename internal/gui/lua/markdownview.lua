@@ -78,8 +78,12 @@ gui.define {
       return file ~= "" and dirname(file) or ""
     end
 
-    -- picture is the png image a picture block shows, read once.
+    -- picture is the png image a picture block shows: the program's from
+    -- pictures, by its src, or read once from the page's folder.
     local function picture(self, src)
+      local given = self.pictures and self.pictures[src]
+      if type(given) == "table" and not given.width then given = given.image end
+      if given then return given end
       local path = join(base(self), unescape(src))
       local img = s.images[path]
       if img == nil then

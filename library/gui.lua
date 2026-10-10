@@ -179,6 +179,11 @@ function Container:Canvas(opts) end
 ---@return gui.MarkdownView
 function Container:MarkdownView(opts) end
 
+--- Markdown edited as it looks: a word processor's page, or a note's.
+---@param opts? gui.MarkdownEditOptions
+---@return gui.MarkdownEdit
+function Container:MarkdownEdit(opts) end
+
 ---@param opts? gui.Options
 ---@return gui.Frame
 function Container:Frame(opts) end
@@ -507,6 +512,7 @@ function Canvas:snapshot(scale) end
 ---@field text string the Markdown it shows; a page it opens puts its text here
 ---@field file string the page it shows: a relative path is looked for next to the script, and links are read from the page's folder
 ---@field textSize integer the size of its text: 15 unless given; everything else grows with it
+---@field pictures? table<string, png.Image|{image: png.Image}> pictures the program has, by the src the page gives them, before the page's folder is looked in
 ---@field onLink? fun(self: gui.MarkdownView, url: string): boolean? a link was clicked; true says the program followed it, and the view does nothing more
 ---@field onNavigate? fun(self: gui.MarkdownView, file: string) it shows another page: opened, or gone back or forward to
 ---@field onHover? fun(self: gui.MarkdownView, url: string?) the mouse is over a link now, or off it (nil)
@@ -572,6 +578,43 @@ function MarkdownView:selectAll() end
 ---@field onLink? fun(self: gui.MarkdownView, url: string): boolean?
 ---@field onNavigate? fun(self: gui.MarkdownView, file: string)
 ---@field onHover? fun(self: gui.MarkdownView, url: string?)
+
+---@class gui.MarkdownEdit: gui.Canvas
+---@field ed markdown.Editor the document and what edits it: e.g. edit.ed:toggle("b"), then edit:changed()
+---@field pictures table<string, png.Image|{image: png.Image}> the pictures the document shows, by the src it gives them
+---@field textSize integer the size of its text: 15 unless given; everything else grows with it
+---@field paper boolean a page on a grey desk, as a word processor shows it; a plain background otherwise
+---@field onChange? fun(self: gui.MarkdownEdit) the document changed
+---@field onSelect? fun(self: gui.MarkdownEdit) the caret or the selection moved
+---@field onMenu? fun(self: gui.MarkdownEdit, x: integer, y: integer) a right click, for a context menu
+---@field onLink? fun(self: gui.MarkdownEdit, url: string) a Cmd- or Ctrl-click on a link: a wiki link's url is its page, "Page Name.md"
+---@field onHover? fun(self: gui.MarkdownEdit, url: string?) the mouse is over a link now, or off it (nil)
+local MarkdownEdit = {}
+
+--- Shows a document, Markdown text or blocks markdown.parse made, with the
+--- pictures it shows (pictures as the field holds them). Undo starts afresh.
+---@param doc string|markdown.Block[]
+---@param pictures? table<string, png.Image|{image: png.Image}>
+function MarkdownEdit:load(doc, pictures) end
+
+--- The document as Markdown text.
+---@return string
+function MarkdownEdit:markdown() end
+
+--- Shows the document again and raises onChange, after edit.ed changed it.
+function MarkdownEdit:changed() end
+
+--- Shows the caret again and raises onSelect, after edit.ed moved it.
+function MarkdownEdit:moved() end
+
+---@class gui.MarkdownEditOptions: gui.Options
+---@field textSize? integer
+---@field paper? boolean
+---@field onChange? fun(self: gui.MarkdownEdit)
+---@field onSelect? fun(self: gui.MarkdownEdit)
+---@field onMenu? fun(self: gui.MarkdownEdit, x: integer, y: integer)
+---@field onLink? fun(self: gui.MarkdownEdit, url: string)
+---@field onHover? fun(self: gui.MarkdownEdit, url: string?)
 
 ---@class gui.Frame: gui.Container
 ---@class gui.Panel: gui.Container

@@ -79,6 +79,7 @@ behind its siblings, which is also the order a layout lists them in.
 | `Table`       | `columns`, `rows`, `columnWidths`, `selected`, `editable` | `onChange`, `onDoubleClick`, `onStartEdit`, `onEdit`, `onEditButton` |
 | `Canvas`      | drawn by its `onDraw` (see below); `color` is the background; `transparent` shows what is under it; `pointer` is the mouse pointer over it | `onDraw`, `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseDrag`, `onMouseWheel`, `onMouseEnter`, `onMouseLeave`, `onKey` |
 | `MarkdownView` | formatted text with links (see [below](#formatted-text-markdownview)): `text`, `file`, `textSize` | `onLink`, `onNavigate`, `onHover` |
+| `MarkdownEdit` | Markdown edited as it looks (see [below](#editing-markdown-markdownedit)): `textSize`, `paper` | `onChange`, `onSelect`, `onMenu`, `onLink`, `onHover` |
 | `Slider`      | `min`, `max`, `step`, `value`, `vertical`            | `onChange` |
 | `Spinner`     | `min`, `max`, `step`, `value`                        | `onChange` |
 | `ProgressBar` | `min`, `max`, `value`; `caption` is drawn on the bar | — |
@@ -479,6 +480,10 @@ help:back()
   the script, as an Image's is, and out of the program's own files first in
   a fused program or a bundle. Links and pictures on the page are read from
   the page's folder.
+- **`pictures`**, when the program sets it, holds pictures by the `src` a
+  page gives them, a `png` image each (or a table with one in its `image`
+  field), as a MarkdownEdit's does: for pages whose pictures are not files,
+  such as ones kept in a zip. Those it does not have are read as before.
 - **`textSize`** is the size of its text, 15 unless given. Headings, spaces
   and indents grow with it. `color` is the background and `textColor` the
   text's colour.
@@ -526,8 +531,52 @@ would be, out of three modules any program can use as well:
 - `markdown.layout` lays the blocks out on a page of a given width.
 - `markdown.render` draws them with a Canvas's `g`.
 
-An editor of your own can be built on them; that is what microword, in
-turboapps, does.
+- `markdown.editor` edits them: typing, Enter and Backspace, styles, the
+  kinds of block, lists, links, pictures, the clipboard and undo, with no
+  GUI in it. A MarkdownEdit is one drawn on a Canvas.
+
+## Editing Markdown: MarkdownEdit
+
+A MarkdownEdit edits Markdown as it looks, the way a word processor does:
+what it holds is Markdown, and what it shows is the formatted text, with the
+caret and the selection.
+
+```lua
+local edit = form:MarkdownEdit { left = 0, top = 30, width = 600, height = 400, grow = true }
+edit:load("# Notes\n\nSee [[Ideas]].\n", pictures)   -- text, and the pictures it shows
+function edit:onChange() saveLater(edit:markdown()) end
+function edit:onLink(url) openNote(url) end            -- a Cmd- or Ctrl-click on a link
+edit.ed:toggle("b") edit:changed()                     -- a Bold button
+```
+
+- **The document.** `edit:load(text or blocks [, pictures])` shows a
+  document and starts undo afresh; `edit:markdown()` is what it holds now.
+- **Editing.** Typing, Enter, Backspace and Delete, Shift+Enter for a line
+  break, Tab and Shift+Tab to indent a list item, the arrows (Alt or Ctrl
+  for words, Cmd or Home and End for the line), Page Up and Down, Shift to
+  select, a double click for a word. `# `, `## `, `- `, `1. ` and `> ` at a
+  paragraph's start make it a heading, a list item or a quote, and `---`
+  then Enter a rule. Tables, `[[toc]]` and pictures are kept whole: the
+  caret steps over each as one character.
+- **What a program adds.** `edit.ed` is the `markdown.editor` underneath:
+  its `toggle("b")`, `setType("h2")`, `setLink(url)`, `insertImage(src)`,
+  `undo()`, `copyText()`, `paste(text)` and the rest are a program's menus
+  and toolbar. After calling one, `edit:changed()` shows the change and
+  raises `onChange`; `edit:moved()` is for the caret alone. Cmd and Ctrl
+  keys are left to the menus.
+- **Pictures.** `edit.pictures` holds the pictures the document shows, by
+  the `src` it gives them: a `png` image, or a table with one in its
+  `image` field. Where they come from (a zip, a folder) is the program's.
+- **Links.** Over a link the pointer is a hand and `onHover(self, url)`
+  says which. A Cmd- or Ctrl-click on one calls `onLink(self, url)`; a wiki
+  link `[[Page Name]]` gives `"Page Name.md"`.
+- **Events.** `onChange` when the document changes, `onSelect` when the
+  caret or the selection moves, `onMenu(self, x, y)` for a right click.
+- **Looks.** `paper = true` shows a page on a grey desk, as microword
+  does; otherwise it fills with its `color`. `textSize` is 15 unless given.
+  The text column is at most 700 wide, at size 15, in the middle.
+
+microword and micronotes, in turboapps, are built on it.
 
 ## Drag and drop
 

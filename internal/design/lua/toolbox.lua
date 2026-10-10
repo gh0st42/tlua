@@ -119,6 +119,14 @@ function glyphs.MarkdownView(g, x, y)
   g:color("#1a5fb4"); g:line(x + 4, y + 11, x + 11, y + 11)
 end
 
+function glyphs.MarkdownEdit(g, x, y)
+  g:color("white"); g:fill(x + 1, y + 1, 18, 14)
+  g:color("#404040"); g:rect(x + 1, y + 1, 18, 14)
+  g:fill(x + 4, y + 4, 8, 2)
+  g:line(x + 4, y + 8, x + 12, y + 8)
+  g:color("#1a5fb4"); g:fill(x + 14, y + 6, 1, 7)
+end
+
 -- A control of the project's own: VB6's user-control box.
 function glyphs.Defined(g, x, y)
   g:color("#fff4dc"); g:fill(x + 1, y + 1, 18, 14)

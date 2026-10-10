@@ -1,10 +1,11 @@
 package lualib
 
-// markdown, markdown.layout and markdown.render are tlua's own, written in
-// Lua: Markdown read into blocks and written back, laid out on a page, and
-// drawn on a gui Canvas. The gui's MarkdownView is made of them, and so can
-// a program's own controls be. They are found after the program's own
-// modules, so a program with a markdown.lua of its own keeps using it.
+// markdown, markdown.layout, markdown.render and markdown.editor are tlua's
+// own, written in Lua: Markdown read into blocks and written back, laid out
+// on a page, drawn on a gui Canvas, and edited. The gui's MarkdownView and
+// MarkdownEdit are made of them, and so can a program's own controls be.
+// They are found after the program's own modules, so a program with a
+// markdown.lua of its own keeps using it.
 //
 // Each is also tlua.<name>, which is how they require one another and the
 // MarkdownView requires them: those names are preloaded, so a program's own
@@ -25,6 +26,7 @@ var luaModules = map[string]string{
 	"markdown":        "lua/markdown.lua",
 	"markdown.layout": "lua/markdown_layout.lua",
 	"markdown.render": "lua/markdown_render.lua",
+	"markdown.editor": "lua/markdown_editor.lua",
 }
 
 func installLuaModules(L *lua.LState) {
