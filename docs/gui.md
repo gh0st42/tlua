@@ -784,6 +784,18 @@ form again builds it afresh from those values. So a form made for one
 question, on each click, does not pile up. Replacing an Image's `file` frees
 the picture it showed.
 
+## Looks
+
+`gui.scheme(name)` gives every window one of FLTK's looks: `"base"`, FLTK's
+own and the default, `"gtk+"`, softer edges, `"gleam"`, glossy gradients,
+`"plastic"`, a striped background, or `"oxy"`, smooth gradients and
+borderless text boxes. It can be called before a form is shown or after,
+and returns the look in effect; `gui.scheme()` only returns it.
+
+The user has the last word: `TLUA_SCHEME=oxy tlua app.lua` runs any program
+in that look, whatever it asks for, and `gui.scheme` then returns the
+user's. `tlua -E` ignores the variable, as it does the other `TLUA_` ones.
+
 ## Running another program
 
 `gui.spawn{command, args..., dir = ..., onOutput = fn, onExit = fn}` runs a

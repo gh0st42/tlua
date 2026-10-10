@@ -257,6 +257,11 @@ type app struct {
 	// tlua's own written the same way, while definingBuiltins.
 	custom           map[string]*customKind
 	definingBuiltins bool
+	// scheme is FLTK's look the program asked for with gui.scheme, and
+	// userScheme the one the user asked for with TLUA_SCHEME, which wins.
+	// schemed is set once one of them is in effect.
+	scheme, userScheme string
+	schemed            bool
 	// read is where a fused program's own files come from, archive first;
 	// nil for a program on disk.
 	read func(string) ([]byte, error)
@@ -351,6 +356,7 @@ func (a *app) open(L *lua.LState) int {
 		"kinds":       a.kindsTable,
 		"spawn":       a.spawn,
 		"openurl":     a.openURL,
+		"scheme":      a.schemeFunc,
 		"after":       a.timerFunc(false),
 		"every":       a.timerFunc(true),
 	})
@@ -1184,6 +1190,7 @@ func (a *app) requestClose(f *guiObject) {
 
 // build puts a form's window together, if it has none, and keeps track of it.
 func (a *app) build(f *guiObject) error {
+	a.applyScheme()
 	if err := buildForm(f); err != nil {
 		return err
 	}
@@ -1472,4 +1479,58 @@ func (o *guiObject) applyStoredProps() error {
 		}
 	}
 	return nil
+}
+
+// Schemes are FLTK's looks: "base" is its own, which a program has unless
+// it or its user asks for another.
+var Schemes = []string{"base", "gtk+", "gleam", "plastic", "oxy"}
+
+// IsScheme says whether name is one of them.
+func IsScheme(name string) bool {
+	for _, s := range Schemes {
+		if s == name {
+			return true
+		}
+	}
+	return false
+}
+
+// currentScheme is the look in effect: the user's, else the program's.
+func (a *app) currentScheme() string {
+	switch {
+	case a.userScheme != "":
+		return a.userScheme
+	case a.scheme != "":
+		return a.scheme
+	}
+	return "base"
+}
+
+// applyScheme gives FLTK the look once a form is about to be shown, or
+// again when it changes after that; with nobody having asked for one, FLTK
+// is left as it is.
+func (a *app) applyScheme() {
+	if a.userScheme == "" && a.scheme == "" {
+		return
+	}
+	a.schemed = true
+	setScheme(a.currentScheme())
+}
+
+// schemeFunc is gui.scheme([name]): the look of every window, one of
+// Schemes. It returns the look in effect, which is the user's when
+// TLUA_SCHEME names one, whatever the program asks for.
+func (a *app) schemeFunc(L *lua.LState) int {
+	if L.GetTop() >= 1 {
+		name := L.CheckString(1)
+		if !IsScheme(name) {
+			L.ArgError(1, fmt.Sprintf("a scheme is one of %s, not %q", strings.Join(Schemes, ", "), name))
+		}
+		a.scheme = name
+		if a.schemed || len(a.forms) > 0 {
+			a.applyScheme()
+		}
+	}
+	L.Push(lua.LString(a.currentScheme()))
+	return 1
 }

@@ -912,6 +912,15 @@ gui.platform = nil
 ---@return string
 function gui.clipboard() end
 
+---@alias gui.Scheme "base"|"gtk+"|"gleam"|"plastic"|"oxy"
+
+--- FLTK's look for every window: "base" (its own, the default), "gtk+",
+--- "gleam", "plastic" or "oxy". It returns the look in effect, which is the
+--- user's when TLUA_SCHEME names one, whatever the program asks for.
+---@param name? gui.Scheme
+---@return gui.Scheme
+function gui.scheme(name) end
+
 --- Opens a web address in the browser, a mail address in the mail
 --- program, or a file in the program it belongs to. It returns once that
 --- program has started.

@@ -280,6 +280,12 @@ func covered(o *guiObject) bool {
 	return false
 }
 
+// setScheme gives every window FLTK's look of that name, and redraws
+// those already up.
+func setScheme(name string) {
+	fltk.SetScheme(name)
+}
+
 func setClipboard(text string) error {
 	fltk.CopyToClipboard(text)
 	return nil

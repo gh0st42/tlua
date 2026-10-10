@@ -3,6 +3,10 @@
 package gui
 
 import (
+	"fmt"
+	"os"
+	"strings"
+
 	lua "github.com/yuin/gopher-lua"
 
 	"tlua/internal/interp"
@@ -31,6 +35,14 @@ type Boot struct {
 func Ready(in *interp.Interp, read func(string) ([]byte, error)) *Boot {
 	b := &Boot{app: Open(in.L)}
 	b.app.read = read
+	// TLUA_SCHEME is the user's choice of look, over the program's.
+	if name := os.Getenv("TLUA_SCHEME"); name != "" && !in.NoEnv() {
+		if IsScheme(name) {
+			b.app.userScheme = name
+		} else {
+			fmt.Fprintf(os.Stderr, "tlua: TLUA_SCHEME=%s is not a scheme; it is one of %s\n", name, strings.Join(Schemes, ", "))
+		}
+	}
 	in.L.SetGlobal("bootgui", in.L.NewFunction(func(L *lua.LState) int {
 		if b.late {
 			L.RaiseError("bootgui: too late to ask for a window; a program asks while it is running, not after")

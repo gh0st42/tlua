@@ -56,6 +56,7 @@ Environment:
   TLUA_LSP       language server the editor formats, completes and hovers
                  with, or "off"; by default it looks for one on PATH
   TLUA_LOVE      love2d binary for the editor's LOVE run mode
+  TLUA_SCHEME    the look of GUI windows: base, gtk+, gleam, plastic or oxy
 
 The edit subcommand opens a full-screen Lua editor: a menu bar, several files
 at once, F5 to run the primary file, F9 to check its syntax, and, when a

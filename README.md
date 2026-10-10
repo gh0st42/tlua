@@ -117,6 +117,7 @@ Environment:
   TLUA_LSP       language server the editor formats, completes and hovers
                  with, or "off"; by default it looks for one on PATH
   TLUA_LOVE      love2d binary for the editor's LOVE run mode
+  TLUA_SCHEME    the look of GUI windows: base, gtk+, gleam, plastic or oxy
 ```
 
 ```sh
@@ -753,6 +754,7 @@ sources only cost one lookup each.
 | `TLUA_INIT` | A chunk to run before anything else; `@file` runs a file. Takes precedence over `LUA_INIT`. |
 | `TLUA_LSP` | The language server `tlua edit` formats with, as a command with any arguments. `off` uses none. Unset, the editor looks for one on PATH. |
 | `TLUA_LOVE` | The love2d binary the editor runs in LÖVE mode, as a command with any arguments. Unset, it looks for `love` on PATH and in `/Applications/love.app` on macOS. |
+| `TLUA_SCHEME` | The look of every GUI window: FLTK's scheme `base`, `gtk+`, `gleam`, `plastic` or `oxy`. It wins over what a program asks for with `gui.scheme`, so a user can give every tlua program the look they like. |
 | `LUA_PATH`, `LUA_INIT` | The standard Lua variables, honoured as the reference interpreter does. |
 
 So a machine declares its shared Lua libraries once:

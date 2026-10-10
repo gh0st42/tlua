@@ -43,6 +43,7 @@ func measureText(text, font string, size int) (int, int, error)   { return 0, 0,
 func pointAt(o *guiObject, pos int) (int, int, int, bool)         { return 0, 0, 0, false }
 func getClipboard() (string, error)                               { return "", errNoBackend }
 func setClipboard(text string) error                              { return errNoBackend }
+func setScheme(name string)                                       {}
 
 func dialog(title, message string, buttons []string, input bool, deflt string, stop func() bool) (int, string, error) {
 	return -1, "", errNoBackend
