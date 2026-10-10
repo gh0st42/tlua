@@ -94,3 +94,12 @@ a copy, so `t.x, a = a, t.x` stored `a` after it had changed.
 With more than one target every value now goes to a temporary first, and
 the assignments follow, as Lua does; one target keeps the shortcut.
 
+
+## stringlib.go: string.match with no match
+
+`string.match` pushed nil when nothing matched but said it returned no
+values, so `select("#", s:match(p))` was 0 rather than 1, and
+`tonumber(s:match(p))` was an error ("value expected") rather than nil, as
+was any call that took the result as an argument. It returns its nil now.
+`string.byte` of an empty range and a finished `gmatch` iterator still
+return nothing, as Lua 5.1's do.

@@ -104,6 +104,12 @@ func TestGopherLuaPatches(t *testing.T) {
 			assert(not pcall(function() return "0b101" + 0 end))
 			assert(tonumber("ff", 16) == 255 and tonumber("0xff", 16) == 255 and tonumber("8", 8) == nil)
 			assert(tonumber("z", 36) == 35 and tonumber("-101", 2) == -5 and not pcall(tonumber, "1", 99))`,
+		"string.match gives nil when nothing matches": `
+			assert(select("#", ("ab"):match("x")) == 1 and ("ab"):match("x") == nil)
+			assert(tonumber(("h2"):match("^h(%d)$")) == 2 and tonumber(("p"):match("^h(%d)$")) == nil)
+			local t = { ("ab"):match("x"), "after" }
+			assert(t[1] == nil and t[2] == "after")
+			assert(select("#", ("ab"):find("x")) == 1)`,
 		"multiple assignment computes every value first": `
 			local a, b = 1, 2
 			a, b = b, a
