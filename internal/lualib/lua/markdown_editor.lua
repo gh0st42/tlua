@@ -454,7 +454,8 @@ function Editor:insertBlock(block)
   local cur = self.blocks[i]
   if cur.type == "p" and M.length(cur) == 0 then
     self.blocks[i] = block
-  elseif not hasText(cur) and self.caret.o == 0 then
+  elseif self.caret.o == 0 then
+    -- At a block's start the new one goes before it, leaving it whole.
     table.insert(self.blocks, i, block)
   else
     if hasText(cur) and self.caret.o < M.length(cur) then

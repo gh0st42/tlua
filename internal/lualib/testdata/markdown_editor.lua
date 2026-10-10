@@ -217,4 +217,14 @@ test("word and character counts", function()
 end)
 
 
+test("a block put in at a paragraph's start goes before it", function()
+  local e = ed("# One\n\ntext\n")
+  e:insertBlock { type = "toc" }
+  eq(e:markdown(), "[[toc]]\n\n# One\n\ntext\n")
+  eq(e.caret.b, 2) eq(e.caret.o, 0)
+  e:setCaret { b = 3, o = 2 }
+  e:insertRule()
+  eq(e:markdown(), "[[toc]]\n\n# One\n\nte\n\n---\n\nxt\n")
+end)
+
 if #failed > 0 then error(#failed .. " failed:\n" .. table.concat(failed, "\n"), 0) end

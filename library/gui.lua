@@ -587,7 +587,7 @@ function MarkdownView:selectAll() end
 ---@field onChange? fun(self: gui.MarkdownEdit) the document changed
 ---@field onSelect? fun(self: gui.MarkdownEdit) the caret or the selection moved
 ---@field onMenu? fun(self: gui.MarkdownEdit, x: integer, y: integer) a right click, for a context menu
----@field onLink? fun(self: gui.MarkdownEdit, url: string) a Cmd- or Ctrl-click on a link: a wiki link's url is its page, "Page Name.md"
+---@field onLink? fun(self: gui.MarkdownEdit, url: string): boolean? a Cmd- or Ctrl-click on a link: a wiki link's url is its page, "Page Name.md"; a #heading link is gone to unless this returns true
 ---@field onHover? fun(self: gui.MarkdownEdit, url: string?) the mouse is over a link now, or off it (nil)
 local MarkdownEdit = {}
 
@@ -601,6 +601,16 @@ function MarkdownEdit:load(doc, pictures) end
 ---@return string
 function MarkdownEdit:markdown() end
 
+--- The document's headings, in order: for a list of contents.
+---@return gui.Heading[]
+function MarkdownEdit:headings() end
+
+--- Puts the caret at a heading, by its anchor ("#usage" or "usage"), and
+--- brings it to the top.
+---@param anchor string
+---@return boolean found
+function MarkdownEdit:scrollTo(anchor) end
+
 --- Shows the document again and raises onChange, after edit.ed changed it.
 function MarkdownEdit:changed() end
 
@@ -613,7 +623,7 @@ function MarkdownEdit:moved() end
 ---@field onChange? fun(self: gui.MarkdownEdit)
 ---@field onSelect? fun(self: gui.MarkdownEdit)
 ---@field onMenu? fun(self: gui.MarkdownEdit, x: integer, y: integer)
----@field onLink? fun(self: gui.MarkdownEdit, url: string)
+---@field onLink? fun(self: gui.MarkdownEdit, url: string): boolean?
 ---@field onHover? fun(self: gui.MarkdownEdit, url: string?)
 
 ---@class gui.Frame: gui.Container

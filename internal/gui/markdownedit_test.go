@@ -43,3 +43,26 @@ form:show()`, func(s *scene) {
 		s.expect(`menu == true`)
 	})
 }
+
+// A [[toc]] entry Ctrl-clicked goes to its heading, unless onLink took it.
+func TestMarkdownEditGoesToHeadings(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 420, height = 200}
+edit = form:MarkdownEdit{left = 10, top = 10, width = 400, height = 180,
+  onLink = function(self, url) linked = url end}
+local lines = { "[[toc]]", "", "# One", "" }
+for i = 1, 30 do lines[#lines + 1] = "filler " .. i lines[#lines + 1] = "" end
+lines[#lines + 1] = "## Far Down"
+edit:load(table.concat(lines, "\n") .. "\n")
+form:show()`, func(s *scene) {
+		s.expect(`#edit:headings() == 2 and edit:headings()[2].anchor == "far-down" and edit:headings()[2].block == nil`)
+		s.expect(`edit:scrollTo("#far-down") and edit.ed.caret.b == 33 and edit.ed.caret.o == 0`)
+		s.expect(`not edit:scrollTo("nowhere")`)
+		s.lua(`edit.ed:moveToDocument(-1) edit:moved()`)
+		s.pump()
+		// The list of contents is the first block: its first entry, One.
+		x, y := s.at("edit", 16+12, 16+11)
+		in.ClickWith(x, y, fltk.CTRL)
+		s.expect(`linked == "#one" and edit.ed.caret.b == 2`)
+	})
+}

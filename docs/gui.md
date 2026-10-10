@@ -569,7 +569,10 @@ edit.ed:toggle("b") edit:changed()                     -- a Bold button
   `image` field. Where they come from (a zip, a folder) is the program's.
 - **Links.** Over a link the pointer is a hand and `onHover(self, url)`
   says which. A Cmd- or Ctrl-click on one calls `onLink(self, url)`; a wiki
-  link `[[Page Name]]` gives `"Page Name.md"`.
+  link `[[Page Name]]` gives `"Page Name.md"`. A link to a heading,
+  `#anchor` (a `[[toc]]` entry's), goes there unless `onLink` returns true.
+- **Headings.** `edit:headings()` lists them, as a MarkdownView's do, and
+  `edit:scrollTo(anchor)` puts the caret at one and brings it to the top.
 - **Events.** `onChange` when the document changes, `onSelect` when the
   caret or the selection moves, `onMenu(self, x, y)` for a right click.
 - **Looks.** `paper = true` shows a page on a grey desk, as microword

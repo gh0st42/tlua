@@ -9,7 +9,7 @@
 local gui, host = ...
 -- The markdown modules are tlua's, required when the first one is made, so
 -- that the gui module opens in a state without them.
-local editor, layout, render
+local editor, layout, render, md
 
 local BAR = 12           -- the scrollbar's width
 local MARGIN = 56        -- around the text, on paper
@@ -25,7 +25,7 @@ gui.define {
     paper = { type = "boolean", default = false },
   },
   build = function(parent, opts)
-    editor = require "tlua.markdown.editor"
+    editor, md = require "tlua.markdown.editor", require "tlua.markdown"
     layout, render = require "tlua.markdown.layout", require "tlua.markdown.render"
     local c = parent:Canvas { width = 400, height = 300 }
     c.ed = editor.new()
@@ -101,6 +101,31 @@ gui.define {
     -- where things are; nil before the first draw.
     function c:layout() return s.lay end
 
+    -- headings lists the document's headings: level, text and the anchor a
+    -- link to it names, as a MarkdownView's do.
+    function c:headings()
+      local out = md.headings(self.ed.blocks)
+      for _, h in ipairs(out) do h.block = nil end
+      return out
+    end
+
+    -- scrollTo puts the caret at a heading, by its anchor ("#usage" or
+    -- "usage"), and brings it to the top; false when there is no such one.
+    function c:scrollTo(anchor)
+      anchor = tostring(anchor or ""):gsub("^#", "")
+      for _, h in ipairs(md.headings(self.ed.blocks)) do
+        if h.anchor == anchor then
+          self.ed:setCaret { b = h.block, o = 0 }
+          self.ed.goalX = nil
+          s.top = h.block
+          self:redraw()
+          self:fire("onSelect")
+          return true
+        end
+      end
+      return false
+    end
+
     ---------------------------------------------------------------- drawing
 
     local function relayout(self, columnW)
@@ -123,6 +148,11 @@ gui.define {
       local ed = self.ed
       local pad = top(self)
       local total = lay.height + 2 * pad
+      if s.top and lay.blocks[s.top] then
+        -- A heading gone to comes to the top.
+        s.scrollY = lay.blocks[s.top].y
+        s.top, s.reveal = nil, false
+      end
       if s.reveal then
         local _, cy, ch = lay:caret(ed.caret)
         if cy + pad - s.scrollY < 8 then s.scrollY = cy + pad - 8 end
@@ -227,11 +257,12 @@ gui.define {
         self:fire("onMenu", x, y)
         return
       end
-      -- Cmd- or Ctrl-click follows a link, which is onLink's to do.
+      -- Cmd- or Ctrl-click follows a link: onLink's to do, but for a link
+      -- to a heading here, which the editor goes to unless onLink did.
       if mods:find("Cmd") or mods:find("Ctrl") then
         local url = s.lay and s.lay:linkAt(pageAt(self, x, y)) or ed:linkAt(p)
         if url then
-          self:fire("onLink", url)
+          if self:fire("onLink", url) ~= true and url:match("^#") then self:scrollTo(url) end
           return
         end
       end
