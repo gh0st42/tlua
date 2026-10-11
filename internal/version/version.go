@@ -3,7 +3,7 @@
 package version
 
 // Number is the release, as major.minor.patch.
-const Number = "0.6.1"
+const Number = "0.6.2"
 
 // Build is the platform a release build was made for, as its archive is
 // named (tlua-VERSION-<Build>.tar.gz): scripts/build-release.sh sets it with
