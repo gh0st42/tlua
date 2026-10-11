@@ -779,11 +779,20 @@ exception: tlua carries them, written in Go, and `require` finds them first.
 The Lua half of each library is used as LuaRocks installs it, so a `lib/`
 directory copied from a LuaRocks tree works with its `.so` files left behind.
 
+For LuaSocket and LuaSec, tlua carries the Lua half too: LuaSocket 3.1.0's
+`socket`, `socket.http`, `socket.url`, `socket.headers`, `socket.tp`,
+`socket.ftp`, `socket.smtp`, `ltn12` and `mime`, and LuaSec 1.3.2's `ssl`
+and `ssl.https`, as their authors wrote them (MIT licensed; the licences are
+in `internal/lualib/lua/`). So `require "socket"` and `require "ssl"` work
+with nothing installed. They are found after `package.path`, so a program
+or a LuaRocks tree with its own copies keeps using those.
+
 | Module | Is | So these work |
 | --- | --- | --- |
 | `lfs` | LuaFileSystem 1.9 | anything that walks directories |
 | `mime.core` | LuaSocket 3.1's MIME core | `mime`, `ltn12` filters |
 | `socket.core` | LuaSocket 3.1's core, Linux and macOS | `socket`, `socket.http`, `socket.smtp`, `socket.ftp`, `socket.tp`, `socket.url`, `socket.headers` |
+| `ssl.core`, `ssl.context`, `ssl.x509`, `ssl.config` | LuaSec 1.3.2's core, on Go's `crypto/tls`, Linux and macOS | `ssl`, `ssl.https`, and `https://` addresses in `socket.http` (see [TLS](#tls)) |
 | `zlib` | lua-zlib 1.2's API, with lzlib's `compress` and `decompress` | anything using either rock: deflate, inflate, gzip, crc32, adler32 |
 | `zip` | LuaZip's reading API, and writing | `zip.open(path)`, `zfile:files()`, `zfile:open(name)` |
 
@@ -798,6 +807,94 @@ against Python's zlib, gzip and zipfile instead, both ways round. What differs:
   resolved by Go, from the same `/etc/hosts` and `resolv.conf`, and
   `socket.dns.toip` and `tohostname` list no aliases. There is no
   `socket.unix` or `socket.serial`, and no `socket.core` on Windows.
+
+### TLS
+
+`require "ssl"` is LuaSec: a LuaSocket TCP connection wrapped in TLS, as a
+client or a server, with certificates, ALPN and SNI. Its Go half is
+built on Go's `crypto/tls`, and LuaSec's own `ssl.lua` and `ssl/https.lua`
+run on top of it, so code written for LuaSec runs as it is:
+
+```lua
+local socket, ssl = require "socket", require "ssl"
+
+local tcp = assert(socket.connect("example.org", 443))
+local conn = assert(ssl.wrap(tcp, { mode = "client", protocol = "any", verify = "peer" }))
+conn:sni("example.org")
+assert(conn:dohandshake())
+conn:send("GET / HTTP/1.0\r\nHost: example.org\r\n\r\n")
+print(conn:receive("*l"))           --> HTTP/1.1 200 OK
+print(conn:info("protocol"))        --> TLSv1.3
+conn:close()
+
+local https = require "ssl.https"   -- or socket.http, given an https:// address
+local body, code = https.request("https://example.org/")
+```
+
+- **Connections.** `ssl.wrap(sock, params)` takes a connected TCP socket
+  over; `conn:dohandshake()` shakes hands; `send`, `receive` (with
+  LuaSocket's patterns), `settimeout`, `close`, `dirty` and `getfd` work as
+  a socket's do, and `socket.select` takes connections too. A read or a
+  write that runs out of time says `"wantread"` or `"wantwrite"`, as LuaSec
+  does, so non-blocking code (copas and the like) works.
+- **Parameters.** `mode` (`"client"` or `"server"`), `protocol` (`"any"`,
+  `"tlsv1_2"`, `"tlsv1_3"`, ...), `key` and `certificate` (PEM files, or
+  `certificates` for several), `password`, `cafile` and `capath`, `verify`
+  (`"none"`, `"peer"`, `"fail_if_no_peer_cert"`), `verifyext`
+  (`"lsec_continue"`, `"lsec_ignore_purpose"`), `options` (`"no_tlsv1_2"`
+  and the like), `alpn`, `curve` and `curveslist`, `depth`.
+- **Certificates.** `conn:getpeercertificate()`, `getpeerchain()`,
+  `getlocalcertificate()` and `ssl.loadcertificate(pem)` give certificates
+  with `digest("sha256")`, `subject()`, `issuer()`, `extensions()` (the
+  alternative names), `notbefore()`, `notafter()`, `validat(time)`,
+  `serial()`, `pubkey()`, `pem()` and `issued(other)`.
+  `conn:getpeerverification()` says whether the peer's chain checked out,
+  and if not, why, in OpenSSL's words (`"self-signed certificate"`,
+  `"certificate has expired"`, ...).
+- **Also:** `conn:getalpn()`, `conn:getsniname()`, `conn:info()` (cipher,
+  protocol, bits), `conn:exportkeyingmaterial(label, n)`, and `conn:sni(map)`
+  for a server choosing a certificate by the name a client asks for.
+
+**Checking certificates.** As in LuaSec, a connection checks nothing
+unless it is told to: without `verify = "peer"` the handshake succeeds
+whatever the peer shows, and `getpeerverification()` says what was wrong.
+`ssl.https` also asks for no checking, as LuaSec's does; pass
+`verify = "peer"` in a request table to have it. With `verify = "peer"` a
+bad chain fails the handshake with `"certificate verify failed"`. Only the
+chain is checked, not that the certificate names the host: LuaSec leaves
+that to the program, with `cert:extensions()` and `cert:subject()`.
+
+**Gemini.** Gemini capsules mostly sign their own certificates, which no
+authority vouches for; a client trusts a host's certificate the first time
+and expects the same one after. `examples/net/gemini.lua` is such a client:
+
+```lua
+local conn = assert(ssl.wrap(tcp, { mode = "client", protocol = "tlsv1_2" }))
+conn:sni(host)
+assert(conn:dohandshake())
+local fingerprint = conn:getpeercertificate():digest("sha256")
+-- compare with the one this host showed before, then:
+conn:send("gemini://" .. host .. "/\r\n")
+print(conn:receive("*l"))           --> 20 text/gemini
+```
+
+A capsule that asks who is visiting gets a client certificate given as
+`key` and `certificate`, which is sent whatever the server asks for.
+
+What differs from LuaSec on OpenSSL:
+
+- With `verify = "peer"` and no `cafile` or `capath`, the system's trusted
+  roots are used; LuaSec loads none, and every chain fails.
+- `ciphers`, `ciphersuites` and `dhparam` are accepted and left to Go, which
+  chooses its own cipher suites; `protocol = "any"` allows TLS 1.2 and 1.3,
+  Go's floor. Keys are PEM: PKCS#1, PKCS#8 or EC, and the old encrypted PEM
+  with a password, not encrypted PKCS#8. `key`, `certificate` and `cafile`
+  may be the PEM itself rather than a path, and a path is read out of a
+  fused program or a bundle first.
+- With `verifyext = "lsec_continue"`, `getpeerverification()` gives the
+  reason as a string, not LuaSec's table by depth. `getfinished()` and
+  `getpeerfinished()` return nothing, and there is no PSK or DANE.
+- Like `socket.core`, the `ssl` modules exist on Linux and macOS only.
 
 ### tlua's own modules
 
@@ -822,7 +919,8 @@ them.
 
 In a fused program or a bundle, `png.load` and `zip.open` read the
 program's own files out of it first, as `require` does. `library/png.lua`,
-`zlib.lua`, `zip.lua` and `markdown.lua` declare them for lua-language-server.
+`zlib.lua`, `zip.lua` and `markdown.lua` declare them for lua-language-server,
+and `library/ssl.lua` declares LuaSec's `ssl`.
 
 ## Compatibility notes
 

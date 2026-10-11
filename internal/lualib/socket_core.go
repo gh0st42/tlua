@@ -27,6 +27,7 @@ import (
 
 func preloadSocket(L *lua.LState) {
 	L.PreloadModule("socket.core", openSocketCore)
+	preloadSSL(L)
 }
 
 func openSocketCore(L *lua.LState) int {

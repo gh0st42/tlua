@@ -348,25 +348,41 @@ func (b *sockBuffer) skip(n int) {
 	}
 }
 
-// get hands back what is buffered, reading more first if nothing is.
-func (s *lsock) bufGet(L *lua.LState) ([]byte, int) {
-	err := ioDone
-	if s.buf.isempty() {
-		var n int
-		n, err = sockRecv(L, s.fd, s.buf.data[:], nil, &s.tm)
-		s.buf.first, s.buf.last = 0, n
-	}
-	return s.buf.data[s.buf.first:s.buf.last], err
+// transport is what a buffer reads from and writes to: a socket's
+// descriptor, or a TLS connection over one (ssl.core). Each returns the
+// bytes moved and what the operation came to, as sockRecv and sockSend do.
+type transport interface {
+	recvInto(L *lua.LState, p []byte, tm *timeout) (int, int)
+	sendFrom(L *lua.LState, p []byte, tm *timeout) (int, int)
 }
 
-func (s *lsock) recvRaw(L *lua.LState, wanted int, out []byte) ([]byte, int) {
+func (s *lsock) recvInto(L *lua.LState, p []byte, tm *timeout) (int, int) {
+	return sockRecv(L, s.fd, p, nil, tm)
+}
+
+func (s *lsock) sendFrom(L *lua.LState, p []byte, tm *timeout) (int, int) {
+	return sockSend(L, s.fd, p, nil, tm)
+}
+
+// get hands back what is buffered, reading more first if nothing is.
+func (b *sockBuffer) get(L *lua.LState, t transport, tm *timeout) ([]byte, int) {
+	err := ioDone
+	if b.isempty() {
+		var n int
+		n, err = t.recvInto(L, b.data[:], tm)
+		b.first, b.last = 0, n
+	}
+	return b.data[b.first:b.last], err
+}
+
+func (b *sockBuffer) recvRaw(L *lua.LState, t transport, tm *timeout, wanted int, out []byte) ([]byte, int) {
 	err, total := ioDone, 0
 	for err == ioDone {
 		var data []byte
-		data, err = s.bufGet(L)
+		data, err = b.get(L, t, tm)
 		n := min(len(data), wanted-total)
 		out = append(out, data[:n]...)
-		s.buf.skip(n)
+		b.skip(n)
 		total += n
 		if total >= wanted {
 			break
@@ -375,14 +391,14 @@ func (s *lsock) recvRaw(L *lua.LState, wanted int, out []byte) ([]byte, int) {
 	return out, err
 }
 
-func (s *lsock) recvAll(L *lua.LState, out []byte) ([]byte, int) {
+func (b *sockBuffer) recvAll(L *lua.LState, t transport, tm *timeout, out []byte) ([]byte, int) {
 	err, total := ioDone, 0
 	for err == ioDone {
 		var data []byte
-		data, err = s.bufGet(L)
+		data, err = b.get(L, t, tm)
 		total += len(data)
 		out = append(out, data...)
-		s.buf.skip(len(data))
+		b.skip(len(data))
 	}
 	if err == ioClosed && total > 0 {
 		return out, ioDone
@@ -391,11 +407,11 @@ func (s *lsock) recvAll(L *lua.LState, out []byte) ([]byte, int) {
 }
 
 // recvLine reads up to a LF, dropping every CR on the way.
-func (s *lsock) recvLine(L *lua.LState, out []byte) ([]byte, int) {
+func (b *sockBuffer) recvLine(L *lua.LState, t transport, tm *timeout, out []byte) ([]byte, int) {
 	err := ioDone
 	for err == ioDone {
 		var data []byte
-		data, err = s.bufGet(L)
+		data, err = b.get(L, t, tm)
 		pos := 0
 		for pos < len(data) && data[pos] != '\n' {
 			if data[pos] != '\r' {
@@ -404,22 +420,115 @@ func (s *lsock) recvLine(L *lua.LState, out []byte) ([]byte, int) {
 			pos++
 		}
 		if pos < len(data) {
-			s.buf.skip(pos + 1)
+			b.skip(pos + 1)
 			break
 		}
-		s.buf.skip(pos)
+		b.skip(pos)
 	}
 	return out, err
 }
 
-func (s *lsock) sendRaw(L *lua.LState, data []byte) (int, int) {
+func (b *sockBuffer) sendRaw(L *lua.LState, t transport, tm *timeout, data []byte) (int, int) {
 	err, total := ioDone, 0
 	for total < len(data) && err == ioDone {
 		step := min(len(data)-total, sendStepSize)
 		var n int
-		n, err = sockSend(L, s.fd, data[total:total+step], nil, &s.tm)
+		n, err = t.sendFrom(L, data[total:total+step], tm)
 		total += n
 	}
-	s.buf.sent += float64(total)
+	b.sent += float64(total)
 	return total, err
+}
+
+// bufReceive is buffer_meth_receive: obj:receive([pattern [, prefix]]) on
+// whatever the buffer reads from, with strerror for its failures.
+func bufReceive(L *lua.LState, b *sockBuffer, t transport, tm *timeout, strerror func(int) string) int {
+	prefix, _ := optString(L, 3)
+	tm.markstart()
+	out := []byte(prefix)
+	e := ioDone
+	if n, ok := toNumber(L.Get(2)); ok {
+		if n < 0 {
+			L.ArgError(2, "invalid receive pattern")
+		}
+		wanted := int(n)
+		if len(prefix) == 0 || wanted > len(prefix) {
+			out, e = b.recvRaw(L, t, tm, wanted-len(prefix), out)
+		}
+	} else {
+		p := optStringDef(L, 2, "*l")
+		switch {
+		case len(p) >= 2 && p[0] == '*' && p[1] == 'l':
+			out, e = b.recvLine(L, t, tm, out)
+		case len(p) >= 2 && p[0] == '*' && p[1] == 'a':
+			out, e = b.recvAll(L, t, tm, out)
+		default:
+			L.ArgError(2, "invalid receive pattern")
+		}
+	}
+	if e != ioDone {
+		L.Push(lua.LNil)
+		L.Push(lua.LString(strerror(e)))
+		L.Push(lua.LString(out))
+	} else {
+		L.Push(lua.LString(out))
+		L.Push(lua.LNil)
+		L.Push(lua.LNil)
+	}
+	L.Push(lua.LNumber(gettime() - tm.start))
+	return 4
+}
+
+// bufSend is buffer_meth_send: obj:send(data [, i [, j]]).
+func bufSend(L *lua.LState, b *sockBuffer, t transport, tm *timeout, strerror func(int) string) int {
+	data := L.CheckString(2)
+	start := int64(L.OptNumber(3, 1))
+	end := int64(L.OptNumber(4, -1))
+	tm.markstart()
+	size := int64(len(data))
+	if start < 0 {
+		start = size + start + 1
+	}
+	if end < 0 {
+		end = size + end + 1
+	}
+	if start < 1 {
+		start = 1
+	}
+	if end > size {
+		end = size
+	}
+	sent, e := 0, ioDone
+	if start <= end {
+		sent, e = b.sendRaw(L, t, tm, []byte(data[start-1:end]))
+	}
+	last := lua.LNumber(int64(sent) + start - 1)
+	if e != ioDone {
+		L.Push(lua.LNil)
+		L.Push(lua.LString(strerror(e)))
+		L.Push(last)
+	} else {
+		L.Push(last)
+		L.Push(lua.LNil)
+		L.Push(lua.LNil)
+	}
+	L.Push(lua.LNumber(gettime() - tm.start))
+	return 4
+}
+
+// bufGetstats and bufSetstats are getstats and setstats.
+func bufGetstats(L *lua.LState, b *sockBuffer) int {
+	L.Push(lua.LNumber(b.received))
+	L.Push(lua.LNumber(b.sent))
+	L.Push(lua.LNumber(gettime() - b.birthday))
+	return 3
+}
+
+func bufSetstats(L *lua.LState, b *sockBuffer) int {
+	b.received = float64(L.OptNumber(2, lua.LNumber(b.received)))
+	b.sent = float64(L.OptNumber(3, lua.LNumber(b.sent)))
+	if age, ok := toNumber(L.Get(4)); ok {
+		b.birthday = gettime() - age
+	}
+	return pushOne(L)
 }

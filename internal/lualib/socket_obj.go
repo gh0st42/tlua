@@ -460,20 +460,12 @@ func tcpGetpeername(L *lua.LState) int {
 
 func tcpGetstats(L *lua.LState) int {
 	_, s := checkSock(L, classTCPClient)
-	L.Push(lua.LNumber(s.buf.received))
-	L.Push(lua.LNumber(s.buf.sent))
-	L.Push(lua.LNumber(gettime() - s.buf.birthday))
-	return 3
+	return bufGetstats(L, &s.buf)
 }
 
 func tcpSetstats(L *lua.LState) int {
 	_, s := checkSock(L, classTCPClient)
-	s.buf.received = float64(L.OptNumber(2, lua.LNumber(s.buf.received)))
-	s.buf.sent = float64(L.OptNumber(3, lua.LNumber(s.buf.sent)))
-	if age, ok := toNumber(L.Get(4)); ok {
-		s.buf.birthday = gettime() - age
-	}
-	return pushOne(L)
+	return bufSetstats(L, &s.buf)
 }
 
 // tcpSend is send(data [, i [, j]]): the bytes i..j of data, and how far it
@@ -482,39 +474,7 @@ func tcpSetstats(L *lua.LState) int {
 // LUASOCKET_DEBUG.
 func tcpSend(L *lua.LState) int {
 	_, s := checkSock(L, classTCPClient)
-	data := L.CheckString(2)
-	start := int64(L.OptNumber(3, 1))
-	end := int64(L.OptNumber(4, -1))
-	s.tm.markstart()
-	size := int64(len(data))
-	if start < 0 {
-		start = size + start + 1
-	}
-	if end < 0 {
-		end = size + end + 1
-	}
-	if start < 1 {
-		start = 1
-	}
-	if end > size {
-		end = size
-	}
-	sent, e := 0, ioDone
-	if start <= end {
-		sent, e = s.sendRaw(L, []byte(data[start-1:end]))
-	}
-	last := lua.LNumber(int64(sent) + start - 1)
-	if e != ioDone {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(sockStrerror(e)))
-		L.Push(last)
-	} else {
-		L.Push(last)
-		L.Push(lua.LNil)
-		L.Push(lua.LNil)
-	}
-	L.Push(lua.LNumber(gettime() - s.tm.start))
-	return 4
+	return bufSend(L, &s.buf, s, &s.tm, sockStrerror)
 }
 
 // tcpReceive is receive([pattern [, prefix]]): a line ("*l", the default),
@@ -522,40 +482,7 @@ func tcpSend(L *lua.LState) int {
 // gives back nil, the error and what had arrived.
 func tcpReceive(L *lua.LState) int {
 	_, s := checkSock(L, classTCPClient)
-	prefix, _ := optString(L, 3)
-	s.tm.markstart()
-	out := []byte(prefix)
-	e := ioDone
-	if n, ok := toNumber(L.Get(2)); ok {
-		if n < 0 {
-			L.ArgError(2, "invalid receive pattern")
-		}
-		wanted := int(n)
-		if len(prefix) == 0 || wanted > len(prefix) {
-			out, e = s.recvRaw(L, wanted-len(prefix), out)
-		}
-	} else {
-		p := optStringDef(L, 2, "*l")
-		switch {
-		case len(p) >= 2 && p[0] == '*' && p[1] == 'l':
-			out, e = s.recvLine(L, out)
-		case len(p) >= 2 && p[0] == '*' && p[1] == 'a':
-			out, e = s.recvAll(L, out)
-		default:
-			L.ArgError(2, "invalid receive pattern")
-		}
-	}
-	if e != ioDone {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(sockStrerror(e)))
-		L.Push(lua.LString(out))
-	} else {
-		L.Push(lua.LString(out))
-		L.Push(lua.LNil)
-		L.Push(lua.LNil)
-	}
-	L.Push(lua.LNumber(gettime() - s.tm.start))
-	return 4
+	return bufReceive(L, &s.buf, s, &s.tm, sockStrerror)
 }
 
 // UDP.
