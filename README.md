@@ -953,11 +953,10 @@ enclosing locals once any error had been caught, `string.format` was Go's
 as numbers by Go's rules (`tonumber("1e5")` was nil, `"010" + 0` was 8), and
 assigning to more than one variable could change one before the others had
 read it (`a, b = b, a` gave `2 2`). Its `PATCHES.md` has the details. What
-remains different from Lua 5.1: `tostring` writes numbers in full rather than
-with 14 digits (`1e15` is `1000000000000000`, `0.1 + 0.2` is
-`0.30000000000000004`), `pairs` visits keys in a different order, and errors
-raised by library functions carry the position of the Lua line that called
-them.
+remains different from Lua 5.1: `pairs` visits keys in a different order, and
+errors raised by library functions carry the position of the Lua line that
+called them. Numbers are written with 14 digits, as Lua 5.1 writes them
+(`0.1 + 0.2` is `0.3`, `2^53` is `9.007199254741e+15`).
 
 ## Layout
 

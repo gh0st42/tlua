@@ -135,6 +135,11 @@ func TestGopherLuaPatches(t *testing.T) {
 		"math.huge is infinite": `
 			assert(math.huge == 1/0 and tonumber("1e400") == math.huge)
 			assert(tostring(math.huge) == "inf" and tostring(-math.huge) == "-inf")`,
+		"numbers become strings with 14 digits": `
+			assert(tostring(1/3) == "0.33333333333333" and 0.1 + 0.2 .. "" == "0.3")
+			assert(tostring(2^53) == "9.007199254741e+15" and tostring(1e15) == "1e+15")
+			assert(tostring(-0) == "-0" and tostring(100) == "100" and tostring(-1.5) == "-1.5")
+			assert(tostring(123456789012) == "123456789012" and tostring(1e100) == "1e+100")`,
 	} {
 		if err := r.DoString(src, name); err != nil {
 			t.Errorf("%s: %v", name, err)

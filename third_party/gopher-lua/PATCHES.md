@@ -112,3 +112,12 @@ the chunk, so a coroutine made by a program's main chunk and resumed later,
 from a GUI timer or event (which run under the event loop's context),
 died at its first instruction with "context canceled". `coroutine.resume`
 now runs the coroutine under the context of the state resuming it.
+
+## value.go: numbers as strings
+
+`tostring`, `..`, `print` and `io.write` wrote a whole number as an integer
+and any other in Go's shortest exact form, so `0.1 + 0.2` was
+`0.30000000000000004`, `2^53` was `9007199254740992` and `-0` was `0`. Lua
+5.1 writes every number with `%.14g` (LUAI_NUMFFORMAT): `0.3`,
+`9.007199254741e+15`, `-0`. Now so does tlua, and JSON or other text a
+Lua library writes from numbers comes out as it does under Lua 5.1.

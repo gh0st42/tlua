@@ -122,10 +122,9 @@ func (nm LNumber) String() string {
 	case math.IsNaN(f):
 		return "nan"
 	}
-	if isInteger(nm) {
-		return fmt.Sprint(int64(nm))
-	}
-	return fmt.Sprint(float64(nm))
+	// LUAI_NUMFFORMAT: 14 significant digits, so 0.1+0.2 is 0.3, 2^53 is
+	// 9.007199254741e+15 and -0 is -0.
+	return fmt.Sprintf("%.14g", float64(nm))
 }
 
 func (nm LNumber) Type() LValueType { return LTNumber }
