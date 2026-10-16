@@ -6,6 +6,8 @@ package lualib
 
 import (
 	lua "github.com/yuin/gopher-lua"
+
+	"tlua/internal/audio"
 )
 
 // Open installs everything into a fresh state. The modules are preloaded
@@ -19,6 +21,8 @@ func Open(L *lua.LState) {
 	L.PreloadModule("zlib", openZlib)
 	L.PreloadModule("png", openPng)
 	L.PreloadModule("zip", openZip)
+	L.PreloadModule("beepbox", openBeepbox)
+	L.PreloadModule("audio", audio.Open)
 	preloadSocket(L)
 	installLuaModules(L)
 }
