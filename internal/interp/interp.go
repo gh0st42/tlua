@@ -43,6 +43,7 @@ type Interp struct {
 	name string
 
 	interrupt chan os.Signal
+	terminal  func() // puts the terminal back as tlua found it
 }
 
 // New creates an interpreter with the standard libraries open and the search
@@ -205,6 +206,7 @@ func (r *Interp) setupArg() {
 func (r *Interp) setupInterrupt() {
 	r.interrupt = make(chan os.Signal, 1)
 	signal.Notify(r.interrupt, os.Interrupt, syscall.SIGTERM)
+	r.terminal = saveTerminal()
 }
 
 // Protect runs fn as a chunk is run: Ctrl-C or SIGTERM cancels the state's
@@ -219,8 +221,9 @@ func (r *Interp) protect(fn func() error) error {
 	done := make(chan struct{})
 	go func() {
 		select {
-		case <-r.interrupt:
+		case sig := <-r.interrupt:
 			cancel()
+			r.stopStuck(sig, done)
 		case <-done:
 		}
 	}()

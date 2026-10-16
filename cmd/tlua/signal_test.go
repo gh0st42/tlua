@@ -77,3 +77,45 @@ func stopped(t *testing.T, cmd *exec.Cmd) {
 		t.Fatalf("still running 5 seconds after SIGTERM (stdout %q)", out.String())
 	}
 }
+
+// A program waiting for a line or a key on stdin cannot be interrupted
+// there, so tlua ends it, with the status a shell gives a process the signal
+// killed.
+func TestAProgramReadingStdinStopsWhenToldTo(t *testing.T) {
+	for sig, want := range map[os.Signal]int{syscall.SIGTERM: 143, os.Interrupt: 130} {
+		t.Run(sig.String(), func(t *testing.T) {
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer w.Close() // open until the end, so the read waits
+			cmd := exec.Command(bin(t), "-e", `print("up") io.stdout:flush() io.read()`)
+			cmd.Stdin = r
+			out, err := cmd.StdoutPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			r.Close()
+			buf := make([]byte, 3)
+			if _, err := out.Read(buf); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(100 * time.Millisecond) // into the read
+			cmd.Process.Signal(sig)
+			done := make(chan error, 1)
+			go func() { done <- cmd.Wait() }()
+			select {
+			case err := <-done:
+				if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != want {
+					t.Errorf("ended with %v, want status %d", err, want)
+				}
+			case <-time.After(5 * time.Second):
+				cmd.Process.Kill()
+				t.Fatal("still running 5 seconds after the signal")
+			}
+		})
+	}
+}

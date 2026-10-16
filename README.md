@@ -935,7 +935,11 @@ indices walk back over tlua's own options.
 
 Ctrl-C aborts the running chunk rather than killing the process, so the REPL
 survives an interrupted loop; a script interrupted this way exits with
-status 1. A program waiting on a socket is interrupted the same way. So is
+status 1. A program waiting on a socket is interrupted the same way. One
+waiting for input on stdin (`io.read`, `term.readkey`) cannot be
+interrupted, so tlua ends it a second after the signal, or at a second
+Ctrl-C, with the status a shell shows for one the signal killed (130, or
+143 for SIGTERM), after putting the terminal back as it found it. So is
 a GUI program waiting on its windows, a modal form or a message box, and
 SIGTERM stops one as Ctrl-C does; a colour or file chooser open at the time
 is left to close first, since the system runs those itself.
