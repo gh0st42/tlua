@@ -57,7 +57,7 @@ var commonEvents = []string{"onDrop", "onDrag", "onContextMenu"}
 var kinds = map[string]*kind{
 	"Form": {
 		w: 360, h: 240,
-		events: []string{"onClose", "onUnload", "onKey", "onResize"},
+		events: []string{"onClose", "onUnload", "onKey", "onKeyPreview", "onResize"},
 		holds:  append([]string{"Menu"}, controls...),
 		props:  map[string]lua.LValue{"resizable": lua.LFalse},
 		fixed:  []string{"resizable"},

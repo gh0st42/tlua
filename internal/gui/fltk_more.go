@@ -85,6 +85,12 @@ func handle(o *guiObject, e fltk.Event) bool {
 		o.mouse.armed = false
 	}
 
+	// A form's onKeyPreview sees each key before the control it goes to,
+	// and can keep it from it: Space playing music whatever has the focus.
+	if e == fltk.KEY && o.kind != "Form" && previewKey(o) {
+		return true
+	}
+
 	if o.kind == "TextBox" && textBoxEvent(o, e) {
 		return true
 	}
@@ -111,6 +117,17 @@ func handle(o *guiObject, e fltk.Event) bool {
 		return e == fltk.PUSH && has("onDrag")
 	}
 	return false
+}
+
+// previewKey shows the key being pressed in a control to its form's
+// onKeyPreview, and says whether the form kept it.
+func previewKey(o *guiObject) bool {
+	f := o.form()
+	if f == nil || f.events["onKeyPreview"] == nil {
+		return false
+	}
+	name := keyName(fltk.EventKey(), fltk.EventState())
+	return lua.LVAsBool(o.app.fire(f, "onKeyPreview", lua.LString(name), lua.LString(fltk.EventText())))
 }
 
 // dropEvent handles what drag and drop sends an object; ok is false for

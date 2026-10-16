@@ -279,6 +279,40 @@ form:show()`, func(s *scene) {
 	})
 }
 
+// A form's onKeyPreview sees a key before the control with the focus, and
+// keeps it from the control by returning true; onKey still has the keys no
+// control used.
+func TestFormKeyPreview(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 300, height = 200}
+check = form:CheckBox{name = "check", caption = "on", left = 10, top = 10, width = 100}
+press = form:Button{name = "press", caption = "go", left = 10, top = 50, onClick = function() pressed = (pressed or 0) + 1 end}
+form:TextBox{name = "box", left = 10, top = 90, width = 200}
+previewed = {}
+function form:onKeyPreview(key, text)
+  previewed[#previewed + 1] = key
+  return key == "Space"
+end
+function form:onKey(key) lastKey = key end
+form:show()`, func(s *scene) {
+		s.focus("check")
+		in.Key(' ', " ", 0)
+		s.expect(`previewed[#previewed] == "Space" and check.checked == false`)
+		s.focus("press")
+		in.Key(' ', " ", 0)
+		s.expect(`pressed == nil`)
+		// What it lets go of goes on to the control.
+		s.focus("form.box")
+		in.Key('a', "a", 0)
+		s.expect(`previewed[#previewed] == "a" and form:find("box").text == "a"`)
+		// Without it, Space is the control's again.
+		s.lua(`form.onKeyPreview = nil`)
+		s.focus("check")
+		in.Key(' ', " ", 0)
+		s.expect(`check.checked == true`)
+	})
+}
+
 func TestMenuShortcuts(t *testing.T) {
 	onScreen(t, `
 form = gui.Form{width = 300, height = 200}

@@ -66,7 +66,7 @@ behind its siblings, which is also the order a layout lists them in.
 
 | Kind          | Own properties                                       | Events |
 |---------------|------------------------------------------------------|--------|
-| `Form`        | `resizable`                                          | `onClose`, `onUnload`, `onKey`, `onResize` |
+| `Form`        | `resizable`                                          | `onClose`, `onUnload`, `onKey`, `onKeyPreview`, `onResize` |
 | `Menu`        | `items` (see below); Form only                       | — |
 | `Label`       | `align` (`"left"`, `"center"`, `"right"`), `image`; `text` is `caption` | — |
 | `Button`      | `default` (Enter presses it), `image` beside the caption | `onClick` |
@@ -137,6 +137,12 @@ return false to keep the form open; so can `onUnload`, which runs next.
 named the way shortcuts are written: `"a"`, `"Ctrl+s"`, `"Shift+Tab"`, `"F5"`,
 `"Escape"`, and `"Cmd+..."` on a Mac. Returning true keeps the key from going
 any further, menu shortcuts and Escape included.
+`onKeyPreview(self, key, text)` sees each key pressed in a control before
+the control has it, as VB6's KeyPreview did; returning true keeps it from the
+control. It is for the few keys a form means whatever has the focus: Space
+to play and stop in a music editor, where a focused checkbox would otherwise
+tick. Keys it lets go of go on as before, to the control and then, unused,
+to `onKey`.
 
 An error in a handler stops the event loop and is reported where the loop was
 started. Without `bootgui()`, it surfaces from `form:show()`, so `pcall` can

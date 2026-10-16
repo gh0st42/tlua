@@ -217,6 +217,7 @@ function Container:Splitter(opts) end
 ---@field onClose? fun(self: gui.Form): boolean? the close box, Escape or close(); false keeps it open
 ---@field onUnload? fun(self: gui.Form): boolean? runs after onClose; false keeps it open too
 ---@field onKey? fun(self: gui.Form, key: string, text: string): boolean? a key the focused control did not use, as "a", "Ctrl+s", "F5"; true keeps it from going further
+---@field onKeyPreview? fun(self: gui.Form, key: string, text: string): boolean? each key pressed in a control, before the control has it; true keeps it from the control (Space for play, whatever has the focus)
 ---@field onResize? fun(self: gui.Form)
 local Form = {}
 
@@ -240,6 +241,7 @@ function Form:Menu(items) end
 ---@field onClose? fun(self: gui.Form): boolean?
 ---@field onUnload? fun(self: gui.Form): boolean?
 ---@field onKey? fun(self: gui.Form, key: string, text: string): boolean?
+---@field onKeyPreview? fun(self: gui.Form, key: string, text: string): boolean?
 ---@field onResize? fun(self: gui.Form)
 
 ---@class gui.Menu: gui.Object
