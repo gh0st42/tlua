@@ -48,7 +48,8 @@ function find:onKey(key)
   end
 end
 
-function frm:onResize(w, h)
+function frm:onResize()
+  local w, h = frm.width, frm.height
   find.left = w - 200
   toc.height = h - 52
   view.width, view.height = w - 204, h - 52
