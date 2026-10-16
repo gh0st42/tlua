@@ -572,6 +572,7 @@ function map(cells, sheet, x, y, tile_w, tile_h, draw_zero) end
 ---@param tw? integer
 ---@param th? integer
 ---@param flags? integer
+function map(tx, ty, sx, sy, tw, th, flags) end
 
 --- Whether a button is held. 0 to 5 are left, right, up, down, O and X, which
 --- can also be named. With no arguments, whether anything at all is held.

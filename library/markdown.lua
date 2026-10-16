@@ -38,7 +38,10 @@ local markdown = {}
 
 --- The blocks a Markdown text is made of.
 ---@param text string
----@--- A document's headings, in order, with the anchors links name them by.
+---@return markdown.Block[]
+function markdown.parse(text) end
+
+--- A document's headings, in order, with the anchors links name them by.
 ---@param blocks markdown.Block[]
 ---@return markdown.Heading[]
 function markdown.headings(blocks) end
@@ -47,9 +50,6 @@ function markdown.headings(blocks) end
 ---@param target string
 ---@return string
 function markdown.wikiLink(target) end
-
-return markdown.Block[]
-function markdown.parse(text) end
 
 --- Markdown for blocks, in a steady form: it reads back as the same blocks.
 ---@param blocks markdown.Block[]
