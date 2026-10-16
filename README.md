@@ -96,6 +96,8 @@ usage: tlua [options] [script [args]]
        tlua app.ztl [args]
        tlua bundle [-o output] [-play] <main.lua | directory>
        tlua fuse [-o output] [-play] <main.lua | directory | archive.zip>
+       tlua update [-check] [-y]
+       tlua lib export [dir] | luarc [project]
 
 Options:
   -e stat    execute string 'stat'
@@ -549,6 +551,27 @@ document synchronisation, formatting, completion and hover — the part of the
 protocol these three keys need. Its tests run against a fake server in
 `testdata`, and against whatever real server is installed when there is one.
 
+### Other editors
+
+Another editor's Lua support (VS Code's Lua extension, Neovim's `lua_ls`,
+anything on lua-language-server) can know tlua's modules too. `tlua lib`
+writes the declarations out of the binary for it:
+
+```sh
+tlua lib luarc            # this project: writes ./.luarc.json
+tlua lib luarc ~/games/x  # another one
+tlua lib export           # only the declarations, and how to use them
+```
+
+`luarc` puts the declarations in one folder for the user
+(`~/Library/Application Support/tlua/library` on macOS,
+`~/.local/share/tlua/library` on Linux, `%APPDATA%\tlua\library` on Windows,
+or wherever `-lib` says) and writes the project's `.luarc.json` to use them,
+with Lua 5.1. A `.luarc.json` already there keeps its other settings. `export`
+prints what to put in VS Code's settings instead, for every project at once.
+The declarations follow the version of tlua that wrote them: run `tlua lib
+luarc` (or `export`) again after `tlua update`.
+
 ### The function list
 
 `Alt-F2` lists what a buffer defines — QBasic's F2 and RHIDE's Alt-F2 — with the
@@ -934,9 +957,10 @@ libraries above, LuaSocket, and Lua 5.1 itself, function by function.
   if it has one, is found first.
 
 In a fused program or a bundle, `png.load` and `zip.open` read the
-program's own files out of it first, as `require` does. `library/png.lua`,
-`zlib.lua`, `zip.lua` and `markdown.lua` declare them for lua-language-server,
-and `library/ssl.lua` declares LuaSec's `ssl`.
+program's own files out of it first, as `require` does. `library/` declares
+every module tlua carries for lua-language-server: these, `ssl`, `lfs`,
+LuaSocket's modules, `sys`, `term`, `tui` and the libraries above. `tlua
+lib` writes them out for other editors (see [Other editors](#other-editors)).
 
 ## Compatibility notes
 
@@ -1000,8 +1024,8 @@ docs/design.md     the form designer
 docs/rad-plan.md   the plan the form designer is being built to
 docs/gui-progress.md  what the GUI has, and what it does not yet
 docs/future.md     what is not here yet, and where it would go
-library/pico.lua   the same API declared for lua-language-server
-library/gui.lua    the gui module declared for lua-language-server
+library/           every module declared for lua-language-server (pico.lua the
+                   console's API, gui.lua the gui's); tlua lib writes them out
 examples/          hello.lua, app/ to fuse, pico/ for the console, gui/ for the
                    desktop, console/ for sys, term and tui
 third_party/       gopher-lua, patched; PATCHES.md says how

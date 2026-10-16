@@ -31,7 +31,7 @@ tlua is a Lua 5.1 interpreter in Go, on a patched gopher-lua, with:
 | internal/game, internal/pico | `tlua play` |
 | internal/update | `tlua update` |
 | third_party/gopher-lua | the patched gopher-lua; PATCHES.md says what and why |
-| library | lua-language-server declarations for tlua's modules |
+| library | lua-language-server declarations for tlua's modules; `tlua lib` exports them and writes a .luarc.json |
 | docs | gui.md, design.md, pico.md; modules/, a page per module and on Lua 5.1; plans (`*-plan.md`) and future.md |
 | scripts, .github/workflows | release builds and CI |
 

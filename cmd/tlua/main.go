@@ -22,6 +22,7 @@ import (
 	"tlua/internal/payload"
 	"tlua/internal/update"
 	"tlua/internal/version"
+	"tlua/library"
 )
 
 // banner is what -v prints, and what greets an interactive session.
@@ -35,6 +36,7 @@ const usage = `usage: tlua [options] [script [args]]
        tlua bundle [-o output] [-play] <main.lua | directory>
        tlua fuse [-o output] [-play] <main.lua | directory | archive.zip>
        tlua update [-check] [-y]
+       tlua lib export [dir] | luarc [project]
 
 Options:
   -e stat    execute string 'stat'
@@ -75,6 +77,10 @@ runs on. The bundle subcommand makes one; "tlua bundle -h" explains it.
 The update subcommand asks GitHub for tlua's latest release and, when it is
 newer, offers to put it in this tlua's place. Only a release build does
 this; "tlua update -h" explains it.
+
+The lib subcommand writes the declarations of tlua's modules for
+lua-language-server, and a project's .luarc.json, so that other editors (VS
+Code, Neovim, ...) know them; "tlua lib -h" explains it.
 
 The fuse subcommand attaches a Lua program to a copy of this binary, producing
 a standalone executable; with -play the executable opens a window and runs the
@@ -119,6 +125,8 @@ func main() {
 			os.Exit(game.Command(os.Args[2:]))
 		case "update":
 			os.Exit(update.Command(os.Args[2:]))
+		case "lib":
+			os.Exit(library.Command(os.Args[2:]))
 		}
 	}
 
