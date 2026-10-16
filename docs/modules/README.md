@@ -2,7 +2,8 @@
 
 What a tlua program can `require` with nothing installed, beyond the
 standard library. Each page says what the module is for, then goes
-through its functions with examples.
+through its functions with examples. `tlua doc <page>` shows one from
+the binary, and `tlua doc -g` all of them in a window.
 
 ## The language
 

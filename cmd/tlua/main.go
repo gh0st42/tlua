@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"tlua/internal/design"
+	"tlua/internal/doc"
 	"tlua/internal/editor"
 	"tlua/internal/fuse"
 	"tlua/internal/game"
@@ -37,6 +38,7 @@ const usage = `usage: tlua [options] [script [args]]
        tlua fuse [-o output] [-play] <main.lua | directory | archive.zip>
        tlua update [-check] [-y]
        tlua lib export [dir] | luarc [project]
+       tlua doc [-g] [topic]
 
 Options:
   -e stat    execute string 'stat'
@@ -77,6 +79,10 @@ runs on. The bundle subcommand makes one; "tlua bundle -h" explains it.
 The update subcommand asks GitHub for tlua's latest release and, when it is
 newer, offers to put it in this tlua's place. Only a release build does
 this; "tlua update -h" explains it.
+
+The doc subcommand shows the documentation built into tlua: each module,
+Lua 5.1, the gui, the designer and the console, in the terminal or with -g
+in a window. "tlua doc" lists the pages; "tlua doc sys.copy" shows one part.
 
 The lib subcommand writes the declarations of tlua's modules for
 lua-language-server, and a project's .luarc.json, so that other editors (VS
@@ -127,6 +133,8 @@ func main() {
 			os.Exit(update.Command(os.Args[2:]))
 		case "lib":
 			os.Exit(library.Command(os.Args[2:]))
+		case "doc":
+			os.Exit(doc.Command(os.Args[2:]))
 		}
 	}
 

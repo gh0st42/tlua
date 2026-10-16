@@ -15,6 +15,12 @@ import (
 // follows is never reached.
 var errNoBackend = errors.New("gui: this tlua was built without FLTK (it needs cgo on darwin, linux, openbsd or windows/amd64)")
 
+// Available says whether this tlua can open windows.
+const Available = false
+
+// ErrUnavailable is why it cannot.
+var ErrUnavailable = errNoBackend
+
 func buildForm(f *guiObject) error                                  { return errNoBackend }
 func buildLive(o *guiObject) error                                  { return errNoBackend }
 func showWindow(f *guiObject, modal bool)                           {}

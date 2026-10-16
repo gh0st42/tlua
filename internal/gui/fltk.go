@@ -17,6 +17,13 @@ import (
 	"tlua/internal/luasyntax"
 )
 
+// Available says whether this tlua can open windows; nofltk.go's twin
+// says it cannot, and ErrUnavailable why.
+const Available = true
+
+// ErrUnavailable is nil here: windows can be opened.
+var ErrUnavailable error
+
 // The build constraint above is the list of platforms go-fltk ships prebuilt
 // libraries for; nofltk.go covers everything else.
 

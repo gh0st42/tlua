@@ -98,6 +98,7 @@ usage: tlua [options] [script [args]]
        tlua fuse [-o output] [-play] <main.lua | directory | archive.zip>
        tlua update [-check] [-y]
        tlua lib export [dir] | luarc [project]
+       tlua doc [-g] [topic]
 
 Options:
   -e stat    execute string 'stat'
@@ -130,7 +131,28 @@ echo 'print(1+1)' | tlua          # program on stdin
 tlua -i                           # REPL
 tlua edit app.lua                 # full-screen editor
 tlua play examples/pico/snake.lua # a game, in a window
+tlua doc sys.copy                 # the documentation of one function
 ```
+
+### Documentation
+
+The documentation is built into tlua, so it is there with nothing but the
+binary, offline, and for the version you run:
+
+```sh
+tlua doc                # the contents, and the names of the pages
+tlua doc tui            # one page: a module, lua, stdlib, gui, design, pico
+tlua doc sys.copy       # the part of a page about one function or class
+tlua doc connect        # anything; says where, when it is in several places
+tlua doc -g [topic]     # in a window, with links, back and forward, search
+```
+
+In a terminal, pages are drawn in colour and a long one goes through
+`$PAGER` (`less` by default; `-no-pager` prints it). `NO_COLOR` turns the
+colours off. The pages are [docs/modules](docs/modules/README.md) (a page
+per module, and Lua 5.1 itself), [docs/gui.md](docs/gui.md),
+[docs/design.md](docs/design.md) and [docs/pico.md](docs/pico.md). For
+help inside an editor, see [Other editors](#other-editors).
 
 ## The console
 
@@ -1017,6 +1039,9 @@ internal/picolua/  that console's Lua API
 internal/game/     the window: Ebitengine, the frame loop, input
 internal/gui/      the desktop GUI: the gui module, and FLTK under it
 internal/design/   tlua design, the form designer, written in Lua on the gui module
+internal/doc/      tlua doc: the documentation in the terminal or a window
+internal/update/   tlua update
+docs/embed.go      the pages tlua doc carries in the binary
 docs/modules/      a page per module, and on Lua 5.1
 docs/pico.md       the console API, written out
 docs/gui.md        the gui module, written out

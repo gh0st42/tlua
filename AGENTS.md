@@ -30,6 +30,7 @@ tlua is a Lua 5.1 interpreter in Go, on a patched gopher-lua, with:
 | internal/design, internal/design/lua | `tlua design`, mostly in Lua |
 | internal/game, internal/pico | `tlua play` |
 | internal/update | `tlua update` |
+| internal/doc | `tlua doc`: the pages in the terminal or a window |
 | third_party/gopher-lua | the patched gopher-lua; PATCHES.md says what and why |
 | library | lua-language-server declarations for tlua's modules; `tlua lib` exports them and writes a .luarc.json |
 | docs | gui.md, design.md, pico.md; modules/, a page per module and on Lua 5.1; plans (`*-plan.md`) and future.md |
@@ -114,6 +115,10 @@ musl build in Alpine.
   have a `tlua.<name>` preload name, which they use among themselves.
 - **Controls written in Lua** that come with tlua live in internal/gui/lua
   and are defined with `gui.define` when the gui module opens.
+- **Docs are built in.** `tlua doc` shows docs/modules, gui.md, design.md
+  and pico.md from the binary (docs/embed.go); a new page outside
+  docs/modules goes into its `//go:embed` line, and internal/doc's tests
+  check that links between pages lead to pages that are built in.
 - **Docs move with the code.** A user-visible change updates what applies:
   README.md, docs/gui.md, docs/design.md, docs/modules, the `library/*.lua`
   declarations, `tlua -h` (cmd/tlua/main.go), and an example under
@@ -147,4 +152,7 @@ how `tlua update` knows a release build from one built from source.
 
 - docs/sandbox-plan.md: running bundles and games locked down, LÖVE-style,
   with permissions and trust. Not started.
+- docs/modules-plan.md: `tlua doc`, and the sources and docs in `tlua lib
+  export`, so they reach a user with only the binary. The declarations'
+  export and `tlua lib luarc` are done; the rest is proposed.
 - docs/future.md: smaller things set aside.
