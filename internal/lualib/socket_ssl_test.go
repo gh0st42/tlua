@@ -198,6 +198,20 @@ eq(#assert(ss:receive(100000)), 100000)
 local received, sent = cs:getstats()
 assert(sent > 100000 and received == 5, received)
 
+-- A receive that cannot wait still takes what has come: a program polls
+-- with a timeout of 0, as a GUI does from a timer.
+cs:settimeout(0)
+eq(select(2, cs:receive()), "wantread", "nothing yet")
+ss:send("later\n")
+local line
+for _ = 1, 500 do
+  line = cs:receive()
+  if line then break end
+  socket.sleep(0.002)
+end
+eq(line, "later", "a timeout of 0 reads what is there")
+cs:settimeout(5)
+
 -- Closing ends the other side's read.
 cs:close()
 assert(tostring(cs):find("closed"))

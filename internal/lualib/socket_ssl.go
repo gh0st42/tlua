@@ -1367,6 +1367,11 @@ func (c *sslConn) recvInto(L *lua.LState, p []byte, tm *timeout) (int, int) {
 		if last {
 			d = time.Duration(retry * float64(time.Second))
 		}
+		if d < time.Millisecond {
+			// Go fails a read whose deadline has passed before it looks, so
+			// a timeout of 0 would never see what has come.
+			d = time.Millisecond
+		}
 		c.tc.SetReadDeadline(time.Now().Add(d))
 		n, err := c.tc.Read(p)
 		if n > 0 {
