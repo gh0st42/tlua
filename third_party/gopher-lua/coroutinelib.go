@@ -62,6 +62,21 @@ func coResume(L *LState) int {
 		return 2
 	}
 	th.Parent = L
+	// A coroutine runs under the context of the state that resumes it, not
+	// the one it was made under, which may have ended since: a coroutine
+	// made by one chunk and resumed by a later one, or by an event, works.
+	if th.ctx != L.ctx {
+		if th.ctxCancelFn != nil {
+			th.ctxCancelFn()
+			th.ctxCancelFn = nil
+		}
+		th.ctx = L.ctx
+		if L.ctx != nil {
+			th.mainLoop = mainLoopWithContext
+		} else {
+			th.mainLoop = mainLoop
+		}
+	}
 	L.G.CurrentThread = th
 	if !th.isStarted() {
 		cf := th.stack.Last()

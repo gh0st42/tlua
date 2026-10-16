@@ -141,3 +141,32 @@ func TestGopherLuaPatches(t *testing.T) {
 		}
 	}
 }
+
+// Each chunk runs under a context of its own, ended with it. A coroutine
+// made by one chunk and resumed by a later one, as a GUI's events resume
+// what its main chunk made, runs under the later one's.
+func TestCoroutineOutlivesItsChunk(t *testing.T) {
+	r := New(&Options{})
+	defer r.Close()
+	if err := r.DoString(`
+		co = coroutine.create(function()
+			for i = 1, 3 do coroutine.yield(i) end
+			return "done"
+		end)
+		assert(select(2, coroutine.resume(co)) == 1)`, "first"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.DoString(`
+		local ok, v = coroutine.resume(co)
+		assert(ok and v == 2, tostring(v))
+		local w = coroutine.wrap(function() coroutine.yield(1) end)
+		wrapped = w`, "second"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.DoString(`
+		assert(select(2, coroutine.resume(co)) == 3)
+		assert(select(2, coroutine.resume(co)) == "done")
+		wrapped()`, "third"); err != nil {
+		t.Fatal(err)
+	}
+}

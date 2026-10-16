@@ -103,3 +103,12 @@ values, so `select("#", s:match(p))` was 0 rather than 1, and
 was any call that took the result as an argument. It returns its nil now.
 `string.byte` of an empty range and a finished `gmatch` iterator still
 return nothing, as Lua 5.1's do.
+
+## coroutinelib.go: a coroutine's context
+
+A coroutine was given a child of the context of the state that made it,
+for good. tlua runs each chunk under a context of its own and ends it with
+the chunk, so a coroutine made by a program's main chunk and resumed later,
+from a GUI timer or event (which run under the event loop's context),
+died at its first instruction with "context canceled". `coroutine.resume`
+now runs the coroutine under the context of the state resuming it.
