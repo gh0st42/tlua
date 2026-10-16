@@ -348,6 +348,7 @@ func (a *app) open(L *lua.LState) int {
 		"choosecolor": a.choosecolor,
 		"popup":       a.popup,
 		"measure":     a.measure,
+		"fonts":       a.fonts,
 		"paint":       a.paintFunc,
 		"clipboard":   a.clipboard,
 		"load":        a.load,
@@ -705,10 +706,13 @@ func (a *app) checkProp(L *lua.LState, name string, value lua.LValue) (lua.LValu
 			return nil, err
 		}
 	case "font":
-		switch lua.LVAsString(value) {
-		case "sans", "serif", "mono":
-		default:
-			return nil, fmt.Errorf("gui: font must be \"sans\", \"serif\" or \"mono\", not %q", lua.LVAsString(value))
+		// "sans", "serif", "mono", or an installed font's name: the
+		// backend says whether there is one.
+		if value.Type() != lua.LTString || lua.LVAsString(value) == "" {
+			return nil, fmt.Errorf("gui: font must be \"sans\", \"serif\", \"mono\" or a font's name")
+		}
+		if !fontKnown(lua.LVAsString(value)) {
+			return nil, fmt.Errorf("gui: font must be \"sans\", \"serif\", \"mono\" or an installed font's name (gui.fonts() lists them), not %q", lua.LVAsString(value))
 		}
 	case "syntax":
 		switch lua.LVAsString(value) {
@@ -1276,17 +1280,13 @@ func (a *app) loop(done func() bool) {
 }
 
 // measure is gui.measure(text [, font [, size]]): the width and height the
-// text takes when drawn in that font ("sans", "serif" or "mono") and size,
+// text takes when drawn in that font ("sans", "serif", "mono" or a font's
+// name) and size,
 // 14 and sans unless said; a line a "\n". It is what a Label or a Canvas's
 // g:text needs for it, to size one to fit.
 func (a *app) measure(L *lua.LState) int {
 	text := L.CheckString(1)
 	font := L.OptString(2, "sans")
-	switch font {
-	case "sans", "serif", "mono":
-	default:
-		L.ArgError(2, "font must be \"sans\", \"serif\" or \"mono\"")
-	}
 	size := L.OptInt(3, 14)
 	if size < 1 {
 		L.ArgError(3, "size must be at least 1")
@@ -1298,6 +1298,17 @@ func (a *app) measure(L *lua.LState) int {
 	L.Push(lua.LNumber(w))
 	L.Push(lua.LNumber(h))
 	return 2
+}
+
+// fonts is gui.fonts(): the names of the fonts there are, "sans", "serif"
+// and "mono" first, then those installed, as g:font and font take them.
+func (a *app) fonts(L *lua.LState) int {
+	t := L.NewTable()
+	for _, name := range installedFonts() {
+		t.Append(lua.LString(name))
+	}
+	L.Push(t)
+	return 1
 }
 
 // menuPick is the item picked from a popup menu: its table (nil for one

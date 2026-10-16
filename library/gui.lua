@@ -15,7 +15,9 @@
 function bootgui() end
 
 ---@alias gui.Color string `"#rrggbb"`, `"#rgb"`, or black, white, gray, red, green, blue, yellow, orange, purple
----@alias gui.Font "sans"|"serif"|"mono"
+--- "sans", "serif", "mono", or a font installed on the system, by its name
+--- ("Menlo", "Perfect DOS VGA 437 Win"): gui.fonts() lists them.
+---@alias gui.Font "sans"|"serif"|"mono"|string
 ---@alias gui.Align "left"|"center"|"right"
 ---@alias gui.Buttons "ok"|"okcancel"|"yesno"|"yesnocancel"|"retrycancel"
 ---@alias gui.Answer "ok"|"cancel"|"yes"|"no"|"retry"
@@ -513,10 +515,33 @@ function Canvas:snapshot(scale) end
 ---@field file string the page it shows: a relative path is looked for next to the script, and links are read from the page's folder
 ---@field textSize integer the size of its text: 15 unless given; everything else grows with it
 ---@field pictures? table<string, png.Image|{image: png.Image}> pictures the program has, by the src the page gives them, before the page's folder is looked in
+---@field face string a font for all its text, code too, by name (gui.fonts()); "" for sans, and mono for code
+---@field colors? gui.MarkdownColors colours of the program's over the usual ones, and over color and textColor
 ---@field onLink? fun(self: gui.MarkdownView, url: string): boolean? a link was clicked; true says the program followed it, and the view does nothing more
 ---@field onNavigate? fun(self: gui.MarkdownView, file: string) it shows another page: opened, or gone back or forward to
 ---@field onHover? fun(self: gui.MarkdownView, url: string?) the mouse is over a link now, or off it (nil)
 local MarkdownView = {}
+
+--- The colours a MarkdownView draws with, as "#rrggbb"; any left out are
+--- the usual.
+---@class gui.MarkdownColors
+---@field background? string
+---@field text? string
+---@field link? string
+---@field heading? string
+---@field quote? string
+---@field quoteBar? string
+---@field codeText? string
+---@field codeBg? string
+---@field codeLine? string
+---@field inlineCode? string
+---@field rule? string
+---@field selection? string
+---@field tableLine? string
+---@field tableHead? string
+---@field tableStripe? string
+---@field bar? string the scrollbar's track
+---@field thumb? string the scrollbar's thumb
 
 ---@class gui.Heading
 ---@field level integer 1 to 6
@@ -575,6 +600,7 @@ function MarkdownView:selectAll() end
 ---@field text? string
 ---@field file? string
 ---@field textSize? integer
+---@field face? string
 ---@field onLink? fun(self: gui.MarkdownView, url: string): boolean?
 ---@field onNavigate? fun(self: gui.MarkdownView, file: string)
 ---@field onHover? fun(self: gui.MarkdownView, url: string?)
@@ -901,6 +927,12 @@ function gui.popup(items, near) end
 ---@return integer width
 ---@return integer height
 function gui.measure(text, font, size) end
+
+--- The fonts there are, by name: "sans", "serif" and "mono", then those
+--- installed on the system, as g:font, the font property and gui.measure
+--- take them.
+---@return string[]
+function gui.fonts() end
 
 --- Draws into a picture rather than on screen: fn(g) gets a g as a
 --- Canvas's onDraw does, w by h units on a white ground, and the picture

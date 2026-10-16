@@ -1390,12 +1390,7 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 		return 0
 	})
 	def("font", func(L *lua.LState, _, _ int) int {
-		f, ok := map[string]fltk.Font{"sans": fltk.HELVETICA, "serif": fltk.TIMES, "mono": fltk.COURIER}[L.CheckString(2)]
-		if !ok {
-			L.ArgError(2, "font must be \"sans\", \"serif\" or \"mono\"")
-		}
-		// The style, "bold", "italic" or both, picks the face: FLTK keeps
-		// each family's bold, italic and bold italic one after another.
+		// The style, "bold", "italic" or both, picks the face.
 		bold, italic := false, false
 		for _, word := range strings.Fields(L.OptString(4, "")) {
 			switch word {
@@ -1408,11 +1403,9 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 				L.ArgError(4, "style must be \"bold\", \"italic\" or \"bold italic\"")
 			}
 		}
-		if bold {
-			f++
-		}
-		if italic {
-			f += 2
+		f, ok := fontFace(L.CheckString(2), bold, italic)
+		if !ok {
+			L.ArgError(2, fmt.Sprintf("font must be \"sans\", \"serif\", \"mono\" or an installed font's name (gui.fonts() lists them), not %q", L.CheckString(2)))
 		}
 		fltk.SetDrawFont(f, int(math.Round(float64(L.OptNumber(3, 14))*c.scale())))
 		return 0

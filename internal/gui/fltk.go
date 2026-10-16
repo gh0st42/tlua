@@ -643,7 +643,10 @@ func applyProp(o *guiObject, name string, value lua.LValue) error {
 		if value == lua.LNil || w == nil {
 			return nil
 		}
-		f := map[string]fltk.Font{"sans": fltk.HELVETICA, "serif": fltk.TIMES, "mono": fltk.COURIER}[lua.LVAsString(value)]
+		f, ok := fontFace(lua.LVAsString(value), false, false)
+		if !ok {
+			return fmt.Errorf("gui: font must be \"sans\", \"serif\", \"mono\" or an installed font's name (gui.fonts() lists them), not %q", lua.LVAsString(value))
+		}
 		w.SetLabelFont(f)
 		if t, ok := o.widget.(interface{ SetTextFont(fltk.Font) }); ok {
 			t.SetTextFont(f)

@@ -36,3 +36,30 @@ ok3 = pcall(gui.paint, 10, 10, function() end, 0)
 		s.expect(`not ok3`)
 	})
 }
+
+// Fonts are named as the system names them, and a MarkdownView can be
+// drawn in one, in colours of the program's.
+func TestFontsAndMarkdownViewLook(t *testing.T) {
+	onScreen(t, `
+fonts = gui.fonts()
+first = table.concat({ fonts[1], fonts[2], fonts[3] }, " ")
+okBad, errBad = pcall(gui.measure, "x", "No Such Font At All")
+installed = fonts[4]
+if installed then wi = gui.measure("hello", installed, 14) end
+okPaint, errPaint = pcall(gui.paint, 10, 10, function(g) g:font("No Such Font At All", 12) end)
+form = gui.Form{width = 200, height = 300}
+okProp = pcall(function() local l = form:Label{} l.font = "No Such Font At All" end)
+view = form:MarkdownView{width = 200, height = 300, text = "# Hi\n\n[link](x.md)\n"}
+view.colors = { background = "#000080", link = "#55ffff", heading = "#ffffff" }
+view.face = "mono"
+snap = view:snapshot()
+px = table.concat({ snap:get(190, 290) }, ",")
+`, func(s *scene) {
+		s.expect(`first == "sans serif mono"`)
+		s.expect(`not okBad and errBad:find("gui.fonts")`)
+		s.expect(`not installed or (wi and wi > 0)`)
+		s.expect(`not okPaint and errPaint:find("No Such Font")`)
+		s.expect(`not okProp`)
+		s.expect(`px == "0,0,128,255"`) // the background
+	})
+}

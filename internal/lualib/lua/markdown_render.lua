@@ -11,7 +11,8 @@
 --     measurer.g = nil
 --   end
 --
--- opts: colors (a table like render.colors, in part or whole), image(src)
+-- opts: colors (a table like render.colors, in part or whole, and
+-- heading, quote and codeText, which have none here), image(src)
 -- giving the png image a picture block shows (nil when it is missing), and
 -- the measurer's measure. Nothing here needs the gui module itself.
 
@@ -78,7 +79,7 @@ function M.measurer()
 end
 
 -- drawLine draws one line of text, its left at x and its top at y.
-local function drawLine(g, line, x, y, st, inCode, opts, color, px)
+local function drawLine(g, line, x, y, st, inCode, opts, color, px, ink)
   local measure = opts and opts.measure
   for _, f in ipairs(line.frags) do
     local text = f.text:gsub("\n", "")
@@ -89,7 +90,7 @@ local function drawLine(g, line, x, y, st, inCode, opts, color, px)
         g:fill(fx - 1, y + px(3), f.w + 2, line.h - px(6))
       end
       M.font(g, f.font)
-      g:color(f.run.link and color("link") or st.color or color("text"))
+      g:color(f.run.link and color("link") or ink or st.color or color("text"))
       g:text(text, fx, y, f.w + px(20), line.h, "left")
       if f.run.link then
         -- Underlined, but not under the spaces after the words.
@@ -146,7 +147,7 @@ function M.block(g, L, x0, y0, columnW, opts)
   end
   if b.type == "toc" then
     if L.empty then
-      g:font("sans", L.style.size, "italic")
+      g:font(L.style.face or "sans", L.style.size, "italic")
       g:color(color("missing"))
       g:text("no headings to list", x, y, columnW, L.contentH, "left")
     end
@@ -167,8 +168,11 @@ function M.block(g, L, x0, y0, columnW, opts)
     g:color(color("text"))
     g:text(L.marker, x - px(26), y + first.y, px(20), first.h, "right")
   end
+  -- Headings, quotes and code take a colour of their own when given one.
+  local ink = (b.type:match("^h%d$") and colors.heading) or (b.type == "quote" and colors.quote)
+    or (b.type == "code" and colors.codeText) or nil
   for _, line in ipairs(L.lines) do
-    drawLine(g, line, x, y + line.y, st, b.type == "code", opts, color, px)
+    drawLine(g, line, x, y + line.y, st, b.type == "code", opts, color, px, ink)
   end
 end
 

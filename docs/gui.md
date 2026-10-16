@@ -78,7 +78,7 @@ behind its siblings, which is also the order a layout lists them in.
 | `Tree`        | `items` (see below), `path`, `text`                  | `onChange`, `onDoubleClick`, `onToggle` |
 | `Table`       | `columns`, `rows`, `columnWidths`, `selected`, `editable` | `onChange`, `onDoubleClick`, `onStartEdit`, `onEdit`, `onEditButton` |
 | `Canvas`      | drawn by its `onDraw` (see below); `color` is the background; `transparent` shows what is under it; `pointer` is the mouse pointer over it | `onDraw`, `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseDrag`, `onMouseWheel`, `onMouseEnter`, `onMouseLeave`, `onKey` |
-| `MarkdownView` | formatted text with links (see [below](#formatted-text-markdownview)): `text`, `file`, `textSize` | `onLink`, `onNavigate`, `onHover` |
+| `MarkdownView` | formatted text with links (see [below](#formatted-text-markdownview)): `text`, `file`, `textSize`, `face` | `onLink`, `onNavigate`, `onHover` |
 | `MarkdownEdit` | Markdown edited as it looks (see [below](#editing-markdown-markdownedit)): `textSize`, `paper` | `onChange`, `onSelect`, `onMenu`, `onLink`, `onHover` |
 | `Slider`      | `min`, `max`, `step`, `value`, `vertical`            | `onChange` |
 | `Spinner`     | `min`, `max`, `step`, `value`                        | `onChange` |
@@ -284,6 +284,13 @@ when drawn in a font (`"sans"`, `"serif"` or `"mono"`, sans unless said) and
 size (14 unless said), a line a `"\n"`. With it a Label, a tip or a box
 drawn on a Canvas can be made to fit what it shows.
 
+Wherever a font is named (`font`, `g:font`, `gui.measure`), a font
+installed on the system can be named too: `"Menlo"`, `"Perfect DOS VGA 437
+Win"`. `gui.fonts()` lists the names there are, the three first, so a
+program can pick one that is there and fall back to `"mono"`. Naming one
+that is not there is an error. A font with no bold or italic face of its
+own is drawn plain.
+
 `gui.platform` says what the program runs on, as Go names it (`"darwin"`,
 `"linux"`, `"windows"`), for the odd thing that differs, as a Mac's
 Ctrl-click does.
@@ -374,7 +381,7 @@ works inside `onDraw`:
 | `g:size()` | returns the canvas's width and height |
 | `g:color(c)` | sets the colour for what follows (`"#rrggbb"` or a name) |
 | `g:width(n)` | sets the line width |
-| `g:font(name, size [, style])` | sets the font: `"sans"`, `"serif"` or `"mono"`; `style` is `"bold"`, `"italic"` or `"bold italic"` |
+| `g:font(name, size [, style])` | sets the font: `"sans"`, `"serif"`, `"mono"` or an installed font's name; `style` is `"bold"`, `"italic"` or `"bold italic"` |
 | `g:point(x, y)`, `g:line(x1, y1, x2, y2)` | a point, a line |
 | `g:rect(x, y, w, h)`, `g:fill(x, y, w, h)` | a rectangle, outlined or filled |
 | `g:circle(x, y, r)`, `g:disc(x, y, r)` | a circle, outlined or filled |
@@ -487,6 +494,15 @@ help:back()
 - **`textSize`** is the size of its text, 15 unless given. Headings, spaces
   and indents grow with it. `color` is the background and `textColor` the
   text's colour.
+- **`face`** draws all its text, code too, in one font, by its name: a
+  terminal's look with `face = "mono"`, or an installed font's
+  (`gui.fonts()` lists them). `""`, as it starts, is sans with code in mono.
+- **`colors`**, a table, sets the colours it draws with, by name; those it
+  does not give are the usual ones: `background`, `text`, `link`,
+  `heading`, `quote`, `quoteBar`, `codeText`, `codeBg`, `codeLine`,
+  `inlineCode`, `rule`, `selection`, `tableLine`, `tableHead`,
+  `tableStripe`, and the scrollbar's `bar` and `thumb`. Its `background`
+  and `text` win over `color` and `textColor`.
 - **Links.** A click on a link calls `onLink(self, url)` first. Returning
   true says the program followed it. Otherwise:
   - `#anchor` scrolls to the heading on the page with that anchor, which is

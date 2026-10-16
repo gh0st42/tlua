@@ -7,6 +7,7 @@ package gui
 
 import (
 	"errors"
+	"fmt"
 	goruntime "runtime"
 
 	"github.com/pwiecz/go-fltk"
@@ -136,7 +137,10 @@ func runContextMenu(o *guiObject) {
 }
 
 func measureText(text, font string, size int) (int, int, error) {
-	f := map[string]fltk.Font{"sans": fltk.HELVETICA, "serif": fltk.TIMES, "mono": fltk.COURIER}[font]
+	f, ok := fontFace(font, false, false)
+	if !ok {
+		return 0, 0, fmt.Errorf("gui: font must be \"sans\", \"serif\", \"mono\" or an installed font's name (gui.fonts() lists them), not %q", font)
+	}
 	fltk.SetDrawFont(f, size)
 	w, h := fltk.MeasureText(text, false)
 	return w, h, nil

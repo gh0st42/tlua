@@ -148,6 +148,19 @@ local cache = {}
 layout.build(md.parse("a\n"), 300, measure, nil, cache)
 local big = layout.build(md.parse("a\n"), 300, measure, nil, cache, { scale = 2 })
 eq(big.blocks[1].lines[1].h, 45)
+
+-- A face puts all the text in one font, code too, and keeps its lines
+-- apart from those of another face in the cache.
+local doc = md.parse("# Head\n\nsome `+"`code`"+`\n\n`+"```"+`\nblock\n`+"```"+`\n")
+local plain = layout.build(doc, 300, measure, nil, cache)
+eq(plain.blocks[2].lines[1].frags[2].font.face, "mono")
+local faced = layout.build(doc, 300, measure, nil, cache, { face = "Perfect DOS VGA 437 Win" })
+eq(faced.face, "Perfect DOS VGA 437 Win")
+for b = 1, 3 do
+  for _, f in ipairs(faced.blocks[b].lines[1].frags) do eq(f.font.face, "Perfect DOS VGA 437 Win", "block " .. b) end
+end
+eq(faced.blocks[1].lines[1].frags[1].font.bold, true, "a heading is still bold")
+eq(layout.build(doc, 300, measure, nil, cache).blocks[2].lines[1].frags[1].font.face, "sans")
 `)
 }
 

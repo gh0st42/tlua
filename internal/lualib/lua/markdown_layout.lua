@@ -9,6 +9,8 @@
 --   measure(text, font) -> width     font = { face, size, bold, italic }
 --   imageSize(src)      -> w, h      or nil when the picture is missing
 --   opts.scale                       every size and space times this (1)
+--   opts.face                        a font for all the text, code too, by
+--                                    its name; "" or nil for sans and mono
 --
 -- Coordinates are the page's: 0 at the left of the text column and at the
 -- top of the first block. markdown.render draws what it lays out.
@@ -62,11 +64,32 @@ local function scaled(k)
 end
 M.scaled = scaled
 
+-- faced is styles with every block's text, and code, in one font.
+local facedCache = setmetatable({}, { __mode = "k" })
+local function faced(styles, face)
+  local byFace = facedCache[styles]
+  if not byFace then
+    byFace = {}
+    facedCache[styles] = byFace
+  end
+  local s = byFace[face]
+  if s then return s end
+  s = {}
+  for name, st in pairs(styles) do
+    local c = {}
+    for key, v in pairs(st) do c[key] = v end
+    c.face, c.mono = face, face
+    s[name] = c
+  end
+  byFace[face] = s
+  return s
+end
+
 -- fontOf is the font a run is drawn in, in a block of style st.
 function M.fontOf(st, run)
   local size = st.size or 15
   if run and run.code then
-    return { face = "mono", size = size - 2, bold = st.bold or run.b, italic = run.i }
+    return { face = st.mono or "mono", size = size - 2, bold = st.bold or run.b, italic = run.i }
   end
   return { face = st.face or "sans", size = size, bold = st.bold or (run and run.b) or false,
     italic = st.italic or (run and run.i) or false }
@@ -278,9 +301,11 @@ end
 -- not break all the others into lines again.
 function M.build(blocks, width, measure, imageSize, cache, opts)
   local k = opts and opts.scale or 1
+  local face = opts and opts.face or ""
   local styles = scaled(k)
+  if face ~= "" then styles = faced(styles, face) end
   local function px(v) return math.floor(v * k + 0.5) end
-  local lay = setmetatable({ blocks = {}, width = width, measure = measure, scale = k }, Layout)
+  local lay = setmetatable({ blocks = {}, width = width, measure = measure, scale = k, face = face }, Layout)
   local y = 0
   local counters, kinds = {}, {}
   for i, b in ipairs(blocks) do
@@ -336,7 +361,7 @@ function M.build(blocks, width, measure, imageSize, cache, opts)
       end
       L.x, L.pad = indent, pad
       local fit = math.max(40, width - indent - pad)
-      local key = cache and keyOf(b, fit, k)
+      local key = cache and keyOf(b, fit, k .. face)
       L.lines = key and cache[key]
       if not L.lines then
         L.lines = breakLines(b, st, fit, measure)

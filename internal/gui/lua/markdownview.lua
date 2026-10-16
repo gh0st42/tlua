@@ -58,6 +58,7 @@ gui.define {
     text = { type = "string", default = "" },
     file = { type = "file", default = "" },
     textSize = { type = "integer", default = 15 },
+    face = { type = "string", default = "" },
   },
   build = function(parent, opts)
     md, layout, render = require "tlua.markdown", require "tlua.markdown.layout", require "tlua.markdown.render"
@@ -122,12 +123,13 @@ gui.define {
     local function relayout(self, W)
       local k = scale(self)
       local width = math.max(40, W - BAR - 2 * math.floor(PAD * k))
-      if not s.lay or s.lay.width ~= width or s.lay.scale ~= k then
+      local face = self.face or ""
+      if not s.lay or s.lay.width ~= width or s.lay.scale ~= k or s.lay.face ~= face then
         s.lay = layout.build(s.blocks, width, s.measurer.measure,
           function(src)
             local img = picture(self, src)
             if img then return img.width, img.height end
-          end, s.cache, { scale = k })
+          end, s.cache, { scale = k, face = face })
       end
       return s.lay
     end
@@ -347,11 +349,16 @@ gui.define {
       local _, y0 = origin(self)
       local width = lay.width
 
-      g:color(self.color or "#ffffff")
+      -- colors, a table of the program's, puts its own over render.colors,
+      -- and over color and textColor, the background and the text.
+      local own = self.colors
+      local colors = setmetatable({}, { __index = type(own) == "table" and own or nil })
+      colors.text = colors.text or self.textColor or render.colors.text
+      g:color(colors.background or self.color or "#ffffff")
       g:fill(0, 0, W, H)
       local a, b = range()
       if a then
-        g:color(render.colors.selection)
+        g:color(colors.selection or render.colors.selection)
         for _, r in ipairs(lay:rects(a, b)) do
           if y0 + r[2] + r[4] >= 0 and y0 + r[2] <= H then g:fill(x0 + r[1], y0 + r[2], r[3], r[4]) end
         end
@@ -359,7 +366,7 @@ gui.define {
       local opts = {
         scale = k, measure = s.measurer.measure,
         image = function(src) return picture(self, src) end,
-        colors = { text = self.textColor or render.colors.text },
+        colors = colors,
       }
       for _, L in ipairs(lay.blocks) do
         if y0 + L.y + L.h >= 0 and y0 + L.y <= H then render.block(g, L, x0, y0, width, opts) end
@@ -369,8 +376,8 @@ gui.define {
       if all > H then
         local th = math.max(24, math.floor(H * H / all))
         local ty = math.floor((H - th) * s.scrollY / (all - H))
-        g:color("#e4e5e9"); g:fill(W - BAR, 0, BAR, H)
-        g:color("#a9abb2"); g:fill(W - BAR + 2, ty, BAR - 4, th)
+        g:color(colors.bar or "#e4e5e9"); g:fill(W - BAR, 0, BAR, H)
+        g:color(colors.thumb or "#a9abb2"); g:fill(W - BAR + 2, ty, BAR - 4, th)
       end
       s.measurer.g = nil
     end
