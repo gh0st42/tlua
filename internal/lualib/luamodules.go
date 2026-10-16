@@ -9,7 +9,9 @@ package lualib
 //   - tlua's own: markdown, markdown.layout, markdown.render and
 //     markdown.editor, Markdown read into blocks and written back, laid
 //     out, drawn on a gui Canvas, and edited; the gui's MarkdownView and
-//     MarkdownEdit are made of them. Each is also tlua.<name>, which is how
+//     MarkdownEdit are made of them. And sys, term and tui, from turbolua:
+//     files and folders, an ANSI terminal in the manner of Turbo Pascal, and
+//     Turbo Vision-like windows in it. Each is also tlua.<name>, which is how
 //     they require one another and the gui requires them: those names are
 //     preloaded, so a program's own markdown.lua never stands in for tlua's
 //     inside them.
@@ -19,6 +21,8 @@ package lualib
 //     licensed (lua/luasocket/LICENSE, lua/luasec/LICENSE). Their C halves
 //     are socket.core, mime.core and the ssl.* modules, in Go, so that
 //     require "socket" and require "ssl" work with nothing installed.
+//   - inspect 3.1.3, argparse 0.7.2 and dkjson 2.11, pure Lua libraries
+//     from LuaRocks, unchanged; each carries its MIT licence in the file.
 
 import (
 	"bytes"
@@ -36,6 +40,9 @@ var ownModules = map[string]string{
 	"markdown.layout": "lua/markdown_layout.lua",
 	"markdown.render": "lua/markdown_render.lua",
 	"markdown.editor": "lua/markdown_editor.lua",
+	"sys":             "lua/sys.lua",
+	"term":            "lua/term.lua",
+	"tui":             "lua/tui.lua",
 }
 
 // libraryModules are the Lua halves of the libraries tlua carries.
@@ -51,6 +58,9 @@ var libraryModules = map[string]string{
 	"mime":           "lua/luasocket/mime.lua",
 	"ssl":            "lua/luasec/ssl.lua",
 	"ssl.https":      "lua/luasec/https.lua",
+	"inspect":        "lua/inspect/inspect.lua",
+	"argparse":       "lua/argparse/argparse.lua",
+	"dkjson":         "lua/dkjson/dkjson.lua",
 }
 
 // loadLuaModule compiles one of them, to be called with its name.

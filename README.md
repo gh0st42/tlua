@@ -896,10 +896,26 @@ What differs from LuaSec on OpenSSL:
   `getpeerfinished()` return nothing, and there is no PSK or DANE.
 - Like `socket.core`, the `ssl` modules exist on Linux and macOS only.
 
+### Pure Lua libraries
+
+tlua also carries three pure Lua libraries from LuaRocks, unchanged
+(MIT licensed; each has its licence in the file): `inspect` 3.1.3 (any
+value as readable text), `dkjson` 2.11 (JSON) and `argparse` 0.7.2
+(command-line options and `--help`). Like LuaSocket's Lua half, they are
+found after `package.path`.
+
 ### tlua's own modules
 
 These have no LuaRocks original. Like the ones above, a program `require`s
-them.
+them. [docs/modules](docs/modules/README.md) describes these, the
+libraries above, LuaSocket, and Lua 5.1 itself, function by function.
+
+- `sys`, `term` and `tui`, from turbolua, for console programs: files and
+  folders (`sys.readfile`, `sys.copy`, `sys.listdir`, ...); an ANSI
+  terminal in the manner of Turbo Pascal (`term.gotoxy`, `term.textcolor`,
+  keys one at a time, `term.println("{red}tags{reset}")`); and Turbo
+  Vision-like windows, buttons, input lines, lists and message boxes in it.
+  `examples/console` has a demo of each.
 
 - `png`: pictures to read (PNG, JPEG, GIF), make, change pixel by pixel,
   crop and write as PNG, in any program, not only the console's. A gui
@@ -977,6 +993,7 @@ internal/picolua/  that console's Lua API
 internal/game/     the window: Ebitengine, the frame loop, input
 internal/gui/      the desktop GUI: the gui module, and FLTK under it
 internal/design/   tlua design, the form designer, written in Lua on the gui module
+docs/modules/      a page per module, and on Lua 5.1
 docs/pico.md       the console API, written out
 docs/gui.md        the gui module, written out
 docs/design.md     the form designer
@@ -985,7 +1002,8 @@ docs/gui-progress.md  what the GUI has, and what it does not yet
 docs/future.md     what is not here yet, and where it would go
 library/pico.lua   the same API declared for lua-language-server
 library/gui.lua    the gui module declared for lua-language-server
-examples/          hello.lua, app/ to fuse, pico/ for the console, gui/ for the desktop
+examples/          hello.lua, app/ to fuse, pico/ for the console, gui/ for the
+                   desktop, console/ for sys, term and tui
 third_party/       gopher-lua, patched; PATCHES.md says how
 bin/               build output (git-ignored)
 ```

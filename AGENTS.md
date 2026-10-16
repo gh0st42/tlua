@@ -13,7 +13,9 @@ tlua is a Lua 5.1 interpreter in Go, on a patched gopher-lua, with:
 - a fantasy console for games (`tlua play`);
 - bundles (`.ztl`), fused executables, and a terminal editor (`tlua edit`);
 - Go versions of the C modules LuaRocks libraries are built on (lfs,
-  LuaSocket, LuaSec, zlib, zip), and modules of its own (png, markdown).
+  LuaSocket, LuaSec, zlib, zip), pure Lua libraries from LuaRocks
+  (inspect, dkjson, argparse), and modules of its own (png, markdown, and
+  sys, term and tui from turbolua).
 
 ## Layout
 
@@ -22,7 +24,7 @@ tlua is a Lua 5.1 interpreter in Go, on a patched gopher-lua, with:
 | cmd/tlua | the command: options, subcommands, running scripts and bundles |
 | internal/interp | the interpreter around gopher-lua: paths, signals, fused programs |
 | internal/lualib | the modules: lfs, socket.core, ssl.*, zlib, png, zip, mime |
-| internal/lualib/lua | modules written in Lua: markdown*, and LuaSocket's and LuaSec's Lua halves |
+| internal/lualib/lua | modules written in Lua: markdown*, sys, term, tui; LuaSocket's and LuaSec's Lua halves; inspect, dkjson, argparse |
 | internal/gui | the gui module; `fltk*.go` on FLTK, `nofltk.go` without cgo |
 | internal/gui/lua | controls written in Lua that come with tlua (MarkdownView, MarkdownEdit) |
 | internal/design, internal/design/lua | `tlua design`, mostly in Lua |
@@ -30,7 +32,7 @@ tlua is a Lua 5.1 interpreter in Go, on a patched gopher-lua, with:
 | internal/update | `tlua update` |
 | third_party/gopher-lua | the patched gopher-lua; PATCHES.md says what and why |
 | library | lua-language-server declarations for tlua's modules |
-| docs | gui.md, design.md, pico.md; plans (`*-plan.md`) and future.md |
+| docs | gui.md, design.md, pico.md; modules/, a page per module and on Lua 5.1; plans (`*-plan.md`) and future.md |
 | scripts, .github/workflows | release builds and CI |
 
 The sibling repository `../turboapps` holds desktop apps built on tlua
@@ -113,7 +115,7 @@ musl build in Alpine.
 - **Controls written in Lua** that come with tlua live in internal/gui/lua
   and are defined with `gui.define` when the gui module opens.
 - **Docs move with the code.** A user-visible change updates what applies:
-  README.md, docs/gui.md, docs/design.md, the `library/*.lua`
+  README.md, docs/gui.md, docs/design.md, docs/modules, the `library/*.lua`
   declarations, `tlua -h` (cmd/tlua/main.go), and an example under
   examples/ when one helps.
 - **Writing**: docs and comments in plain English, short sentences, saying

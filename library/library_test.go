@@ -13,7 +13,7 @@ func TestDirHoldsTheDeclarations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"gui.lua", "pico.lua"} {
+	for _, name := range []string{"gui.lua", "pico.lua", "sys.lua", "term.lua", "tui.lua", "inspect.lua", "dkjson.lua", "argparse.lua"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
