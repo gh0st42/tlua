@@ -693,6 +693,17 @@ func applyProp(o *guiObject, name string, value lua.LValue) error {
 		setSelected(o, int(lua.LVAsNumber(value)))
 	case "min", "max", "step", "value":
 		setNumber(o, name, float64(lua.LVAsNumber(value)))
+	case "scrollX", "scrollY":
+		if sc, ok := o.widget.(*fltk.Scroll); ok {
+			x, y := sc.XPosition(), sc.YPosition()
+			if n := int(lua.LVAsNumber(value)); name == "scrollX" {
+				x = n
+			} else {
+				y = n
+			}
+			maxX, maxY := scrollLimits(o, sc)
+			sc.ScrollTo(max(0, min(x, maxX)), max(0, min(y, maxY)))
+		}
 	case "cursor":
 		setCursor(o, int(lua.LVAsNumber(value)))
 	case "pointer":
@@ -1067,6 +1078,33 @@ func imageFromData(path string, data []byte) (scalable, error) {
 	return fltk.NewSharedImageLoad(tmp.Name())
 }
 
+// scrollLimits is how far a Scroll can be scrolled right and down: what its
+// controls reach beyond what it shows, which is less its scrollbars' room
+// when they are there.
+func scrollLimits(o *guiObject, sc *fltk.Scroll) (int, int) {
+	ox, oy := origin(o)
+	right, bottom := 0, 0
+	for _, c := range o.children {
+		if g, ok := c.widget.(geometry); ok {
+			right = max(right, g.X()-ox+g.W())
+			bottom = max(bottom, g.Y()-oy+g.H())
+		}
+	}
+	bar := fltk.ScrollbarSize()
+	w, h := sc.W(), sc.H()
+	for range 2 {
+		needY, needX := bottom > h, right > w
+		w, h = sc.W(), sc.H()
+		if needY {
+			w -= bar
+		}
+		if needX {
+			h -= bar
+		}
+	}
+	return max(0, right-w), max(0, bottom-h)
+}
+
 // readProp reads what may have changed on screen since the script set it.
 func readProp(o *guiObject, name string) (lua.LValue, bool) {
 	switch name {
@@ -1081,6 +1119,13 @@ func readProp(o *guiObject, name string) (lua.LValue, bool) {
 			x, y = x-ox, y-oy
 		}
 		return lua.LNumber(map[string]int{"left": x, "top": y, "width": g.W(), "height": g.H()}[name]), true
+	case "scrollX", "scrollY":
+		if sc, ok := o.widget.(*fltk.Scroll); ok {
+			if name == "scrollX" {
+				return lua.LNumber(sc.XPosition()), true
+			}
+			return lua.LNumber(sc.YPosition()), true
+		}
 	case "visible":
 		if o.kind == "Form" {
 			return lua.LBool(shown(o)), true

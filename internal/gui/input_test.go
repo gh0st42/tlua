@@ -721,6 +721,36 @@ form:show()`, func(s *scene) {
 	})
 }
 
+func TestScrollPosition(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 300, height = 200}
+scroll = form:Scroll{left = 10, top = 10, width = 200, height = 100}
+far = scroll:Label{caption = "far", left = 20, top = 300, width = 40, height = 20}
+wide = scroll:Label{caption = "wide", left = 500, top = 5, width = 40, height = 20}
+form:show()`, func(s *scene) {
+		s.expect(`scroll.scrollX == 0 and scroll.scrollY == 0`)
+		s.lua(`scroll.scrollY = 120`)
+		s.pump()
+		s.expect(`scroll.scrollY == 120 and scroll.scrollX == 0`)
+		s.expect(`far.top == 300`) // still measured from the content
+		s.lua(`scroll.scrollX = 80`)
+		s.pump()
+		s.expect(`scroll.scrollX == 80 and scroll.scrollY == 120`)
+		// Past the end is the end, and the start is 0.
+		s.lua(`scroll.scrollY = 100000; scroll.scrollX = 100000`)
+		s.pump()
+		// The end is what the content reaches past the view, less the
+		// scrollbars: 320 - (100 - 16) down, 540 - (200 - 16) across.
+		s.expect(`scroll.scrollY == 236 and scroll.scrollX == 356`)
+		s.lua(`scroll.scrollY = -5`)
+		s.pump()
+		s.expect(`scroll.scrollY == 0`)
+		s.lua(`scroll.scrollX = 0; scroll.scrollY = 0`)
+		s.pump()
+		s.expect(`scroll.scrollX == 0 and scroll.scrollY == 0`)
+	})
+}
+
 func TestSpawn(t *testing.T) {
 	if goruntime.GOOS == "windows" {
 		t.Skip("uses /bin/sh")

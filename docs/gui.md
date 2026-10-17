@@ -86,7 +86,7 @@ behind its siblings, which is also the order a layout lists them in.
 | `Image`       | `file` (PNG, JPEG, BMP, SVG, GIF), `fit`             | — |
 | `Frame`       | holds controls inside a captioned border             | — |
 | `Panel`       | holds controls, with no border or caption            | — |
-| `Scroll`      | holds controls, showing part of them with scrollbars; their positions are measured from its content's corner | — |
+| `Scroll`      | holds controls, showing part of them with scrollbars; their positions are measured from its content's corner; `scrollX`, `scrollY` | — |
 | `Splitter`    | holds controls that tile it edge to edge; the user drags the lines between them | — |
 | `Tabs`        | holds Pages, made with `tabs:Page{caption = ...}`; `selected` | `onChange` |
 
@@ -160,6 +160,9 @@ Forms do not resize unless they say so:
 - `resizable = true` with nothing marked `grow` scales everything.
 - A form never shrinks below the size it opened at.
 - Inside a Frame or Page, the same rule applies to its children.
+- A Scroll's `scrollX` and `scrollY` are how far its content is scrolled, in
+  pixels, from 0 at the corner. Set them to scroll, as a hand tool or a
+  "scroll to here" does; a value past the end is the end.
 
 ## Text boxes for code
 

@@ -166,6 +166,8 @@ var kinds = map[string]*kind{
 	"Scroll": {
 		w: 200, h: 120,
 		holds: controls,
+		// How far the content is scrolled, in pixels: both read and set.
+		props: map[string]lua.LValue{"scrollX": lua.LNumber(0), "scrollY": lua.LNumber(0)},
 	},
 	// A Splitter's controls tile it edge to edge, and the user can drag the
 	// lines between them.

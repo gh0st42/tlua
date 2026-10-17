@@ -657,6 +657,8 @@ function MarkdownEdit:moved() end
 ---@class gui.Frame: gui.Container
 ---@class gui.Panel: gui.Container
 ---@class gui.Scroll: gui.Container
+---@field scrollX integer how far the content is scrolled across, in pixels; set to scroll
+---@field scrollY integer how far the content is scrolled down, in pixels; set to scroll
 ---@class gui.Splitter: gui.Container
 
 ---@class gui.Tabs: gui.Object
