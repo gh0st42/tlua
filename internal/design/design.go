@@ -14,6 +14,7 @@ import (
 
 	lua "github.com/yuin/gopher-lua"
 
+	"tlua/internal/doc"
 	"tlua/internal/gui"
 	"tlua/internal/interp"
 )
@@ -83,6 +84,7 @@ func Command(args []string) int {
 // its language server as design.server.
 func Preload(L *lua.LState) {
 	preloadServer(L)
+	doc.Preload(L) // the Help menu's documentation
 	entries, _ := sources.ReadDir("lua")
 	for _, e := range entries {
 		file := e.Name()

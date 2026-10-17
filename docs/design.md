@@ -168,6 +168,19 @@ but the tlua binary. Each form's `forms/Name.d.lua` tells it of the form's
 controls. Nothing waits for it: the window works while it starts, and
 without one.
 
+## The documentation
+
+The Help menu opens tlua's documentation, the pages `tlua doc` shows, in a
+window of its own beside the designer: F1 opens the contents (except in
+the code window, where F1 is the language server's help), and the menu
+goes straight to the gui module, the designer and Lua 5.1. Shift+F1 in
+the code window opens the documentation on the name at the cursor:
+`sys.copy`, `tui.Button`, `gui`; for a name it does not know, such as
+`frm:show`, the last part of it, and failing that the contents, with a
+word in the status line. Asked again while it is open, the window goes to
+the new page; its links, Back and Forward, and search work as in `tlua doc
+-g`.
+
 ## Controls of your own
 
 A project's own controls are in `controls/`, one to a file, each a

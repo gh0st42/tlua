@@ -7,6 +7,7 @@
 --   - The mouse resting on a name shows what it is, and so does F1 at the
 --     cursor.
 --   - Typing ( or , says what the call takes, in the status line.
+--   - Shift+F1 opens tlua's documentation on the name at the cursor.
 --
 -- The server is told of tlua's own modules, so gui and the form's controls
 -- are known to it. Everything it is asked is answered in the background;
@@ -117,6 +118,9 @@ function M:key(key, text)
     return true
   elseif key == "F1" then
     self:help(self.box.cursor, true)
+    return true
+  elseif key == "Shift+F1" then
+    self.d:help(self.d:nameAtCursor())
     return true
   end
   -- What the key typed is in the box once it has been handled.

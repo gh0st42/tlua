@@ -2,3 +2,4 @@
 *.test
 *.prof
 /dist/
+.DS_Store

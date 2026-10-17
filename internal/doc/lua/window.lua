@@ -1,14 +1,30 @@
--- The window `tlua doc -g` opens: a page in a MarkdownView, the headings
--- of it beside it, back, forward and contents buttons, and a search box.
--- Links between the pages open in the same view, web links in the browser.
+-- The window `tlua doc -g` and the designer's Help menu open: a page in a
+-- MarkdownView, the headings of it beside it, back, forward and contents
+-- buttons, and a search box. Links between the pages open in the same view,
+-- web links in the browser. There is one at a time: asked for another page
+-- while it is open, it goes there.
 
 local gui = require("gui")
 
 local M = {}
 
--- open shows file (scrolled to anchor) and returns when the window is
--- closed; index is the contents page.
+-- The window while it is open: its form and its view.
+local current
+
+-- shown is the open window's form and view, or nil; for tests.
+function M.shown()
+    if current then return current.frm, current.view end
+end
+
+-- open shows file (scrolled to anchor); index is the contents page. In a
+-- program that said bootgui(), the designer for one, it returns at once;
+-- otherwise when the window is closed.
 function M.open(file, anchor, index)
+    if current then
+        current.view:open(file .. (anchor and ("#" .. anchor) or ""))
+        current.frm:show()
+        return
+    end
     local frm = gui.Form { caption = "tlua help", width = 900, height = 640, resizable = true }
     local back = frm:Button { caption = "<", left = 8, top = 8, width = 32, enabled = false, tooltip = "Back" }
     local fwd = frm:Button { caption = ">", left = 44, top = 8, width = 32, enabled = false, tooltip = "Forward" }
@@ -58,6 +74,8 @@ function M.open(file, anchor, index)
         end
     end
 
+    function frm:onClose() current = nil end
+
     function frm:onResize()
         local w, h = frm.width, frm.height
         find.left = w - 200
@@ -68,6 +86,7 @@ function M.open(file, anchor, index)
 
     refresh()
     if anchor then view:scrollTo(anchor) end
+    current = { frm = frm, view = view }
     frm:show()
 end
 

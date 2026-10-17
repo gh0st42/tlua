@@ -151,8 +151,10 @@ In a terminal, pages are drawn in colour and a long one goes through
 `$PAGER` (`less` by default; `-no-pager` prints it). `NO_COLOR` turns the
 colours off. The pages are [docs/modules](docs/modules/README.md) (a page
 per module, and Lua 5.1 itself), [docs/gui.md](docs/gui.md),
-[docs/design.md](docs/design.md) and [docs/pico.md](docs/pico.md). For
-help inside an editor, see [Other editors](#other-editors).
+[docs/design.md](docs/design.md) and [docs/pico.md](docs/pico.md). `tlua
+design` opens the same window from its Help menu (F1), and Shift+F1 in its
+code window opens it on the name at the cursor. For help inside another
+editor, see [Other editors](#other-editors).
 
 ## The console
 

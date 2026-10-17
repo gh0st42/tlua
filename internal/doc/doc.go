@@ -90,13 +90,13 @@ func command(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	topic := fl.Arg(0)
-	texts, files, err := pages()
+	if *window {
+		return openWindow(topic, stderr)
+	}
+	texts, _, err := pages()
 	if err != nil {
 		fmt.Fprintf(stderr, "tlua doc: %v\n", err)
 		return 1
-	}
-	if *window {
-		return openWindow(texts, files, topic, stderr)
 	}
 
 	tty, width, height := terminal(stdout)
@@ -127,9 +127,31 @@ func terminal(w io.Writer) (tty bool, width, height int) {
 	return true, width, height
 }
 
-// newState is a Lua state with tlua's modules and doc.lua as "tlua.doc".
-func newState(L *lua.LState) {
-	for _, name := range []string{"doc", "window"} {
+// Preload makes the documentation requirable: tlua.doc finds and draws
+// pages, tlua.window is the window, tlua.help opens it on a topic, and
+// tlua.docpages is the pages, written out to the user's cache the first
+// time it is required. The designer's Help menu uses tlua.help.
+func Preload(L *lua.LState) {
+	L.PreloadModule("tlua.docpages", func(L *lua.LState) int {
+		texts, files, err := pages()
+		if err != nil {
+			L.RaiseError("%s", err.Error())
+		}
+		dir, err := docs.Dir()
+		if err != nil {
+			L.RaiseError("the documentation cannot be written out: %s", err.Error())
+		}
+		paths := L.NewTable()
+		for name, file := range files {
+			paths.RawSetString(name, lua.LString(filepath.Join(dir, filepath.FromSlash(file))))
+		}
+		mod := L.NewTable()
+		mod.RawSetString("texts", luaPages(L, texts))
+		mod.RawSetString("files", paths)
+		L.Push(mod)
+		return 1
+	})
+	for _, name := range []string{"doc", "window", "help"} {
 		file := "lua/" + name + ".lua"
 		L.PreloadModule("tlua."+name, func(L *lua.LState) int {
 			src, _ := sources.ReadFile(file)
@@ -157,7 +179,7 @@ func show(texts map[string]string, topic string, width int, color bool) (string,
 	L := lua.NewState()
 	defer L.Close()
 	lualib.Open(L)
-	newState(L)
+	Preload(L)
 	opts := L.NewTable()
 	opts.RawSetString("width", lua.LNumber(width))
 	opts.RawSetString("color", lua.LBool(color))
@@ -204,36 +226,24 @@ func page(text string) bool {
 
 // openWindow is tlua doc -g: the pages, written out so that their links
 // work as files, in a window.
-func openWindow(texts map[string]string, files map[string]string, topic string, stderr io.Writer) int {
+func openWindow(topic string, stderr io.Writer) int {
 	if !gui.Available {
 		fmt.Fprintf(stderr, "tlua doc: %v; without -g it shows the pages here\n", gui.ErrUnavailable)
-		return 1
-	}
-	dir, err := docs.Dir()
-	if err != nil {
-		fmt.Fprintf(stderr, "tlua doc: %v\n", err)
 		return 1
 	}
 	r := interp.New(&interp.Options{})
 	defer r.Close()
 	gui.Ready(r, nil)
-	newState(r.L)
+	Preload(r.L)
 	L := r.L
-	paths := L.NewTable()
-	for name, file := range files {
-		paths.RawSetString(name, lua.LString(filepath.Join(dir, filepath.FromSlash(file))))
-	}
 	return r.Report(r.Protect(func() error {
-		if err := L.CallByParam(lua.P{Fn: L.GetField(require(L, "tlua.doc"), "target"), NRet: 2, Protect: true},
-			luaPages(L, texts), paths, lua.LString(topic)); err != nil {
+		if err := L.CallByParam(lua.P{Fn: L.GetField(require(L, "tlua.help"), "open"), NRet: 2, Protect: true},
+			lua.LString(topic), lua.LTrue); err != nil {
 			return err
 		}
-		file, anchor := L.Get(-2), L.Get(-1)
-		L.Pop(2)
-		if file == lua.LNil {
-			return fmt.Errorf("%s", lua.LVAsString(anchor))
+		if ok, why := L.Get(-2), L.Get(-1); ok == lua.LNil {
+			return fmt.Errorf("%s", lua.LVAsString(why))
 		}
-		return L.CallByParam(lua.P{Fn: L.GetField(require(L, "tlua.window"), "open"), NRet: 0, Protect: true},
-			file, anchor, paths.RawGetString("index"))
+		return nil
 	}))
 }

@@ -463,6 +463,37 @@ func TestDesignerCompletesAndExplainsCode(t *testing.T) {
 	})
 }
 
+// The Help menu opens tlua's documentation in a window of its own, which
+// later requests reuse: the contents on F1, a page or a part of one by name,
+// and Shift+F1 in the code window the name at the cursor.
+func TestDesignerOpensTheDocumentation(t *testing.T) {
+	withDesigner(t, func(s *scene) {
+		s.lua(`window = require "tlua.window"
+function page() local _, view = window.shown(); return view and view.file:gsub("\\", "/"):match("[^/]+/[^/]+$") end`)
+		// F1 away from the code window: the contents.
+		s.lua(`D:showDesign(); D.win:focus()`)
+		in.Key(fltk.F1, "", 0)
+		s.expect(`page() == "modules/README.md"`)
+		s.lua(`D:help("design")`)
+		s.expect(`page():match("/design%.md$")`)
+		s.lua(`helpForm = window.shown()`)
+
+		// Shift+F1 on sys.copy in the code: the sys page, the same window.
+		s.lua(`D:showCode(); D.codeBox.text = 'local ok = sys.copy("a", "b")'; D.codeBox.cursor = #"local ok = sys.co"; D.codeBox:focus()`)
+		s.expect(`D:nameAtCursor() == "sys.copy"`)
+		in.Key(fltk.F1, "", fltk.SHIFT)
+		s.expect(`page() == "modules/sys.md" and window.shown() == helpForm`)
+
+		// A name it does not know: the contents, and the status line says so.
+		s.lua(`D:help("frm:nosuchthing")`)
+		s.expect(`page() == "modules/README.md" and D.statusLine.caption:find("nosuchthing", 1, true)`)
+		s.lua(`D.codeBox.cursor = #"local ok ="`)
+		s.expect(`D:nameAtCursor() == nil`)
+		s.lua(`helpForm:close()`)
+		s.expect(`window.shown() == nil`)
+	})
+}
+
 // The help tip is as big as its text, wrapped to the code box and cut to
 // its height, whatever the text.
 func TestDesignerHelpTipFitsItsText(t *testing.T) {

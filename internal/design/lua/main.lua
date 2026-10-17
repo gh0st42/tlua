@@ -876,6 +876,38 @@ function M.start(opts)
     if self.proc and self.proc.running() then self.proc.kill() end
   end
 
+  ---------------------------------------------------------------- help
+
+  -- help opens tlua's documentation in a window of its own: on topic (a
+  -- page, or a name such as sys.copy), or the contents. A name it does not
+  -- know is tried by its last part (frm:show by show); failing that, the
+  -- contents open and the status line says so.
+  function d:help(topic)
+    local help = require "tlua.help"
+    if topic == nil or topic == "" then
+      help.open()
+      return
+    end
+    if help.open(topic, true) then return end
+    local last = topic:match("[.:]([%w_]+)$")
+    if last and help.open(last, true) then return end
+    help.open()
+    self:status("Nothing in the documentation about " .. topic)
+  end
+
+  -- nameAtCursor is the dotted name the code window's cursor is in, such
+  -- as sys.copy or frm:show; nil when it is not in one, or the code window
+  -- is not shown.
+  function d:nameAtCursor()
+    local box = self.codeBox
+    if self.views.selected ~= 2 then return nil end
+    local text, cursor = box.text, box.cursor
+    local name = text:sub(1, cursor):match("[%w_.:]*$") .. text:sub(cursor + 1):match("^[%w_]*")
+    name = name:gsub("^[.:]+", ""):gsub("[.:]+$", "")
+    if name == "" then return nil end
+    return name
+  end
+
   ---------------------------------------------------------------- the menu and the keys
 
   win:Menu {
@@ -958,6 +990,14 @@ function M.start(opts)
     { "&Run", {
       { "&Start", function() d:run() end, shortcut = "F5" },
       { "S&top", function() d:stop() end, shortcut = "Shift+F5" },
+    } },
+    { "&Help", {
+      { "tlua &Documentation", function() d:help() end, shortcut = "F1" },
+      { "The &gui Module", function() d:help("gui") end },
+      { "The &Designer", function() d:help("design") end },
+      { "&Lua 5.1", function() d:help("lua") end },
+      "-",
+      { "Help on the &Name at the Cursor", function() d:help(d:nameAtCursor()) end, shortcut = "Shift+F1" },
     } },
   }
 
