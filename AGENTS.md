@@ -97,10 +97,16 @@ musl build in Alpine.
 - **Commit, push, tag and release only when asked.** Other agents and the
   user commit to main too: look at `git log` and `git status` first, and
   say when commits you did not make are about to go into a release.
-- **Commit messages**: a first line saying what the change does for its
-  user, in plain words and the imperative ("Add TLS: ...", "Ask which
-  project to design when ..."), a blank line, then prose saying what and
-  why. End with the `Co-Authored-By` line the session asks for.
+- **Commit messages** follow [Conventional Commits](https://www.conventionalcommits.org):
+  a first line `type(scope): subject`, with a type of `feat`, `fix`,
+  `docs`, `refactor`, `test`, `perf`, `build`, `ci` or `chore`, a scope
+  naming the part (`doc`, `gui`, `lualib`, `interp`, `design`, `library`,
+  `update`, ...) when one fits, and a subject in plain words and the
+  imperative that says what the change does for its user, such as
+  `feat(lualib): add TLS with LuaSec's interface`. A breaking change has a
+  `!` after the type or a `BREAKING CHANGE:` footer. Then a blank line and
+  prose saying what and why. End with the `Co-Authored-By` line the session
+  asks for. Commits before 2026-10-17 are in the older plain style.
 - **One feature per commit.** When two features touch the same file, stage
   each one's lines with its own commit.
 - **Compatibility with reference Lua 5.1 comes first.** A behaviour that
@@ -136,7 +142,7 @@ Only when asked. Patch versions for features and fixes so far
 
 1. Commit the work.
 2. Set `Number` in internal/version/version.go; build and check `tlua -v`.
-3. Commit as "Call it X.Y.Z", the body starting "Since X.Y.W:" and
+3. Commit as `chore(release): X.Y.Z`, the body starting "Since X.Y.W:" and
    listing what changed.
 4. `git tag vX.Y.Z`, push main, then push the tag.
 5. The Release workflow checks the tag matches the version, builds eight
