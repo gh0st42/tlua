@@ -787,6 +787,62 @@ There are two common shapes:
 
 `examples/gui/custom.lua` defines one of each.
 
+### Components
+
+A composite control can be described as data instead of built in code: a
+**component** is a layout with a Frame at its top, and `gui.component`
+defines it with `gui.define`, so it is made and used like any other:
+
+```lua
+-- components/LabeledField.comp.lua
+return {
+  kind = "Component", name = "LabeledField", width = 240, height = 28,
+  props  = { label = { type = "string", default = "Name", to = "lbl.caption" },
+             text  = { type = "string", to = "txt.text" } },
+  events = { onChange = "txt.onChange", "onSubmit" },
+  { kind = "Label",   name = "lbl", left = 0,  top = 4, width = 80 },
+  { kind = "TextBox", name = "txt", left = 84, top = 0, width = 156 },
+}
+```
+
+```lua
+gui.component {
+  layout = "components/LabeledField",   -- or the table itself
+  code = function(self, parts)          -- optional: what the layout cannot say
+    function self:clear() parts.txt.text = "" end
+  end,
+}
+local field = form:LabeledField { label = "Surname", left = 10, top = 10 }
+```
+
+- **The layout** is read as `gui.load` reads one: a path without `.lua`
+  means its `.comp.lua` file, found next to the script that names it. The
+  top says `kind = "Component"` (or `"Frame"`), its `width` and `height` are
+  the component's defaults, and its parts are in the array part.
+- **Props.** `props` is as in `gui.define`; a prop with `to = "part.property"`
+  stands for that property of a part: assigning it sets the part, reading it
+  reads the part, and a layout keeps it. A prop with no `to` is a field of
+  the component, set to its default when it is made.
+- **Events.** `events = { onChange = "txt.onChange" }` raises the component's
+  `onChange` when that part's does, with the same arguments after the
+  component. A name alone, as `"onSubmit"`, is raised by the code with
+  `self:fire`.
+- **Parts are private.** The names of the parts belong to the component: two
+  `LabeledField`s on a form have a `txt` each, a form cannot reach `field.lbl`
+  (and `form.lbl` is nothing), and a part cannot clash with a name on the
+  form. A part with `public = true` is a field of the component, as
+  `field.txt`. `code` gets all the parts as its second argument.
+- **Code.** `code(self, parts)` runs once for each component made, after the
+  parts are built and the props and events wired. It is for methods, and for
+  handlers that tie the parts together. It can also be the name of a module
+  that returns that function.
+- **On a form,** an instance is one control: `gui.dump` and `gui.save` write
+  its kind and props, not its parts, so changing a component changes every
+  form that uses it. A component can hold components; one that holds itself
+  is an error.
+
+`examples/gui/components.lua` uses one.
+
 ## Forms in files
 
 A form can be written down as a **layout**: a Lua table with the form's kind

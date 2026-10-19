@@ -1138,4 +1138,26 @@ function gui.kinds() end
 ---@param def gui.Definition
 function gui.define(def) end
 
+---@class gui.ComponentProp: gui.PropInfo
+---@field to? string a part's property it stands for, as "part.property"
+
+---@class gui.ComponentLayout: gui.Options
+---@field kind? "Component"|"Frame"
+---@field props? table<string, gui.ComponentProp> the properties it shows
+---@field events? table<string, string|true>|string[] the events it shows: name = "part.event" passes a part's on, a name alone is raised by its code
+---@field [integer] gui.Layout the parts; one with `public = true` is a field of the component
+
+---@class gui.ComponentSpec
+---@field name? string the kind's name, a capital first; by default the layout's
+---@field layout string|gui.ComponentLayout a layout, or the path of a file returning one (without .lua it means `.comp.lua`)
+---@field code? fun(self: gui.Object, parts: table<string, gui.Object>)|string a function that sets it up, or the name of a module returning one
+
+--- Names a control made of others, from a layout: a Frame with parts in it,
+--- some of its properties and events passed on to them. After it,
+--- `container:Name{...}` and `gui.Name{...}` make one, as for gui.define. The
+--- parts' names are the component's own, so two of them on a form do not
+--- clash, and the form reaches only the parts marked public.
+---@param spec gui.ComponentSpec
+function gui.component(spec) end
+
 return gui

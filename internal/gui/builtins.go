@@ -30,6 +30,7 @@ func (a *app) defineBuiltins(L *lua.LState, mod *lua.LTable) {
 			return 1
 		},
 	})
+	a.hostComponent(L, host)
 	entries, _ := builtinSources.ReadDir("lua")
 	a.definingBuiltins = true
 	defer func() { a.definingBuiltins = false }()

@@ -403,6 +403,13 @@ type guiObject struct {
 	extra  []string
 	// names are a Form's controls by name, for frm.<name> and find.
 	names map[string]*guiObject
+	// scope is set on the top of a component: the names of the controls
+	// inside it are its own, not the form's, and open lists those it shows
+	// as fields (the others are private). link sends a property of the
+	// component to a property of one of its parts.
+	scope bool
+	open  map[string]bool
+	link  map[string]partProp
 	// given are file properties (an Image's file, a Button's image) as the
 	// script wrote them, for a layout; the properties themselves are where
 	// the files were found.
@@ -583,7 +590,7 @@ func (o *guiObject) adopt(child *guiObject) error {
 			return fmt.Errorf("gui: a %s cannot hold itself", child.kind)
 		}
 	}
-	oldForm, newForm := child.form(), o.form()
+	oldForm, newForm := child.nameScope(), scopeOf(o)
 	if oldForm != newForm {
 		if err := fitNames(newForm, child); err != nil {
 			return err
@@ -701,6 +708,9 @@ func (o *guiObject) set(L *lua.LState, name string, value lua.LValue) error {
 			hookEvents(o) // onPaint and onResize cost a handler on the widget
 		}
 		return nil
+	}
+	if l, ok := o.link[name]; ok {
+		return l.part.set(L, l.prop, value)
 	}
 	if alias, ok := o.spec.aliases[name]; ok {
 		name = alias
@@ -934,7 +944,7 @@ func guiIndex(L *lua.LState) int {
 	if alias, ok := obj.spec.aliases[key]; ok {
 		key = alias
 	}
-	if c, ok := obj.names[key]; ok {
+	if c, ok := obj.names[key]; ok && (!obj.scope || obj.open[key]) {
 		L.Push(c.ud)
 		return 1
 	}
@@ -954,6 +964,9 @@ func guiIndex(L *lua.LState) int {
 // get reads a property, from the widget while there is one: the user may
 // have typed, ticked, picked or resized since the script last looked.
 func (o *guiObject) get(name string) lua.LValue {
+	if l, ok := o.link[name]; ok {
+		return l.part.get(l.prop)
+	}
 	if o.widget != nil {
 		if v, ok := readProp(o, name); ok {
 			return v
@@ -1101,7 +1114,7 @@ func (o *guiObject) detach() {
 	if p == nil {
 		return
 	}
-	unregister(o.form(), o)
+	unregister(o.nameScope(), o)
 	for i, c := range p.children {
 		if c == o {
 			p.children = append(p.children[:i], p.children[i+1:]...)

@@ -193,10 +193,29 @@ func named(o *guiObject, out map[string]*guiObject) map[string]*guiObject {
 	if n := propString(o, "name"); n != "" && o.kind != "Form" {
 		out[n] = o
 	}
+	if o.scope {
+		return out // what is inside a component is named in the component
+	}
 	for _, c := range o.children {
 		named(c, out)
 	}
 	return out
+}
+
+// scopeOf is where the names of the controls in o are kept: o if it is a
+// Form or the top of a component, else the nearest such above it.
+func scopeOf(o *guiObject) *guiObject {
+	for p := o; p != nil; p = p.parent {
+		if p.kind == "Form" || p.scope {
+			return p
+		}
+	}
+	return nil
+}
+
+// nameScope is where o's own name is kept: the scope it is in.
+func (o *guiObject) nameScope() *guiObject {
+	return scopeOf(o.parent)
 }
 
 // fitNames checks that a subtree's names are free on form f.
@@ -240,7 +259,7 @@ func (o *guiObject) rename(name string) error {
 	if err := o.checkName(name); err != nil {
 		return err
 	}
-	f := o.form()
+	f := o.nameScope()
 	if f == nil || f == o {
 		return nil
 	}
@@ -264,7 +283,7 @@ func (o *guiObject) rename(name string) error {
 func guiFind(L *lua.LState) int {
 	obj := checkObject(L, 1)
 	name := L.CheckString(2)
-	if f := obj.form(); f != nil {
+	if f := scopeOf(obj); f != nil {
 		if c, ok := f.names[name]; ok {
 			L.Push(c.ud)
 			return 1
