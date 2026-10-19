@@ -3,7 +3,7 @@
 Status: phase 1 is built (2026-10-19): `gui.component`, private part
 names, forwarded props and events, in docs/gui.md ("Components") and
 `examples/gui/components.lua`. Phase 2 is built: Project > Add Component, a component opens
-like a form (`d:openComponent`), saves its files, and is in the toolbox. Phase 3 is built: Tools > Component Interface. Phase 4 is built: saving defines it again, and props renamed or removed are put right in the layouts that use it. Phases 5 and 6 are not.
+like a form (`d:openComponent`), saves its files, and is in the toolbox. Phase 3 is built: Tools > Component Interface. Phase 4 is built: saving defines it again, and props renamed or removed are put right in the layouts that use it. Phase 5 is built (palettes, but as dialogs, not a toolbox drawer). Phase 6 is not.
 
 ## What it is
 
@@ -205,9 +205,10 @@ the whole component; parts cannot be moved on a form (that is the point).
    that use them. Events renamed or removed are only reported, with the code
    that mentions them. The `.d.lua` declarations let the code window complete
    `form.field.label` (done with phase 2).
-5. **Palettes.** `TLUA_PALETTE`, a drawer in the toolbox for each folder,
-   Save to palette and Add to project, versions. Maybe `tlua lib`-style export for
-   handing components around.
+5. **Palettes.** Done: `TLUA_PALETTE`, Save to palette and Add from palette
+   as Project menu dialogs, and a record of where a copy came from. A
+   drawer in the toolbox for each folder is left for later, as is a
+   `tlua lib`-style export for handing components around.
 6. **Maybe later.** Nested-component cycles in the UI, an icon per component
    for the toolbox, component bundles (`.ztl`), a gallery of examples.
 

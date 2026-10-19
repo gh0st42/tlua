@@ -184,6 +184,25 @@ and used like a control: [gui.md](gui.md#components) describes what it is.
   taken away cannot be put right in code; the pane lists the code that
   mentions it instead.
 
+### Palettes
+
+A palette is a folder of components that projects share: two files for each,
+`Name.comp.lua` and `Name.lua`. `TLUA_PALETTE` lists the folders, separated
+by `:` (`;` on Windows), and without it there is one, `~/.tlua/palette`.
+Nothing is written to a palette unless you ask.
+- **Project > Save Component to Palette** copies the component being
+  designed into a palette (asking which when there are several, and before
+  replacing one).
+- **Project > Add Component from Palette** lists what the palettes hold and
+  copies the one you pick into the project, makes it a control there and
+  opens it. It is a copy, so the project stays complete in itself and packs
+  with Make EXE without the palette. A component that uses others says which
+  the project lacks.
+- **Newer copies.** `components/Name.palette` records where a copy came from
+  and what that held; opening the component says when the palette has a
+  newer one, and adding it again brings it in. A copy changed here is
+  replaced, after asking.
+
 ## Help with the code
 
 With a Lua language server on PATH (lua-language-server, say; `TLUA_LSP`

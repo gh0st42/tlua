@@ -1109,6 +1109,9 @@ func TestDesignerMakesComponents(t *testing.T) {
 	if out, err := exec.Command("go", "build", "-o", exe, "tlua/cmd/tlua").CombinedOutput(); err != nil {
 		t.Fatalf("building tlua: %v\n%s", err, out)
 	}
+	pal := t.TempDir()
+	other := filepath.Join(t.TempDir(), "team")
+	t.Setenv("TLUA_PALETTE", pal+":"+other)
 	withDesigner(t, func(s *scene) {
 		s.lua(`D.answerText = "LabeledField"; D:addComponent()`)
 		s.expect(`D.docKind == "Component" and D.formName == "LabeledField" and D.doc.kind == "Component"`)
@@ -1188,5 +1191,30 @@ func TestDesignerMakesComponents(t *testing.T) {
 		}
 		s.lua(`D:openForm("Form1")`)
 		s.expect(`D.doc[1].title == "Surname" and D.surface.entries[1].obj.title == "Surname" and D.surface.entries[1].obj.label == nil`)
+
+		// A palette is a folder of components that projects share.
+		s.lua(`D:openComponent("LabeledField"); D.answerChoice = 1; D:saveToPalette()`)
+		for _, f := range []string{"LabeledField.comp.lua", "LabeledField.lua"} {
+			if _, err := os.Stat(filepath.Join(pal, f)); err != nil {
+				s.t.Errorf("not in the palette: %v", err)
+			}
+		}
+		s.expect(`not require("design.palette").behind(D.dir, "LabeledField")`)
+		s.expect(`#require("design.palette").list() == 1 and require("design.palette").list()[1].name == "LabeledField"`)
+		// Somebody else changes it there: the project's copy is behind.
+		os.WriteFile(filepath.Join(pal, "LabeledField.lua"), []byte("-- changed\nreturn function(self, parts) end\n"), 0o644)
+		s.lua(`D:openForm("Form1"); D:openComponent("LabeledField")`)
+		s.expect(`D.statusLine.caption:find("newer LabeledField")`)
+		// Taking it into the project again replaces the copy.
+		os.Remove(filepath.Join(s.dir, "components/LabeledField.d.lua"))
+		s.lua(`D.answer = "yes"; D.answerChoice = 1; D:addFromPalette()`)
+		copied, _ := os.ReadFile(filepath.Join(s.dir, "components/LabeledField.lua"))
+		if !strings.Contains(string(copied), "-- changed") {
+			s.t.Errorf("the copy should be the palette's:\n%s", copied)
+		}
+		if _, err := os.Stat(filepath.Join(s.dir, "components/LabeledField.d.lua")); err != nil {
+			s.t.Errorf("what goes with it is written again: %v", err)
+		}
+		s.expect(`D.docKind == "Component" and D.formName == "LabeledField" and not require("design.palette").behind(D.dir, "LabeledField")`)
 	})
 }

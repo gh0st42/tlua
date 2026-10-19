@@ -13,6 +13,7 @@ local toolbox = require "design.toolbox"
 local code = require "design.code"
 local menueditor = require "design.menueditor"
 local interface = require "design.interface"
+local palette = require "design.palette"
 local assist = require "design.assist"
 
 local M = {}
@@ -188,6 +189,26 @@ function M.start(opts)
       return self.answerText
     end
     return gui.inputbox(message, title, default)
+  end
+
+  -- choose is a list to pick one of: its number, or nil for Cancel;
+  -- answerChoice, when set, is the answer.
+  function d:choose(title, items)
+    if self.answerChoice ~= nil then
+      self.asked = title
+      return self.answerChoice or nil
+    end
+    local pick
+    local dlg = gui.Form { caption = title, width = 420, height = 300 }
+    local list = dlg:ListBox { left = 10, top = 10, width = 400, height = 240, items = items, selected = 1 }
+    list.onDoubleClick = function(self) pick = self.selected; dlg:close() end
+    dlg:Button { caption = "Cancel", left = 220, top = 260, width = 90, onClick = function() dlg:close() end }
+    dlg:Button {
+      caption = "OK", left = 320, top = 260, width = 90, default = true,
+      onClick = function() pick = list.selected; dlg:close() end,
+    }
+    dlg:showModal()
+    return pick and pick > 0 and pick or nil
   end
 
   -- chooseColor and chooseFile are the colours and files the designer
@@ -622,6 +643,10 @@ function M.start(opts)
     self:fillTools()
     self:retitle()
     self:status("")
+    if kind == "Component" then
+      local behind, folder = palette.behind(self.dir, name)
+      if behind then self:status("There is a newer " .. name .. " in " .. folder .. "; Add Component from Palette brings it in") end
+    end
   end
 
   function d:save()
@@ -955,6 +980,75 @@ function M.start(opts)
     end
   end
 
+  -- addFromPalette copies a component of a palette into the project.
+  function d:addFromPalette()
+    if not self.dir then return end
+    local entries = palette.list()
+    if #entries == 0 then
+      self:ask("There are no components in the palettes: " .. table.concat(palette.folders(), ", "), "ok", "Add Component from Palette")
+      return
+    end
+    local items = {}
+    for i, e in ipairs(entries) do items[i] = e.name .. "    " .. e.folder end
+    local i = self:choose("Add Component from Palette", items)
+    if not i then return end
+    local entry = entries[i]
+    if project.exists(project.componentPath(self.dir, entry.name)) then
+      if self:ask("The project has a " .. entry.name .. " already. Replace it with the one from the palette?", "yesno", "Add Component from Palette") ~= "yes" then
+        return
+      end
+    elseif project.exists(self.dir .. "/controls/" .. entry.name .. ".lua") then
+      self:ask("There is a controls/" .. entry.name .. ".lua already.", "ok", "Add Component from Palette")
+      return
+    end
+    if not self:keepOrLose() then return end
+    local ok, missing = palette.take(self.dir, entry.folder, entry.name)
+    if not ok then
+      self:ask(tostring(missing), "ok", "Add Component from Palette")
+      return
+    end
+    if #missing > 0 then
+      self:print(entry.name .. " uses " .. table.concat(missing, ", ") .. ", which the project does not have; add them too")
+    end
+    package.loaded["controls." .. entry.name] = nil
+    package.loaded["components." .. entry.name] = nil
+    self.dirty, self.codeDirty = false, false
+    self.formName, self.docKind = nil, nil -- so that it is opened again
+    self:fillTree()
+    self:loadControls()
+    self:openComponent(entry.name)
+  end
+
+  -- saveToPalette copies the component being designed into a palette.
+  function d:saveToPalette()
+    if self.docKind ~= "Component" then
+      self:status("Only a component can go in a palette")
+      return
+    end
+    self:save()
+    local folders = palette.folders()
+    local folder = folders[1]
+    if #folders > 1 then
+      local i = self:choose("Save Component to Palette", folders)
+      if not i then return end
+      folder = folders[i]
+    end
+    if not folder then
+      self:status("There is no palette: set TLUA_PALETTE")
+      return
+    end
+    if project.exists(folder .. "/" .. self.formName .. ".comp.lua")
+        and self:ask(("%s has a %s already. Replace it?"):format(folder, self.formName), "yesno", "Save Component to Palette") ~= "yes" then
+      return
+    end
+    local ok, err = palette.put(self.dir, self.formName, folder)
+    if ok then
+      self:status("Saved " .. self.formName .. " to " .. folder)
+    else
+      self:ask(tostring(err), "ok", "Save Component to Palette")
+    end
+  end
+
   function d:addComponent()
     local n = 1
     while project.exists(project.componentPath(self.dir, "Component" .. n)) or project.exists(self.dir .. "/controls/Component" .. n .. ".lua") do n = n + 1 end
@@ -1134,6 +1228,8 @@ function M.start(opts)
     { "&Project", {
       { "&Add Form...", function() d:addForm() end },
       { "Add C&omponent...", function() d:addComponent() end },
+      { "Add Component from Pa&lette...", function() d:addFromPalette() end },
+      { "Save Component to &Palette...", function() d:saveToPalette() end },
       { "Set as &Startup Form", function() d:setStartup() end },
       "-",
       { "&New Control...", function() d:newControl() end },
