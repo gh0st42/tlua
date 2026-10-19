@@ -969,7 +969,7 @@ libraries above, LuaSocket, and Lua 5.1 itself, function by function.
   Vision-like windows, buttons, input lines, lists and message boxes in it.
   `examples/console` has a demo of each.
 
-- `png`: pictures to read (PNG, JPEG, GIF), make, change pixel by pixel,
+- `png`: pictures to read (PNG, JPEG, GIF, WebP, and the frames of animated GIF, APNG and WebP), make, change pixel by pixel,
   crop and write as PNG, in any program, not only the console's. A gui
   Canvas draws one with `g:image(img, x, y)`. `examples/gui/paint.lua` is a
   small pixel editor built on it.

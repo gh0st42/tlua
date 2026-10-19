@@ -4,7 +4,7 @@ package lualib
 // program, the console's or not.
 //
 //	local png = require "png"
-//	local img = png.load("photo.png")       -- PNG, JPEG or GIF
+//	local img = png.load("photo.png")       -- PNG, JPEG, GIF or WebP
 //	print(img.width, img.height)
 //	local r, g, b, a = img:get(0, 0)          -- 0 to 255, from the top left
 //	img:set(10, 10, 255, 0, 0)                -- or img:set(10, 10, "#ff0000")
@@ -25,6 +25,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	_ "golang.org/x/image/webp"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -79,11 +81,13 @@ func openPng(L *lua.LState) int {
 	}))
 
 	mod := L.SetFuncs(L.NewTable(), map[string]lua.LGFunction{
-		"load":       pngLoad,
-		"decode":     pngDecode,
-		"new":        pngNew,
-		"fromPixels": pngFromPixels,
-		"encode":     imageEncode,
+		"load":         pngLoad,
+		"decode":       pngDecode,
+		"frames":       pngFrames,
+		"decodeFrames": pngDecodeFrames,
+		"new":          pngNew,
+		"fromPixels":   pngFromPixels,
+		"encode":       imageEncode,
 	})
 	L.Push(mod)
 	return 1
@@ -127,6 +131,13 @@ func toNRGBA(src image.Image) *image.NRGBA {
 
 func decodeImage(L *lua.LState, data []byte) int {
 	src, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil && isWebP(data) {
+		// A WebP that moves: the first frame is its picture.
+		if a, aerr := decodeWebPAnimation(data); aerr == nil && a != nil {
+			pushImage(L, a.frames[0].pix)
+			return 1
+		}
+	}
 	if err != nil {
 		L.Push(lua.LNil)
 		L.Push(lua.LString(err.Error()))
@@ -136,7 +147,7 @@ func decodeImage(L *lua.LState, data []byte) int {
 	return 1
 }
 
-// pngLoad is png.load(path): the picture in a PNG, JPEG or GIF file, or
+// pngLoad is png.load(path): the picture in a PNG, JPEG, GIF or WebP file, or
 // nil and why. A fused program or a bundle reads its own files first.
 func pngLoad(L *lua.LState) int {
 	data, err := readFile(L, L.CheckString(1))
