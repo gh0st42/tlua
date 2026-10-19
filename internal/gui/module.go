@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -57,14 +58,14 @@ var commonEvents = []string{"onDrop", "onDrag", "onContextMenu"}
 var kinds = map[string]*kind{
 	"Form": {
 		w: 360, h: 240,
-		events: []string{"onClose", "onUnload", "onKey", "onKeyPreview", "onResize"},
+		events: []string{"onClose", "onUnload", "onKey", "onKeyPreview"},
 		holds:  append([]string{"Menu"}, controls...),
 		props:  map[string]lua.LValue{"resizable": lua.LFalse},
 		fixed:  []string{"resizable"},
 	},
 	"Label": {
 		w: 120, h: 28,
-		props:   map[string]lua.LValue{"align": lua.LString("left"), "image": lua.LString("")},
+		props:   map[string]lua.LValue{"align": lua.LString("left"), "image": lua.LString(""), "pointer": lua.LString("default")},
 		aliases: map[string]string{"text": "caption"},
 	},
 	"Button": {
@@ -150,7 +151,7 @@ var kinds = map[string]*kind{
 	},
 	"Image": {
 		w: 100, h: 100,
-		props: map[string]lua.LValue{"file": lua.LString(""), "fit": lua.LFalse},
+		props: map[string]lua.LValue{"file": lua.LString(""), "fit": lua.LFalse, "pointer": lua.LString("default")},
 	},
 	"Frame": {
 		w: 200, h: 120,
@@ -189,6 +190,67 @@ var kinds = map[string]*kind{
 		w: 0, h: 25,
 		events: []string{"onClick"},
 	},
+}
+
+// The events beyond each kind's own, which every kind of a sort shares:
+//
+//   - every kind but a Menu: onShow and onHide (it became visible or not:
+//     a form shown or hidden, a page chosen in its Tabs), onResize (its
+//     size changed), and onPaint (it has drawn itself, and the program may
+//     draw over it, with a g as onDraw's; a Canvas has onDraw for that);
+//   - a Form: onLoad (it is built and on screen, once the program has set
+//     it up), onActivate and onDeactivate (it has the keyboard, or lost
+//     it to another window);
+//   - a Scroll: onScroll (its content was scrolled, by the user or the
+//     program);
+//   - what takes the keyboard: onFocus and onBlur;
+//   - a Label or an Image, which a click does nothing to: the mouse's
+//     onClick, onDoubleClick, onMouseDown, onMouseUp, onMouseMove,
+//     onMouseEnter and onMouseLeave, as a Canvas has them.
+//
+// They are added to the kinds' own lists when the program starts, so that
+// gui.kinds() reports them, a script can set them, and the designer lists
+// them like any other.
+var (
+	focusEvents   = []string{"onFocus", "onBlur"}
+	clickEvents   = []string{"onClick", "onDoubleClick"}
+	pointerEvents = []string{"onMouseDown", "onMouseUp", "onMouseMove", "onMouseEnter", "onMouseLeave"}
+	showEvents    = []string{"onShow", "onHide", "onResize"}
+	formEvents    = []string{"onLoad", "onActivate", "onDeactivate"}
+)
+
+func init() {
+	takesFocus := map[string]bool{"Button": true, "TextBox": true, "CheckBox": true, "RadioButton": true,
+		"ComboBox": true, "ListBox": true, "Tree": true, "Table": true, "Canvas": true, "Slider": true, "Spinner": true}
+	for name, k := range kinds {
+		if name == "Menu" {
+			continue
+		}
+		var more []string
+		switch name {
+		case "Form":
+			more = append(more, formEvents...)
+		case "Label", "Image":
+			more = append(more, clickEvents...)
+			more = append(more, pointerEvents...)
+		case "Canvas":
+			more = append(more, clickEvents...)
+		case "Scroll":
+			more = append(more, "onScroll")
+		}
+		if takesFocus[name] {
+			more = append(more, focusEvents...)
+		}
+		more = append(more, showEvents...)
+		if name != "Canvas" {
+			more = append(more, "onPaint")
+		}
+		for _, e := range more {
+			if !slices.Contains(k.events, e) {
+				k.events = append(k.events, e)
+			}
+		}
+	}
 }
 
 // common are the properties every object has.
@@ -301,6 +363,37 @@ type guiObject struct {
 		// listening is set once its widget hands its events to handle, as
 		// some FLTK widgets cannot.
 		listening bool
+		// over is set while the mouse is over a Canvas, Label or Image, and
+		// pointed while the window's pointer is the one it asked for.
+		over, pointed bool
+		// pressed is a press on it that a release over it makes a click,
+		// and double whether that press was a double click.
+		pressed, double bool
+	}
+	// The backend's notes for the events that follow the window and the
+	// keyboard. A Form is loaded when its window has been shown, and ready
+	// once onLoad has been raised and done: nothing on it hears of anything
+	// before that, and what it missed is told then. active is its window
+	// having the keyboard, and activeTold that onActivate was raised for it.
+	// A control is focused when it has the keyboard, and told when onFocus
+	// was raised for it. The size onResize last saw is width by height.
+	loaded, ready, active, activeTold bool
+	focused, told                     bool
+	// focusOwner is a Form's control that last was given the keyboard.
+	focusOwner    *guiObject
+	width, height int
+	resizing      bool
+	// hooked says which handlers the backend has put on its widget, so
+	// that it only does for the ones a script has asked for: the widget
+	// is drawn through the draw one, which costs a call into Go each time.
+	hooked struct{ draw, resize bool }
+	// overlay is the drawing state of onPaint, kept between draws.
+	overlay any
+	// scrolled is where a Scroll was when onScroll last heard of it, and
+	// whether the event is waiting for the event loop.
+	scrolled struct {
+		x, y    int
+		pending bool
 	}
 	// state is anything else the backend keeps for the object.
 	state any
@@ -603,6 +696,9 @@ func (o *guiObject) set(L *lua.LState, name string, value lua.LValue) error {
 			o.events[name] = fn
 		default:
 			return fmt.Errorf("gui: %s must be a function or nil, not a %s", name, value.Type())
+		}
+		if o.widget != nil {
+			hookEvents(o) // onPaint and onResize cost a handler on the widget
 		}
 		return nil
 	}

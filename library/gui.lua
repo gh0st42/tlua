@@ -42,6 +42,12 @@ function bootgui() end
 ---@field fontSize? integer
 ---@field grow boolean stretches with a resizable form; given when it is made
 ---@field tabIndex? integer its place in the order Tab goes in; controls that take the keyboard
+---@field onShow? fun(self: self) it became visible: its form was shown, or it was, or its page was chosen
+---@field onHide? fun(self: self) it stopped being visible: its form closed or was hidden, or another page was chosen
+---@field onResize? fun(self: self) its size changed, by the program or by its container following the form (not for a Menu)
+---@field onPaint? fun(self: self, g: gui.Graphics) it has been drawn and the program may draw over it, inside it, with g as onDraw's (a Canvas has onDraw instead; not for a Menu)
+---@field onFocus? fun(self: self) it was given the keyboard; controls that take it
+---@field onBlur? fun(self: self) it lost the keyboard to another control, or its window lost it to another window
 ---@field onDrop? fun(self: self, text: string, lines: string[], x: integer, y: integer, at: string|integer|nil) something was dropped on it at x, y; files arrive as one path per line; at is the Tree path or ListBox line it landed on
 ---@field onDrag? fun(self: self): string? the user drags out of it; return the text to carry
 ---@field contextMenu? gui.MenuItem[] what a right click on it shows, at the mouse
@@ -102,6 +108,12 @@ function Object:redraw() end
 ---@field grow? boolean
 ---@field tabIndex? integer
 ---@field parent? gui.Container where `gui.Button{}` and the like go, instead of the latest Form
+---@field onShow? fun(self: gui.Object)
+---@field onHide? fun(self: gui.Object)
+---@field onResize? fun(self: gui.Object)
+---@field onPaint? fun(self: gui.Object, g: gui.Graphics)
+---@field onFocus? fun(self: gui.Object)
+---@field onBlur? fun(self: gui.Object)
 ---@field onDrop? fun(self: gui.Object, text: string, lines: string[], x: integer, y: integer, at: string|integer|nil)
 ---@field onDrag? fun(self: gui.Object): string?
 ---@field contextMenu? gui.MenuItem[]
@@ -200,7 +212,7 @@ function Container:Tabs(opts) end
 function Container:Panel(opts) end
 
 --- Shows part of what it holds, with scrollbars for the rest.
----@param opts? gui.Options
+---@param opts? gui.ScrollOptions
 ---@return gui.Scroll
 function Container:Scroll(opts) end
 
@@ -218,7 +230,10 @@ function Container:Splitter(opts) end
 ---@field onUnload? fun(self: gui.Form): boolean? runs after onClose; false keeps it open too
 ---@field onKey? fun(self: gui.Form, key: string, text: string): boolean? a key the focused control did not use, as "a", "Ctrl+s", "F5"; true keeps it from going further
 ---@field onKeyPreview? fun(self: gui.Form, key: string, text: string): boolean? each key pressed in a control, before the control has it; true keeps it from the control (Space for play, whatever has the focus)
----@field onResize? fun(self: gui.Form)
+---@field onLoad? fun(self: gui.Form) it is built and on screen, and the program has finished setting it up (handlers written after show() count); once each time it is built, so again after it was closed and shown anew; fill lists and set up controls here
+---@field onActivate? fun(self: gui.Form) its window was given the keyboard: clicked, or switched to
+---@field onDeactivate? fun(self: gui.Form) its window lost the keyboard to another window; not when it moves between its own controls
+---@field onResize? fun(self: gui.Form) its window changed size (or moved)
 local Form = {}
 
 --- Puts the form up. Under bootgui() that is all; otherwise it also waits
@@ -242,6 +257,9 @@ function Form:Menu(items) end
 ---@field onUnload? fun(self: gui.Form): boolean?
 ---@field onKey? fun(self: gui.Form, key: string, text: string): boolean?
 ---@field onKeyPreview? fun(self: gui.Form, key: string, text: string): boolean?
+---@field onLoad? fun(self: gui.Form)
+---@field onActivate? fun(self: gui.Form)
+---@field onDeactivate? fun(self: gui.Form)
 ---@field onResize? fun(self: gui.Form)
 
 ---@class gui.Menu: gui.Object
@@ -268,11 +286,27 @@ function Form:Menu(items) end
 ---@field text string the same as its caption
 ---@field align gui.Align
 ---@field image string a picture beside the caption
+---@field pointer gui.Pointer the mouse pointer while the mouse is over it: "hand" for one that is clicked
+---@field onClick? fun(self: gui.Label, x: integer, y: integer) pressed and released over it with the left button; x, y from its corner
+---@field onDoubleClick? fun(self: gui.Label, x: integer, y: integer) after onClick, when the press was a double click
+---@field onMouseDown? fun(self: gui.Label, x: integer, y: integer, button: integer, double: boolean, mods: string) button 1 is left, 2 middle, 3 right
+---@field onMouseUp? fun(self: gui.Label, x: integer, y: integer, button: integer)
+---@field onMouseMove? fun(self: gui.Label, x: integer, y: integer)
+---@field onMouseEnter? fun(self: gui.Label)
+---@field onMouseLeave? fun(self: gui.Label)
 
 ---@class gui.LabelOptions: gui.Options
 ---@field text? string
 ---@field align? gui.Align
 ---@field image? string
+---@field pointer? gui.Pointer
+---@field onClick? fun(self: gui.Label, x: integer, y: integer)
+---@field onDoubleClick? fun(self: gui.Label, x: integer, y: integer)
+---@field onMouseDown? fun(self: gui.Label, x: integer, y: integer, button: integer, double: boolean, mods: string)
+---@field onMouseUp? fun(self: gui.Label, x: integer, y: integer, button: integer)
+---@field onMouseMove? fun(self: gui.Label, x: integer, y: integer)
+---@field onMouseEnter? fun(self: gui.Label)
+---@field onMouseLeave? fun(self: gui.Label)
 
 ---@class gui.Button: gui.Object
 ---@field default boolean Enter presses it; given when it is made
@@ -470,10 +504,26 @@ function Table:editing() end
 ---@class gui.Image: gui.Object
 ---@field file string PNG, JPEG, BMP, SVG or GIF; a relative path is looked for next to the script
 ---@field fit boolean grown to fit as well as shrunk
+---@field pointer gui.Pointer the mouse pointer while the mouse is over it: "hand" for one that is clicked
+---@field onClick? fun(self: gui.Image, x: integer, y: integer) pressed and released over it with the left button; x, y from its corner
+---@field onDoubleClick? fun(self: gui.Image, x: integer, y: integer) after onClick, when the press was a double click
+---@field onMouseDown? fun(self: gui.Image, x: integer, y: integer, button: integer, double: boolean, mods: string)
+---@field onMouseUp? fun(self: gui.Image, x: integer, y: integer, button: integer)
+---@field onMouseMove? fun(self: gui.Image, x: integer, y: integer)
+---@field onMouseEnter? fun(self: gui.Image)
+---@field onMouseLeave? fun(self: gui.Image)
 
 ---@class gui.ImageOptions: gui.Options
 ---@field file? string
 ---@field fit? boolean
+---@field pointer? gui.Pointer
+---@field onClick? fun(self: gui.Image, x: integer, y: integer)
+---@field onDoubleClick? fun(self: gui.Image, x: integer, y: integer)
+---@field onMouseDown? fun(self: gui.Image, x: integer, y: integer, button: integer, double: boolean, mods: string)
+---@field onMouseUp? fun(self: gui.Image, x: integer, y: integer, button: integer)
+---@field onMouseMove? fun(self: gui.Image, x: integer, y: integer)
+---@field onMouseEnter? fun(self: gui.Image)
+---@field onMouseLeave? fun(self: gui.Image)
 
 ---@alias gui.Pointer "default"|"hand"|"text"|"cross"|"move"|"wait"|"help"
 
@@ -482,6 +532,8 @@ function Table:editing() end
 ---@field pointer gui.Pointer the mouse pointer while the mouse is over it
 ---@field onKey? fun(self: gui.Canvas, key: string, text: string): boolean? clicking it takes the keyboard
 ---@field onDraw? fun(self: gui.Canvas, g: gui.Graphics)
+---@field onClick? fun(self: gui.Canvas, x: integer, y: integer) pressed and released over it with the left button
+---@field onDoubleClick? fun(self: gui.Canvas, x: integer, y: integer) after onClick, when the press was a double click
 ---@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer, double: boolean, mods: string) button 1 is left, 2 middle, 3 right; double for a double click; mods as "Shift" or "Ctrl+Shift"
 ---@field onMouseUp? fun(self: gui.Canvas, x: integer, y: integer, button: integer)
 ---@field onMouseDrag? fun(self: gui.Canvas, x: integer, y: integer)
@@ -504,6 +556,8 @@ function Canvas:snapshot(scale) end
 ---@field pointer? gui.Pointer the mouse pointer while the mouse is over it
 ---@field onKey? fun(self: gui.Canvas, key: string, text: string): boolean? clicking it takes the keyboard
 ---@field onDraw? fun(self: gui.Canvas, g: gui.Graphics)
+---@field onClick? fun(self: gui.Canvas, x: integer, y: integer)
+---@field onDoubleClick? fun(self: gui.Canvas, x: integer, y: integer)
 ---@field onMouseDown? fun(self: gui.Canvas, x: integer, y: integer, button: integer, double: boolean, mods: string)
 ---@field onMouseUp? fun(self: gui.Canvas, x: integer, y: integer, button: integer)
 ---@field onMouseDrag? fun(self: gui.Canvas, x: integer, y: integer)
@@ -659,6 +713,12 @@ function MarkdownEdit:moved() end
 ---@class gui.Scroll: gui.Container
 ---@field scrollX integer how far the content is scrolled across, in pixels; set to scroll
 ---@field scrollY integer how far the content is scrolled down, in pixels; set to scroll
+---@field onScroll? fun(self: gui.Scroll, x: integer, y: integer) its content was scrolled, by the wheel, the bars or the program, to x, y; once for however far it went before the program heard
+
+---@class gui.ScrollOptions: gui.Options
+---@field scrollX? integer
+---@field scrollY? integer
+---@field onScroll? fun(self: gui.Scroll, x: integer, y: integer)
 ---@class gui.Splitter: gui.Container
 
 ---@class gui.Tabs: gui.Object

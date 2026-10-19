@@ -307,6 +307,11 @@ What there is:
   forms of your own.
 - **Also:** timers, the clipboard, drag and drop in and out, key presses,
   colours and fonts, and resizing.
+- **Events:** besides clicks and changes, a form has `onLoad`, `onActivate`
+  and `onDeactivate`; controls `onFocus` and `onBlur`, `onShow` and
+  `onHide`, `onResize`, and `onPaint` to draw over themselves; a Label or an
+  Image can be clicked and hovered; a Scroll has `onScroll`. See
+  `examples/gui/events.lua` and the Events section of `docs/gui.md`.
 - **Reading properties:** properties are read from the screen, so
   `name.text` is what was typed. A handler gets its control as `self`, and an
   error in one is reported like any other.

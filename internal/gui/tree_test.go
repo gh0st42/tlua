@@ -74,6 +74,6 @@ assert(canvas.color == "#ffffff" and tree.width == 200 and table.selected == 0)
 canvas:redraw()
 form.onDrop = function(self, text, lines) end
 assert(gui.clipboard ~= nil)`)
-	fails(t, L, `canvas.onClick = print`, "a Canvas has no event onClick")
+	fails(t, L, `canvas.onChange = print`, "a Canvas has no event onChange")
 	fails(t, L, `table.onToggle = print`, "a Table has no event onToggle")
 }

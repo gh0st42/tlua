@@ -66,9 +66,9 @@ behind its siblings, which is also the order a layout lists them in.
 
 | Kind          | Own properties                                       | Events |
 |---------------|------------------------------------------------------|--------|
-| `Form`        | `resizable`                                          | `onClose`, `onUnload`, `onKey`, `onKeyPreview`, `onResize` |
+| `Form`        | `resizable`                                          | `onLoad`, `onClose`, `onUnload`, `onKey`, `onKeyPreview`, `onActivate`, `onDeactivate` |
 | `Menu`        | `items` (see below); Form only                       | — |
-| `Label`       | `align` (`"left"`, `"center"`, `"right"`), `image`; `text` is `caption` | — |
+| `Label`       | `align` (`"left"`, `"center"`, `"right"`), `image`; `text` is `caption`; `pointer` | `onClick`, `onDoubleClick`, `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseEnter`, `onMouseLeave` |
 | `Button`      | `default` (Enter presses it), `image` beside the caption | `onClick` |
 | `TextBox`     | `text`, `multiLine`, `password`, `readOnly`; for code `lineNumbers`, `syntax = "lua"`, `acceptsTab`; `line`, `cursor`, `selectedText`, `select(i, j)`, `insert(text)`, `pointAt(pos)` | `onChange`, `onKey`, `onHover` |
 | `CheckBox`    | `checked` (also `value`)                             | `onChange` |
@@ -77,16 +77,16 @@ behind its siblings, which is also the order a layout lists them in.
 | `ListBox`     | `items`, `selected`, `text`                          | `onChange`, `onDoubleClick` |
 | `Tree`        | `items` (see below), `path`, `text`                  | `onChange`, `onDoubleClick`, `onToggle` |
 | `Table`       | `columns`, `rows`, `columnWidths`, `selected`, `editable` | `onChange`, `onDoubleClick`, `onStartEdit`, `onEdit`, `onEditButton` |
-| `Canvas`      | drawn by its `onDraw` (see below); `color` is the background; `transparent` shows what is under it; `pointer` is the mouse pointer over it | `onDraw`, `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseDrag`, `onMouseWheel`, `onMouseEnter`, `onMouseLeave`, `onKey` |
+| `Canvas`      | drawn by its `onDraw` (see below); `color` is the background; `transparent` shows what is under it; `pointer` is the mouse pointer over it | `onDraw`, `onClick`, `onDoubleClick`, `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseDrag`, `onMouseWheel`, `onMouseEnter`, `onMouseLeave`, `onKey` |
 | `MarkdownView` | formatted text with links (see [below](#formatted-text-markdownview)): `text`, `file`, `textSize`, `face` | `onLink`, `onNavigate`, `onHover` |
 | `MarkdownEdit` | Markdown edited as it looks (see [below](#editing-markdown-markdownedit)): `textSize`, `paper` | `onChange`, `onSelect`, `onMenu`, `onLink`, `onHover` |
 | `Slider`      | `min`, `max`, `step`, `value`, `vertical`            | `onChange` |
 | `Spinner`     | `min`, `max`, `step`, `value`                        | `onChange` |
 | `ProgressBar` | `min`, `max`, `value`; `caption` is drawn on the bar | — |
-| `Image`       | `file` (PNG, JPEG, BMP, SVG, GIF), `fit`             | — |
+| `Image`       | `file` (PNG, JPEG, BMP, SVG, GIF), `fit`; `pointer`  | the same as a Label's |
 | `Frame`       | holds controls inside a captioned border             | — |
 | `Panel`       | holds controls, with no border or caption            | — |
-| `Scroll`      | holds controls, showing part of them with scrollbars; their positions are measured from its content's corner; `scrollX`, `scrollY` | — |
+| `Scroll`      | holds controls, showing part of them with scrollbars; their positions are measured from its content's corner; `scrollX`, `scrollY` | `onScroll` |
 | `Splitter`    | holds controls that tile it edge to edge; the user drags the lines between them | — |
 | `Tabs`        | holds Pages, made with `tabs:Page{caption = ...}`; `selected` | `onChange` |
 
@@ -119,7 +119,9 @@ Some details:
 
 Every kind also raises `onDrop` and `onDrag`; see [Drag and drop](#drag-and-drop).
 Every kind also has a `contextMenu`, and raises `onContextMenu`; see
-[Context menus](#context-menus).
+[Context menus](#context-menus). Every kind but a Menu also raises `onShow`,
+`onHide`, `onResize` and `onPaint`, and the controls that take the keyboard
+`onFocus` and `onBlur`: see [Events of the window and its controls](#events-of-the-window-and-its-controls).
 
 ## Handlers
 
@@ -143,6 +145,89 @@ control. It is for the few keys a form means whatever has the focus: Space
 to play and stop in a music editor, where a focused checkbox would otherwise
 tick. Keys it lets go of go on as before, to the control and then, unused,
 to `onKey`.
+
+### Events of the window and its controls
+
+Besides what the user does to a control, a program hears of what happens to
+it. The events are listed for each kind in the table above and by
+`gui.kinds()`; the designer's event box lists them as it does the others.
+
+**A form's life.**
+- `onLoad(self)` is the form's first event: it is built and on screen, and
+  the program has finished setting it up. It comes from the event loop, after
+  the main chunk has run, so handlers written after `form:show()` hear it. It
+  is the place to fill lists and set what the controls start with. It comes
+  once each time the form is built, so again when a form that was closed is
+  shown anew (`onUnload` is its other end).
+- `onShow(self)` follows it, and comes again whenever the form is shown after
+  being hidden (`form.visible = false`, then `true`); `onHide(self)` comes
+  when it is hidden, or closed, after `onUnload`.
+- `onActivate(self)` is the form's window being given the keyboard (clicked,
+  or switched to), and `onDeactivate(self)` its losing it to another window.
+  The keyboard moving from one of the form's controls to another is neither.
+  It is how a game knows to pause, or a program to look again at a file.
+- Nothing on a form hears of anything before `onLoad` has finished: the
+  events there would have been are told right after it, in the order a user
+  would have met them (the form and its visible controls shown, anything that
+  changed size, the window activated, the control with the keyboard given it).
+
+**Showing and hiding.** `onShow` and `onHide` are raised for any control that
+becomes visible or stops being so: by `visible`, by its form being shown or
+closed, or, for a Page, by its tab being chosen or another. A Page's
+`onShow` is where its contents can be filled in when first looked at.
+
+**Size.** `onResize(self)` is raised when a control's, or a form's, size
+changes, whether the program changed it, or its container did following the
+form. It is raised once for a change, with the new size already the object's,
+and not for a move. A handler that sizes its own object again is not asked
+about that. A form's moves are not heard.
+
+**Keyboard.** `onFocus(self)` and `onBlur(self)` are raised for the controls
+that take the keyboard (a Canvas takes it only if it has `onKey`), once each
+time: `onBlur` is raised before the next control's `onFocus`, so a handler
+that checks what was typed in a box on `onBlur` has done so by the time the
+next one starts. A window that loses the keyboard takes it from its control,
+so that control hears `onBlur`, and `onFocus` when the window has it back.
+
+**Painting.** `onPaint(self, g)` is raised each time a control is drawn,
+after it has drawn itself and what it holds, with a `g` that draws inside it
+and nowhere else, as a Canvas's `onDraw` does (see
+[Canvas](#canvas): the same calls, in the control's
+own coordinates). It is for what goes over a control: a mark on a picture, a
+grid over a panel, a border of one's own. To draw under controls, use a Canvas
+below them. `g` only works inside the handler; ask for a redraw with
+`control:redraw()`. A Canvas has `onDraw` for this, and a Menu has neither.
+
+```lua
+function meter:onPaint(g)
+  local w, h = g:size()
+  g:color("#ffffff")
+  for i = 0, 10 do
+    local x = math.floor(w * i / 10)
+    g:line(x, 0, x, 8)
+  end
+end
+```
+
+**Clicks and the mouse over a Label, an Image or a Canvas.** A Label or an
+Image, which a click does nothing to, hears the mouse as a Canvas does:
+`onMouseDown(self, x, y, button, double, mods)`, `onMouseUp(self, x, y,
+button)`, `onMouseMove(self, x, y)`, `onMouseEnter` and `onMouseLeave`, with
+x and y from its corner. They also have `onClick(self, x, y)`, raised when a
+press and the release of it are both over the control with the left button,
+and `onDoubleClick(self, x, y)` after it when that press was a double click;
+a Canvas has these two as well. `pointer = "hand"` (or `"cross"`, `"text"`,
+`"move"`, `"wait"`, `"help"`) shows that mouse pointer over a Label or an
+Image as it does over a Canvas, which makes a link of a Label. A Label with
+none of these does what it did before: nothing, but start a drag when it has
+`onDrag`.
+
+**Scrolling.** `onScroll(self, x, y)` is raised when a Scroll's content was
+scrolled, by the wheel, by its bars or by setting `scrollX` and `scrollY`, to
+x, y; once for however far it went before the program heard.
+
+[`examples/gui/events.lua`](../examples/gui/events.lua) logs all of them as
+they happen.
 
 An error in a handler stops the event loop and is reported where the loop was
 started. Without `bootgui()`, it surfaces from `form:show()`, so `pcall` can
@@ -383,7 +468,9 @@ A Canvas is drawn by its `onDraw(self, g)`, which runs whenever it needs
 drawing. `canvas:redraw()` asks for that, and so does assigning any of its
 properties, fields of the script's own included. Coordinates are the canvas's own,
 with 0, 0 at its top left, and nothing drawn spills outside it. `g` only
-works inside `onDraw`:
+works inside `onDraw`, or inside `onPaint`, which gives the same `g` to any
+other control to draw over it (see [Events of the window and its
+controls](#events-of-the-window-and-its-controls)):
 
 | Call | Draws |
 |------|-------|
@@ -808,9 +895,9 @@ without an executable made for each.
 
 Closing a form frees its window and everything in it. What the user left in
 its controls stays readable: `name.text` is still what was typed. Showing the
-form again builds it afresh from those values. So a form made for one
-question, on each click, does not pile up. Replacing an Image's `file` frees
-the picture it showed.
+form again builds it afresh from those values, and raises `onLoad` again. So
+a form made for one question, on each click, does not pile up. Replacing an
+Image's `file` frees the picture it showed.
 
 ## Looks
 

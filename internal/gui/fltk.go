@@ -86,6 +86,11 @@ func showWindow(f *guiObject, modal bool) {
 		w.SetNonModal()
 	}
 	w.Show()
+	// FLTK tells a window it was shown, which is onLoad and onShow; a
+	// window it did not tell is told now.
+	if !f.loaded {
+		shownForm(f)
+	}
 }
 
 func hideWindow(f *guiObject) {
@@ -171,9 +176,9 @@ func group(o *guiObject) *fltk.Group {
 func destroyWidget(o *guiObject) {
 	d, _ := o.widget.(interface{ Destroy() })
 	win := window(o.form())
-	canvas := o.kind == "Canvas" // forget destroys a Canvas itself
+	drawn := drawnByHand(o) // forget destroys these itself
 	forget(o)
-	if d != nil && !canvas {
+	if d != nil && !drawn {
 		d.Destroy()
 	}
 	if win != nil {
@@ -199,9 +204,14 @@ func restack(p *guiObject) {
 
 // forget drops the widgets of an object and everything in it, freeing what
 // FLTK would not free with them: the images, which widgets only borrow, and
-// a Canvas's drawing handler, which go-fltk only lets go of when the Canvas
-// itself is destroyed. The caller destroys the window.
+// the drawing handler of a Canvas or of a control with onPaint or onScroll, which
+// go-fltk only lets go of when the widget itself is destroyed. Those are
+// destroyed here, the controls inside one before it; the caller destroys the
+// window, unless it is one of them (see drawnByHand).
 func forget(o *guiObject) {
+	for _, c := range o.children {
+		forget(c)
+	}
 	switch st := o.state.(type) {
 	case *canvas:
 		for _, img := range st.images {
@@ -210,15 +220,24 @@ func forget(o *guiObject) {
 	case scalable:
 		st.Destroy()
 	}
-	if b, ok := o.widget.(*fltk.Box); ok && o.kind == "Canvas" {
-		b.Destroy()
+	if over, ok := o.overlay.(*canvas); ok {
+		for _, img := range over.images {
+			img.Destroy()
+		}
 	}
-	o.widget, o.state = nil, nil
-	o.mouse.armed, o.mouse.dropping = false, false
-	for _, c := range o.children {
-		forget(c)
+	if d, ok := o.widget.(interface{ Destroy() }); ok && drawnByHand(o) {
+		d.Destroy()
 	}
+	o.widget, o.state, o.overlay = nil, nil, nil
+	o.mouse.armed, o.mouse.dropping, o.mouse.pressed, o.mouse.over, o.mouse.pointed = false, false, false, false, false
+	o.loaded, o.ready, o.active, o.activeTold = false, false, false, false
+	o.focused, o.told, o.resizing, o.focusOwner = false, false, false, nil
+	o.hooked.draw, o.hooked.resize = false, false
+	o.scrolled.pending = false
 }
+
+// drawnByHand says whether forget destroys an object's widget itself.
+func drawnByHand(o *guiObject) bool { return o.kind == "Canvas" || o.hooked.draw }
 
 // releaseForm frees a closed form's window from the event loop, outside the
 // callback that closed it, unless it has been shown again by then.
@@ -228,8 +247,11 @@ func releaseForm(f *guiObject, gone func()) {
 		if win == nil || win.IsShown() {
 			return
 		}
+		byHand := drawnByHand(f)
 		forget(f)
-		win.Destroy()
+		if !byHand {
+			win.Destroy()
+		}
 		gone()
 	})
 }
@@ -248,17 +270,23 @@ func buildForm(f *guiObject) error {
 	catchDrops(f, w, h)
 	win.SetCallback(func() { f.app.requestClose(f) })
 	listen(f)
-	win.SetResizeHandler(func() { f.app.fire(f, "onResize") })
+	win.SetResizeHandler(func() { resized(f) })
+	f.width, f.height = w, h
+	f.hooked.resize = true
 	err := buildChildren(f, &win.Group)
 	win.End()
 	if err == nil {
 		err = f.applyStoredProps()
 	}
 	if err != nil {
-		win.Destroy()
+		byHand := drawnByHand(f)
 		forget(f)
+		if !byHand {
+			win.Destroy()
+		}
 		return err
 	}
+	hookEvents(f)
 	return nil
 }
 
@@ -465,7 +493,9 @@ func build(o *guiObject) error {
 		return fmt.Errorf("gui: cannot put a %s on screen", o.kind)
 	}
 	listen(o)
-	return o.applyStoredProps()
+	err := o.applyStoredProps()
+	hookEvents(o)
+	return err
 }
 
 // The colours of Lua, a style a letter: text, keywords, the standard
@@ -707,7 +737,7 @@ func applyProp(o *guiObject, name string, value lua.LValue) error {
 	case "cursor":
 		setCursor(o, int(lua.LVAsNumber(value)))
 	case "pointer":
-		if o.kind == "Canvas" {
+		if o.kind == "Canvas" || o.kind == "Label" || o.kind == "Image" {
 			showPointer(o)
 		}
 	case "line":

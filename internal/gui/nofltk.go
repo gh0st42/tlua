@@ -37,6 +37,7 @@ func redraw(o *guiObject)                                           {}
 func paint(a *app, w, h int, k float64, draw func(g *lua.LTable) error) (*image.NRGBA, error) {
 	return nil, errNoBackend
 }
+func hookEvents(o *guiObject)                                     {}
 func releaseForm(f *guiObject, gone func())                       {}
 func destroyWidget(o *guiObject)                                  {}
 func restack(p *guiObject)                                        {}

@@ -165,11 +165,11 @@ assert(form.onClose ~= nil, "on('close') is onClose")`)
 	if _, ok := button.events["onClick"]; ok {
 		t.Fatal("assigning nil should remove the handler")
 	}
-	fails(t, L, `button.onChange = function() end`, "a Button has no event onChange (it has onClick, onDrop, onDrag, onContextMenu)")
+	fails(t, L, `button.onChange = function() end`, "a Button has no event onChange (it has onClick, onFocus, onBlur, onShow, onHide, onResize, onPaint, onDrop, onDrag, onContextMenu)")
 	fails(t, L, `form:on("click", function() end)`, "a Form has no event onClick")
 	fails(t, L, `button.onClick = 5`, "must be a function or nil")
 	fails(t, L, `button.show = 1`, "show is a method")
-	fails(t, L, `form:Label{}.onClick = print`, "a Label has no event onClick (it has onDrop, onDrag, onContextMenu)")
+	fails(t, L, `form:Label{}.onChange = print`, "a Label has no event onChange (it has onClick, onDoubleClick, onMouseDown, onMouseUp, onMouseMove, onMouseEnter, onMouseLeave, onShow, onHide, onResize, onPaint, onDrop, onDrag, onContextMenu)")
 	run(t, L, `form:Label{}.onDrop = print`)
 	run(t, L, `assert(button.focus == form.focus, "methods are the same function every time")`)
 }
@@ -273,4 +273,62 @@ func TestEventNames(t *testing.T) {
 			t.Errorf("eventName(%q) = %q, want %q", in, got, want)
 		}
 	}
+}
+
+// Each kind has the events of the window and the keyboard that fit it, and
+// they can be set before anything is on screen.
+func TestEventsOfTheWindowAndItsControls(t *testing.T) {
+	L, _ := newState(t)
+	run(t, L, `
+local kinds = gui.kinds()
+local function has(kind, event)
+  for _, e in ipairs(kinds[kind].events) do if e == event then return true end end
+  return false
+end
+local function count(kind, event)
+  local n = 0
+  for _, e in ipairs(kinds[kind].events) do if e == event then n = n + 1 end end
+  return n
+end
+-- a form: its life, and its size once
+for _, e in ipairs{"onLoad", "onShow", "onHide", "onActivate", "onDeactivate", "onResize", "onPaint"} do
+  assert(has("Form", e), "Form " .. e)
+end
+assert(count("Form", "onResize") == 1)
+assert(not has("Form", "onFocus"))
+-- what takes the keyboard hears of it, and nothing else does
+for _, k in ipairs{"Button", "TextBox", "CheckBox", "RadioButton", "ComboBox", "ListBox", "Tree", "Table", "Canvas", "Slider", "Spinner"} do
+  assert(has(k, "onFocus") and has(k, "onBlur"), k)
+end
+for _, k in ipairs{"Label", "Image", "Frame", "Panel", "Scroll", "Tabs", "Page", "ProgressBar", "Splitter"} do
+  assert(not has(k, "onFocus"), k)
+end
+-- show, hide, resize and paint for all but a Menu; a Canvas paints with onDraw
+for name in pairs(kinds) do
+  if name ~= "Menu" and not kinds[name].defined then
+    assert(has(name, "onShow") and has(name, "onHide") and has(name, "onResize"), name)
+    assert(has(name, "onPaint") == (name ~= "Canvas"), name)
+  end
+end
+assert(not has("Menu", "onShow") and not has("Menu", "onPaint"))
+-- the mouse on what a click does nothing to, and clicks on a Canvas
+for _, e in ipairs{"onClick", "onDoubleClick", "onMouseDown", "onMouseUp", "onMouseMove", "onMouseEnter", "onMouseLeave"} do
+  assert(has("Label", e) and has("Image", e), e)
+end
+assert(not has("Button", "onMouseDown") and has("Canvas", "onClick") and has("Canvas", "onDoubleClick"))
+assert(has("Scroll", "onScroll") and not has("Panel", "onScroll"))
+assert(kinds.Label.props.pointer and kinds.Image.props.pointer and kinds.Canvas.props.pointer)
+
+-- they can all be given to an object that is not on screen
+local form = gui.Form{width = 100, height = 100, onLoad = function() end, onActivate = print}
+local label = form:Label{caption = "x", pointer = "hand", onClick = function() end, onMouseEnter = print}
+local panel = form:Panel{onPaint = function() end, onResize = print, onShow = print, onHide = print}
+local box = form:TextBox{onFocus = print, onBlur = print}
+local scroll = form:Scroll{onScroll = print}
+assert(label.pointer == "hand" and form.onLoad and scroll.onScroll)
+`)
+	fails(t, L, `gui.Button{}.onLoad = print`, "a Button has no event onLoad")
+	fails(t, L, `gui.Label{}.onFocus = print`, "a Label has no event onFocus")
+	fails(t, L, `gui.Canvas{}.onPaint = print`, "a Canvas has no event onPaint")
+	fails(t, L, `gui.Label{pointer = "crosshair"}`, "pointer must be one of")
 }

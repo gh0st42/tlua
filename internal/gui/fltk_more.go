@@ -60,6 +60,7 @@ func handle(o *guiObject, e fltk.Event) bool {
 		}
 	}
 
+	observe(o, e)
 	if e == fltk.PUSH || e == fltk.KEY {
 		a.lastEvent = o
 	}
@@ -112,8 +113,11 @@ func handle(o *guiObject, e fltk.Event) bool {
 		return treeKey(o, e)
 	case "TextBox":
 		return codeKey(o, e)
-	case "Label", "Image", "ProgressBar":
-		// These take no presses of their own, and a drag starts with one.
+	case "Label", "Image":
+		// These take no presses of their own: the script may, and a drag
+		// starts with one.
+		return pointerEvent(o, e)
+	case "ProgressBar":
 		return e == fltk.PUSH && has("onDrag")
 	}
 	return false
@@ -1060,9 +1064,6 @@ type canvas struct {
 	// paint is set while gui.paint or canvas:snapshot draws into a
 	// picture rather than onto the screen.
 	paint *paintArea
-	// hover is whether the mouse is over it, and pointed whether it has
-	// set the window's mouse pointer to its own.
-	hover, pointed bool
 }
 
 var pointerShapes = map[string]fltk.Cursor{
@@ -1070,22 +1071,22 @@ var pointerShapes = map[string]fltk.Cursor{
 	"move": fltk.CURSOR_MOVE, "wait": fltk.CURSOR_WAIT, "help": fltk.CURSOR_HELP,
 }
 
-// showPointer shows a Canvas's pointer while the mouse is over it, and
-// puts the usual one back when its pointer is "default" again.
+// showPointer shows a Canvas's, Label's or Image's pointer while the mouse
+// is over it, and puts the usual one back when its pointer is "default"
+// again.
 func showPointer(o *guiObject) {
-	c := canvasOf(o)
 	win := window(o.form())
 	if win == nil {
 		return
 	}
 	shape, ok := pointerShapes[propString(o, "pointer")]
 	switch {
-	case ok && c.hover:
+	case ok && o.mouse.over:
 		win.SetCursor(shape)
-		c.pointed = true
-	case c.pointed:
+		o.mouse.pointed = true
+	case o.mouse.pointed:
 		win.SetCursor(fltk.CURSOR_DEFAULT)
-		c.pointed = false
+		o.mouse.pointed = false
 	}
 }
 
@@ -1230,14 +1231,19 @@ func drawCanvas(o *guiObject, b *fltk.Box) {
 	if o.events["onDraw"] == nil {
 		return
 	}
-	c := canvasOf(o)
-	fltk.PushClip(b.X(), b.Y(), b.W(), b.H())
+	drawOn(o, canvasOf(o), b.X(), b.Y(), b.W(), b.H(), "onDraw")
+}
+
+// drawOn raises onDraw or onPaint with the g of c, which draws inside the
+// rectangle x, y, w, h, and in nothing outside it.
+func drawOn(o *guiObject, c *canvas, x, y, w, h int, event string) {
+	fltk.PushClip(x, y, w, h)
 	fltk.SetDrawColor(black)
 	fltk.SetDrawFont(fltk.HELVETICA, 14)
 	fltk.SetLineStyle(fltk.SOLID, 1)
 	c.nearest = false
 	c.drawing = true
-	o.app.fire(o, "onDraw", c.g)
+	o.app.fire(o, event, c.g)
 	c.drawing = false
 	fltk.SetLineStyle(fltk.SOLID, 0)
 	fltk.PopClip()
@@ -1306,7 +1312,8 @@ func canvasEvent(o *guiObject, e fltk.Event) bool {
 			b.TakeFocus()
 		}
 		x, y := at()
-		a.fire(o, "onMouseDown", x, y, lua.LNumber(fltk.EventButton()), lua.LBool(fltk.EventClicks() > 0),
+		o.mouse.pressed, o.mouse.double = true, fltk.EventClicks() > 0
+		a.fire(o, "onMouseDown", x, y, lua.LNumber(fltk.EventButton()), lua.LBool(o.mouse.double),
 			lua.LString(modNames(fltk.EventState())))
 		return true // so that the drag and the release come here too
 	case fltk.FOCUS, fltk.UNFOCUS:
@@ -1324,13 +1331,22 @@ func canvasEvent(o *guiObject, e fltk.Event) bool {
 		return true
 	case fltk.RELEASE:
 		x, y := at()
+		pressed, double := o.mouse.pressed, o.mouse.double
+		o.mouse.pressed = false
 		a.fire(o, "onMouseUp", x, y, lua.LNumber(fltk.EventButton()))
+		px, py := fltk.EventX()-b.X(), fltk.EventY()-b.Y()
+		if pressed && fltk.EventButton() == 1 && px >= 0 && py >= 0 && px < b.W() && py < b.H() && o.widget != nil {
+			a.fire(o, "onClick", x, y)
+			if double && o.widget != nil {
+				a.fire(o, "onDoubleClick", x, y)
+			}
+		}
 		return true
 	case fltk.ENTER:
 		// FLTK sends the first move over a widget as this, so it is a move
 		// as well.
 		x, y := at()
-		canvasOf(o).hover = true
+		o.mouse.over = true
 		a.fire(o, "onMouseEnter")
 		a.fire(o, "onMouseMove", x, y)
 		if o.widget != nil {
@@ -1338,7 +1354,7 @@ func canvasEvent(o *guiObject, e fltk.Event) bool {
 		}
 		return true // so that the moves after it come here
 	case fltk.LEAVE:
-		canvasOf(o).hover = false
+		o.mouse.over = false
 		showPointer(o)
 		a.fire(o, "onMouseLeave")
 		return true
@@ -1368,8 +1384,8 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 		if c.paint != nil {
 			return 0, 0
 		}
-		b := o.widget.(*fltk.Box)
-		return b.X(), b.Y()
+		x, y, _, _ := paintBounds(o)
+		return x, y
 	}
 	// n is argument i in the pixels being drawn: units, but for a picture
 	// painted at a scale.
@@ -1377,7 +1393,7 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 	def := func(name string, fn func(L *lua.LState, x0, y0 int) int) {
 		g.RawSetString(name, L.NewFunction(func(L *lua.LState) int {
 			if !c.drawing {
-				L.RaiseError("gui: g:%s only works inside onDraw", name)
+				L.RaiseError("gui: g:%s only works inside onDraw or onPaint", name)
 			}
 			x0, y0 := origin()
 			return fn(L, x0, y0)
@@ -1389,9 +1405,9 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 			L.Push(lua.LNumber(c.paint.h))
 			return 2
 		}
-		b := o.widget.(*fltk.Box)
-		L.Push(lua.LNumber(b.W()))
-		L.Push(lua.LNumber(b.H()))
+		_, _, w, h := paintBounds(o)
+		L.Push(lua.LNumber(w))
+		L.Push(lua.LNumber(h))
 		return 2
 	})
 	def("color", func(L *lua.LState, _, _ int) int {

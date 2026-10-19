@@ -39,8 +39,8 @@ assert(loose.value == 0)`)
 		t.Fatal("gui.Rating{} should join the latest form")
 	}
 
-	fails(t, L, `r.onClick = print`, "a Rating has no event onClick (it has onChange, onRated, onDraw")
-	fails(t, L, `r:fire("click")`, "a Rating has no event onClick")
+	fails(t, L, `r.onSelect = print`, "a Rating has no event onSelect (it has onChange, onRated, onDraw")
+	fails(t, L, `r:fire("select")`, "a Rating has no event onSelect")
 	fails(t, L, `form:Tabs{}:Rating{}`, "a Tabs cannot hold a Rating")
 	fails(t, L, `r.Rating = 1`, "Rating is a method")
 	run(t, L, `form:Button{}:fire("click")`) // a built-in event, no handler: nothing happens
