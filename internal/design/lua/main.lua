@@ -12,6 +12,7 @@ local props = require "design.props"
 local toolbox = require "design.toolbox"
 local code = require "design.code"
 local menueditor = require "design.menueditor"
+local interface = require "design.interface"
 local assist = require "design.assist"
 
 local M = {}
@@ -880,6 +881,22 @@ function M.start(opts)
     self:openForm(name)
   end
 
+  -- editInterface shows what the component being designed offers to the
+  -- forms that use it: its props, events and public parts.
+  function d:editInterface()
+    if self.docKind ~= "Component" then
+      self:status("Only a component has an interface")
+      return
+    end
+    self:checkpoint()
+    if interface.edit(self.doc, self.interfaceHooks) then
+      self:changed()
+      self.surface:load(self.doc, selectedNames())
+      self.props:list(self.doc)
+      self:status("The interface is kept when the component is saved")
+    end
+  end
+
   function d:addComponent()
     local n = 1
     while project.exists(project.componentPath(self.dir, "Component" .. n)) or project.exists(self.dir .. "/controls/Component" .. n .. ".lua") do n = n + 1 end
@@ -1065,6 +1082,7 @@ function M.start(opts)
     } },
     { "&Tools", {
       { "&Menu Editor...", function() d:editMenu() end, shortcut = "Cmd+E" },
+      { "Component &Interface...", function() d:editInterface() end },
     } },
     { "&Run", {
       { "&Start", function() d:run() end, shortcut = "F5" },

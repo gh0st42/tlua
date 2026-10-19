@@ -169,10 +169,17 @@ and used like a control: [gui.md](gui.md#components) describes what it is.
   U, on every form and in other components, except in itself.
 - **On a form:** an instance is one control. It is placed, moved and given
   props like any, and the layout keeps its kind and props, not its parts.
-- **Not yet:** the component's props and events (what it shows of itself)
-  are written into the layout by hand for now; a form open in the designer
-  keeps the version of a component it started with until the designer is
-  opened again. See [components-plan.md](components-plan.md).
+- **The interface:** Tools > Component Interface says what the component
+  shows of itself, in three lists. *Properties* have a name, a type and a
+  default, and stand for a property of a part (`lbl.caption`) or are the
+  component's own. *Events* are passed on from a part's (`txt.onChange`), or
+  have nothing after them and are raised by its code with `self:fire`.
+  *Parts* are private to the component unless marked public, which makes
+  them fields of it. The dialog refuses what a component cannot carry: a
+  name every control has, a part or property that is not there.
+- **Not yet:** a form open in the designer keeps the version of a component
+  it started with until the designer is opened again. See
+  [components-plan.md](components-plan.md).
 
 ## Help with the code
 

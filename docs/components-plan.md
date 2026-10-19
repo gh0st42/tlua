@@ -3,7 +3,7 @@
 Status: phase 1 is built (2026-10-19): `gui.component`, private part
 names, forwarded props and events, in docs/gui.md ("Components") and
 `examples/gui/components.lua`. Phase 2 is built: Project > Add Component, a component opens
-like a form (`d:openComponent`), saves its files, and is in the toolbox. Phases 3 to 6 are not.
+like a form (`d:openComponent`), saves its files, and is in the toolbox. Phase 3 is built: Tools > Component Interface. Phases 4 to 6 are not.
 
 ## What it is
 
@@ -196,7 +196,7 @@ the whole component; parts cannot be moved on a form (that is the point).
 2. **Components in the designer.** Done. `Component` kind on the surface, the
    Components list in the project tree, New Component, saving the three
    files, the toolbox entry, building on forms. docs/design.md.
-3. **The interface dialog.** Props with `to`, event forwarding, public
+3. **The interface dialog.** Done (`interface.lua`). Props with `to`, event forwarding, public
    parts, methods; the grid shows the declared props on instances.
 4. **Keeping forms in step.** Rebuild open forms on save; rename with
    rewriting; the `.d.lua` declarations so the code window completes

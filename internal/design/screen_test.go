@@ -1121,11 +1121,20 @@ func TestDesignerMakesComponents(t *testing.T) {
 		s.place("Label", 10, 10, 90, 32, "lbl")
 		s.place("TextBox", 100, 10, 225, 38, "txt")
 		s.expect(`#D.doc == 2 and D.doc[2].name == "txt"`)
-		// The interface is written by hand until it has a dialog.
-		s.lua(`D.doc.props = { label = { type = "string", default = "Name", to = "lbl.caption" },
-		  text = { type = "string", to = "txt.text" } }
-		D.doc.events = { onChange = "txt.onChange" }
-		D.dirty = true; D:save()`)
+		// What it shows of itself is set in the Component Interface.
+		s.lua(`E = {}; D.interfaceHooks = E`)
+		later(func() {
+			s.lua(`E.props[1] = { "label", "string", "Name", "lbl.caption" }
+			  E.props[2] = { "text", "string", "", "txt.text" }
+			  E.events[1] = { "onChange", "txt.onChange" }
+			  E.events[2] = { "onSubmit", "" }
+			  E.parts[2][3] = "true"`)
+			x, y := s.at("E.ok", 10, 10)
+			in.Click(x, y)
+		})
+		s.lua(`D:editInterface()`)
+		s.expect(`D.doc.props.label.to == "lbl.caption" and D.doc.events.onChange == "txt.onChange" and D.doc.events[1] == "onSubmit" and D.doc[2].public == true and D.dirty`)
+		s.lua(`D:save()`)
 		for _, f := range []string{"components/LabeledField.comp.lua", "components/LabeledField.lua", "components/LabeledField.d.lua", "controls/LabeledField.lua"} {
 			if _, err := os.Stat(filepath.Join(s.dir, f)); err != nil {
 				s.t.Errorf("not written: %v", err)

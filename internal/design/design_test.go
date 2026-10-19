@@ -165,6 +165,37 @@ assert(code.findHandler("frm.Button1.onClick = function() end", "frm", "Button1"
 local t5, line5 = code.addHandler("local frm = gui.load 'X'", "frm", "B", "onClick")
 assert(t5 == "local frm = gui.load 'X'\n\nfunction frm.B:onClick()\n  \nend\n" and line5 == 4, t5 .. line5)
 
+-- The Component Interface turns rows of text into a layout's props, events
+-- and public parts, and says why they cannot.
+local interface = require "design.interface"
+local doc = { kind = "Component", name = "Field", { kind = "Label", name = "lbl" }, { kind = "TextBox", name = "txt" } }
+local props, events, parts = interface.rows(doc)
+assert(#props == 0 and #events == 0 and #parts == 2 and parts[2][1] == "txt" and parts[2][2] == "TextBox" and parts[2][3] == "false")
+props = { { "label", "string", "Name", "lbl.caption" }, { "size", "integer", "3", "" } }
+events = { { "onChange", "txt.onChange" }, { "onSubmit", "" } }
+parts[2][3] = "true"
+assert(interface.check(props, events, parts) == nil)
+interface.apply(doc, props, events, parts)
+assert(doc.props.label.to == "lbl.caption" and doc.props.label.default == "Name" and doc.props.size.default == 3 and doc.props.size.to == nil)
+assert(doc.events.onChange == "txt.onChange" and doc.events[1] == "onSubmit" and doc[2].public == true and doc[1].public == nil)
+local again = { interface.rows(doc) }
+assert(#again[1] == 2 and again[1][1][1] == "label" and #again[2] == 2 and again[3][2][3] == "true")
+local function bad(p, e, want)
+  local why = interface.check(p, e or {}, parts)
+  assert(why and why:find(want, 1, true), tostring(why))
+end
+bad({ { "caption", "string", "", "" } }, nil, "every control has")
+bad({ { "a b", "string", "", "" } }, nil, "not a name")
+bad({ { "x", "string", "", "" }, { "x", "string", "", "" } }, nil, "twice")
+bad({ { "x", "length", "", "" } }, nil, "the type is one of")
+bad({ { "x", "integer", "abc", "" } }, nil, "must be a number")
+bad({ { "x", "string", "", "nobody.text" } }, nil, "there is no part called nobody")
+bad({ { "x", "string", "", "lbl" } }, nil, "not written part.property")
+bad({ { "x", "string", "", "lbl.nothing" } }, nil, "a Label has no property nothing")
+bad({}, { { "change", "" } }, "not an event name")
+bad({}, { { "onChange", "txt.onNothing" } }, "a TextBox has no event onNothing")
+bad({}, { { "onShow", "" } }, "every control has")
+
 -- A component's code is a function of the component and its parts: the
 -- handlers go inside it, on parts.
 local comp = 'local gui = require "gui"\n\nreturn function(self, parts)\nend\n'
