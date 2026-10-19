@@ -48,9 +48,13 @@ local function escape(s)
 end
 
 -- formVar is what the code calls its form: the local it loads the layout
--- into, frm unless the programmer named it otherwise.
+-- into, frm unless the programmer named it otherwise. A component's code is
+-- a function of the component and its parts, and the parts are what handlers
+-- hang on: parts.
 function M.formVar(text)
-  return text:match("local%s+([%a_][%w_]*)%s*=%s*gui%.load") or "frm"
+  return text:match("local%s+([%a_][%w_]*)%s*=%s*gui%.load")
+    or text:match("return%s+function%s*%(%s*[%a_][%w_]*%s*,%s*([%a_][%w_]*)%s*%)")
+    or "frm"
 end
 
 -- target is how a handler's owner is written: frm.Button1, or frm for the
@@ -82,7 +86,9 @@ end
 
 -- addHandler adds an empty handler, before the line that returns the form
 -- if there is one, and returns the new text and the line inside the
--- handler, where the programmer starts typing.
+-- handler, where the programmer starts typing, and how far it is indented.
+-- In a component's code, which is a function ending the file, it goes
+-- inside that function, before its last end.
 function M.addHandler(text, var, name, event, kind)
   local lines = {}
   for line in (text .. "\n"):gmatch("(.-)\n") do lines[#lines + 1] = line end
@@ -94,19 +100,33 @@ function M.addHandler(text, var, name, event, kind)
       break
     end
   end
+  -- A component's code: a function that returns the file's last line.
+  local pad, inside = "", false
+  local header
+  for i, line in ipairs(lines) do
+    if line:match("^return%s+function%s*%(") then header = i end
+  end
+  if header then
+    for i = #lines, header + 1, -1 do
+      if lines[i]:match("^end%s*$") then
+        at, pad, inside = i, "  ", true
+        break
+      end
+    end
+  end
   local out = {}
   for i = 1, at - 1 do out[#out + 1] = lines[i] end
   -- A blank line on either side of it.
-  if #out > 0 and out[#out] ~= "" then out[#out + 1] = "" end
+  if #out > 0 and out[#out] ~= "" and not (inside and at == header + 1) then out[#out + 1] = "" end
   local start = #out + 1
-  out[#out + 1] = ("function %s:%s(%s)"):format(target(var, name), event, M.params(event, kind))
-  out[#out + 1] = "  "
-  out[#out + 1] = "end"
+  out[#out + 1] = pad .. ("function %s:%s(%s)"):format(target(var, name), event, M.params(event, kind))
+  out[#out + 1] = pad .. "  "
+  out[#out + 1] = pad .. "end"
   if at <= #lines then
-    out[#out + 1] = ""
+    if not inside then out[#out + 1] = "" end
     for i = at, #lines do out[#out + 1] = lines[i] end
   end
-  return table.concat(out, "\n") .. "\n", start + 1
+  return table.concat(out, "\n") .. "\n", start + 1, #pad + 2
 end
 
 -- countRefs and renameRefs find and change what the code calls a control:

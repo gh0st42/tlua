@@ -22,7 +22,16 @@ local captioned = {
 local kinds -- gui.kinds(), read again only when controls are defined
 
 function M.kinds()
-  kinds = kinds or gui.kinds()
+  if not kinds then
+    kinds = gui.kinds()
+    -- A component being designed is a Frame to the designer, with a few of
+    -- its properties; what it shows of itself is kept beside them.
+    local frame, props = kinds.Frame, {}
+    for _, p in ipairs { "name", "width", "height", "color", "font", "fontSize", "textColor" } do
+      props[p] = frame.props[p]
+    end
+    kinds.Component = { props = props, events = {}, holds = frame.holds, width = 240, height = 120 }
+  end
   return kinds
 end
 
@@ -83,6 +92,11 @@ end
 -- newForm is the layout of an empty form.
 function M.newForm(name)
   return { kind = "Form", name = name, caption = name, width = 480, height = 320 }
+end
+
+-- newComponent is the layout of an empty component.
+function M.newComponent(name)
+  return { kind = "Component", name = name, width = 240, height = 120 }
 end
 
 -- names lists every name in a layout, the form's own included.

@@ -1100,3 +1100,68 @@ func TestDesignerWritesLanguageServerStubs(t *testing.T) {
 		}
 	})
 }
+
+func TestDesignerMakesComponents(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds tlua")
+	}
+	exe := filepath.Join(t.TempDir(), "tlua")
+	if out, err := exec.Command("go", "build", "-o", exe, "tlua/cmd/tlua").CombinedOutput(); err != nil {
+		t.Fatalf("building tlua: %v\n%s", err, out)
+	}
+	withDesigner(t, func(s *scene) {
+		s.lua(`D.answerText = "LabeledField"; D:addComponent()`)
+		s.expect(`D.docKind == "Component" and D.formName == "LabeledField" and D.doc.kind == "Component"`)
+		s.expect(`D.tree.path == "Components/LabeledField" and D.win.caption:find("LabeledField")`)
+		// It cannot hold itself, and has no menu or startup.
+		s.expect(`D.toolbox:rowOf("LabeledField") == nil`)
+		s.lua(`D:editMenu(); D:setStartup()`)
+		s.expect(`#D.doc == 0 and D.statusLine.caption:find("not a window")`)
+
+		s.place("Label", 10, 10, 90, 32, "lbl")
+		s.place("TextBox", 100, 10, 225, 38, "txt")
+		s.expect(`#D.doc == 2 and D.doc[2].name == "txt"`)
+		// The interface is written by hand until it has a dialog.
+		s.lua(`D.doc.props = { label = { type = "string", default = "Name", to = "lbl.caption" },
+		  text = { type = "string", to = "txt.text" } }
+		D.doc.events = { onChange = "txt.onChange" }
+		D.dirty = true; D:save()`)
+		for _, f := range []string{"components/LabeledField.comp.lua", "components/LabeledField.lua", "components/LabeledField.d.lua", "controls/LabeledField.lua"} {
+			if _, err := os.Stat(filepath.Join(s.dir, f)); err != nil {
+				s.t.Errorf("not written: %v", err)
+			}
+		}
+		stub, _ := os.ReadFile(filepath.Join(s.dir, "components/LabeledField.d.lua"))
+		for _, want := range []string{"---@class components.LabeledField.parts", "---@field lbl gui.Label", "---@class components.LabeledField: gui.Frame", "---@field label? string"} {
+			if !strings.Contains(string(stub), want) {
+				s.t.Errorf("stub lacks %s:\n%s", want, stub)
+			}
+		}
+
+		// A handler goes inside the code's function.
+		s.lua(`D:openHandler(D.doc[2], "onChange")`)
+		s.expect(`D.codeBox.text:find("  function parts.txt:onChange%(%)\n    \nend") == nil`)
+		s.expect(`D.codeBox.text:find("  function parts.txt:onChange%(%)\n    \n  end\nend")`)
+		s.lua(`D:save()`)
+
+		// It is a control of the project now, on any form.
+		s.lua(`D:openForm("Form1"); D:showDesign()`)
+		s.expect(`D.docKind == "Form" and D.toolbox:rowOf("LabeledField") ~= nil`)
+		s.place("LabeledField", 20, 20, 0, 0, "fldName")
+		s.expect(`D.doc[1].kind == "LabeledField" and D.surface.entries[1].obj.width == 240 and #D.doc[1] == 0`)
+		s.lua(`D:setProp(D.doc[1], "label", "Surname"); D:save()`)
+		layout, _ := os.ReadFile(filepath.Join(s.dir, "forms/Form1.form.lua"))
+		if !strings.Contains(string(layout), `label = "Surname"`) || strings.Contains(string(layout), "lbl") {
+			s.t.Errorf("the form keeps the component's kind and props, not its parts:\n%s", layout)
+		}
+
+		code := "local gui = require \"gui\"\nlocal frm = gui.load \"Form1\"\ngui.after(0.2, function() print(frm.fldName.label, frm.fldName.lbl, frm.lbl); frm:close() end)\nreturn frm\n"
+		os.WriteFile(filepath.Join(s.dir, "forms/Form1.lua"), []byte(code), 0o644)
+		run := exec.Command(exe, "main.lua")
+		run.Dir = s.dir
+		out, err := run.CombinedOutput()
+		if err != nil || strings.TrimSpace(string(out)) != "Surname\tnil\tnil" {
+			s.t.Errorf("running it: %v\n%s", err, out)
+		}
+	})
+}

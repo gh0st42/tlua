@@ -39,7 +39,7 @@ end
 function M:list(doc)
   self.doc = doc
   self.nodes = { doc }
-  local items = { (doc.name or "?") .. "  (Form)" }
+  local items = { (doc.name or "?") .. "  (" .. (doc.kind == "Component" and "Component" or "Form") .. ")" }
   local depth = { [doc] = 0 }
   model.walk(doc, function(node, parent)
     depth[node] = depth[parent] + 1

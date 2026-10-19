@@ -165,6 +165,17 @@ assert(code.findHandler("frm.Button1.onClick = function() end", "frm", "Button1"
 local t5, line5 = code.addHandler("local frm = gui.load 'X'", "frm", "B", "onClick")
 assert(t5 == "local frm = gui.load 'X'\n\nfunction frm.B:onClick()\n  \nend\n" and line5 == 4, t5 .. line5)
 
+-- A component's code is a function of the component and its parts: the
+-- handlers go inside it, on parts.
+local comp = 'local gui = require "gui"\n\nreturn function(self, parts)\nend\n'
+assert(code.formVar(comp) == "parts")
+local c1, cline, cindent = code.addHandler(comp, "parts", "txt", "onChange")
+assert(c1 == 'local gui = require "gui"\n\nreturn function(self, parts)\n  function parts.txt:onChange()\n    \n  end\nend\n', c1)
+assert(cline == 5 and cindent == 4 and code.findHandler(c1, "parts", "txt", "onChange") == 4)
+local c2 = code.addHandler(c1, "parts", "btn", "onClick")
+assert(c2:find("  end\n\n  function parts.btn:onClick%(%)\n    \n  end\nend\n"), c2)
+assert(code.countRefs("parts.txt.text = 1", "parts", "txt") == 1)
+
 local src = "frm.Button1.caption = 1\nfrm.Button10.caption = 2\nfunction frm.Button1:onClick() end"
 assert(code.countRefs(src, "frm", "Button1") == 2)
 local renamed, n = code.renameRefs(src, "frm", "Button1", "cmdOK")

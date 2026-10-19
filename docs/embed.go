@@ -14,7 +14,7 @@ import (
 	"sort"
 )
 
-//go:embed gui.md design.md pico.md rad-plan.md modules/*.md
+//go:embed gui.md design.md pico.md rad-plan.md components-plan.md modules/*.md
 var Files embed.FS
 
 // Dir writes the pages to a folder of their own in the user's cache, once

@@ -124,10 +124,12 @@ function M.addControl(dir, name)
   return true
 end
 
--- classOf is the language server's name for what a layout's kind makes.
-local function classOf(kind)
+-- classOf is the language server's name for what a layout's kind makes: a
+-- component of the project has a class of its own.
+local function classOf(kind, dir)
   local info = model.kinds()[kind]
   if info and (not info.defined or info.builtin) then return "gui." .. kind end
+  if dir and exists(M.componentPath(dir, kind)) then return "components." .. kind end
   return "gui.Object"
 end
 
@@ -144,7 +146,7 @@ function M.stub(dir, name, doc)
   }
   local fields = {}
   model.walk(doc, function(node)
-    if node.name then fields[#fields + 1] = ("---@field %s %s"):format(node.name, classOf(node.kind)) end
+    if node.name then fields[#fields + 1] = ("---@field %s %s"):format(node.name, classOf(node.kind, dir)) end
   end)
   table.sort(fields)
   for _, f in ipairs(fields) do lines[#lines + 1] = f end
@@ -195,6 +197,129 @@ function M.setStartup(dir, name)
 end
 
 M.exists = exists
+
+---------------------------------------------------------------- components
+
+-- A component is a layout of controls that work together, kept as
+-- components/Name.comp.lua (the designer's), components/Name.lua (the code,
+-- yours: a function of the component and its parts) and Name.d.lua (for a
+-- language server). controls/Name.lua, written beside them every time, is
+-- the gui.component that makes it a kind of control the toolbox offers.
+
+local function componentCode(name)
+  return ([[-- The code behind components/%s.comp.lua. It runs once for each %s
+-- that is made: self is the component, and parts are its controls by name.
+
+local gui = require "gui"
+
+---@param self components.%s
+---@param parts components.%s.parts
+return function(self, parts)
+end
+]]):format(name, name, name, name)
+end
+
+local function componentControl(name)
+  return ([[-- Written by tlua design from components/%s.comp.lua; written again on
+-- every save, so changes belong there and in components/%s.lua.
+
+require("gui").component {
+  layout = "../components/%s",
+  code = "components.%s",
+}
+]]):format(name, name, name, name)
+end
+
+function M.componentPath(dir, name)
+  return dir .. "/components/" .. name .. ".comp.lua"
+end
+
+-- components lists the components of the project in dir, by name.
+function M.components(dir)
+  local names = {}
+  if not exists(dir .. "/components") then return names end
+  for file in lfs.dir(dir .. "/components") do
+    local name = file:match("^(.+)%.comp%.lua$")
+    if name then names[#names + 1] = name end
+  end
+  table.sort(names)
+  return names
+end
+
+-- addComponent starts a component: an empty layout, and the code that goes
+-- with it. A name a control has already is refused.
+function M.addComponent(dir, name)
+  if exists(dir .. "/controls/" .. name .. ".lua") then return false end
+  lfs.mkdir(dir .. "/components")
+  M.saveComponent(dir, name, model.newComponent(name))
+  return true
+end
+
+local luaTypes = {
+  string = "string", color = "string", choice = "string", file = "string", name = "string",
+  number = "number", integer = "integer", boolean = "boolean",
+}
+
+-- componentStub writes components/Name.d.lua: the parts by name, for the
+-- code's `parts`, and the component with its props and public parts, for a
+-- form's code.
+local function componentStub(dir, name, doc)
+  local lines = {
+    "---@meta",
+    "-- What " .. name .. ".comp.lua has in it, for a language server. Written by tlua",
+    "-- design each time the component is saved; changing it here changes nothing.",
+    "",
+    "---@class components." .. name .. ".parts",
+  }
+  local parts, public = {}, {}
+  model.walk(doc, function(node)
+    if node.name then
+      local field = ("---@field %s %s"):format(node.name, classOf(node.kind, dir))
+      parts[#parts + 1] = field
+      if node.public then public[#public + 1] = field end
+    end
+  end)
+  table.sort(parts)
+  table.sort(public)
+  for _, f in ipairs(parts) do lines[#lines + 1] = f end
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "---@class components." .. name .. ": gui.Frame"
+  local props = {}
+  for prop, info in pairs(doc.props or {}) do
+    props[#props + 1] = ("---@field %s? %s"):format(prop, luaTypes[info.type or "string"] or "any")
+  end
+  table.sort(props)
+  for _, f in ipairs(props) do lines[#lines + 1] = f end
+  for _, f in ipairs(public) do lines[#lines + 1] = f end
+  write(dir .. "/components/" .. name .. ".d.lua", table.concat(lines, "\n") .. "\n")
+end
+
+-- readComponent loads a component's layout as a table, with nothing in
+-- scope, as gui.component does.
+function M.readComponent(dir, name)
+  local fn, err = loadfile(M.componentPath(dir, name))
+  if not fn then return nil, err end
+  setfenv(fn, {})
+  local ok, doc = pcall(fn)
+  if not ok then return nil, doc end
+  if type(doc) ~= "table" or (doc.kind ~= "Component" and doc.kind ~= "Frame") then
+    return nil, name .. ".comp.lua does not return a component's layout"
+  end
+  doc.kind = "Component"
+  return doc
+end
+
+-- saveComponent writes a component's layout and what goes with it; its code
+-- is the programmer's, and stays as it is.
+function M.saveComponent(dir, name, doc)
+  lfs.mkdir(dir .. "/components")
+  lfs.mkdir(dir .. "/controls")
+  gui.save(doc, M.componentPath(dir, name))
+  componentStub(dir, name, doc)
+  write(dir .. "/controls/" .. name .. ".lua", componentControl(name))
+  local code = dir .. "/components/" .. name .. ".lua"
+  if not exists(code) then write(code, componentCode(name)) end
+end
 
 -- A layout names its images relative to forms/, where the form's code is:
 -- that is where gui.load looks for them, in a packed program too.

@@ -105,10 +105,14 @@ function M.start(opts)
   local center = split:Panel { left = LEFT, top = 0, width = W - LEFT - RIGHT, height = splitH }
   local rightPane = split:Panel { left = W - RIGHT, top = 0, width = RIGHT, height = splitH }
 
-  leftPane:Label { caption = "Forms", left = 6, top = 2, width = LEFT - 12, height = 20 }
+  leftPane:Label { caption = "Project", left = 6, top = 2, width = LEFT - 12, height = 20 }
   d.tree = leftPane:Tree {
     left = 6, top = 22, width = LEFT - 12, height = 110,
-    onDoubleClick = function(self) d:openForm(self.text) end,
+    onDoubleClick = function(self)
+      -- A branch opens and closes; a leaf is a form or a component.
+      local group, name = self.path:match("^([^/]+)/(.+)$")
+      if group == "Forms" then d:openForm(name) elseif group == "Components" then d:openComponent(name) end
+    end,
   }
   d.startupLine = leftPane:Label { left = 6, top = 134, width = LEFT - 12, height = 20, fontSize = 12 }
   leftPane:Label { caption = "Toolbox", left = 6, top = 158, width = LEFT - 12, height = 20 }
@@ -409,6 +413,10 @@ function M.start(opts)
   -- takes away when its last item goes.
   function d:editMenu()
     if not self.doc then return end
+    if self.docKind == "Component" then
+      self:status("A component has no menu: a window has")
+      return
+    end
     local node
     for _, n in ipairs(self.doc) do
       if n.kind == "Menu" then node = n end
@@ -435,6 +443,10 @@ function M.start(opts)
 
   function d:setStartup()
     if not self.formName then return end
+    if self.docKind == "Component" then
+      self:status("A component is a control, not a window: a form is shown first")
+      return
+    end
     local ok, why = project.setStartup(self.dir, self.formName)
     if ok then
       self:showStartup()
@@ -521,7 +533,25 @@ function M.start(opts)
       if not ok then self:print("controls/" .. name .. ".lua: " .. tostring(err)) end
     end
     model.refreshKinds()
-    self.toolbox:setTools(model.definedKinds())
+    self:fillTools()
+  end
+
+  -- fillTools puts the project's own controls in the toolbox. A component
+  -- being designed is left out of its own: it cannot hold itself.
+  function d:fillTools()
+    local tools = {}
+    for _, kind in ipairs(model.definedKinds()) do
+      if not (self.docKind == "Component" and kind == self.formName) then tools[#tools + 1] = kind end
+    end
+    self.toolbox:setTools(tools)
+  end
+
+  -- fillTree lists the forms and the components in the project tree.
+  function d:fillTree()
+    self.tree.items = {
+      { "Forms", project.forms(self.dir), open = true },
+      { "Components", project.components(self.dir), open = true },
+    }
   end
 
   function d:newControl()
@@ -551,7 +581,7 @@ function M.start(opts)
     lfs.chdir(dir .. "/forms")
     self.assist:start(dir)
     local forms = project.forms(dir)
-    self.tree.items = forms
+    self:fillTree()
     self:loadControls()
     self:showStartup()
     self:retitle()
@@ -559,21 +589,36 @@ function M.start(opts)
   end
 
   function d:openForm(name)
-    if name == "" or name == self.formName then return end
+    self:openDoc("Form", name)
+  end
+
+  function d:openComponent(name)
+    self:openDoc("Component", name)
+  end
+
+  -- openDoc opens a form or a component, whichever kind says, by its name.
+  function d:openDoc(kind, name)
+    if name == "" or (name == self.formName and kind == self.docKind) then return end
     if not self:keepOrLose() then return end
-    local doc, err = project.read(self.dir, name)
+    local doc, err
+    if kind == "Component" then
+      doc, err = project.readComponent(self.dir, name)
+    else
+      doc, err = project.read(self.dir, name)
+    end
     if not doc then
       self:ask(tostring(err), "ok", "tlua design")
       return
     end
-    self.doc, self.formName, self.dirty = doc, name, false
+    self.doc, self.formName, self.docKind, self.dirty = doc, name, kind, false
     self.selection, self.namedAs = nil, nil
     self.undoStack, self.redoStack, self.lastTag = {}, {}, nil
     self.props:list(doc)
     self.surface:load(doc)
     self:loadCode()
     self.surface:select(nil)
-    self.tree.path = name
+    self.tree.path = (kind == "Component" and "Components/" or "Forms/") .. name
+    self:fillTools()
     self:retitle()
     self:status("")
   end
@@ -581,6 +626,16 @@ function M.start(opts)
   function d:save()
     if not self.doc then return end
     self:offerRename()
+    if self.docKind == "Component" then
+      local known = model.kinds()[self.formName] and model.kinds()[self.formName].defined
+      project.saveComponent(self.dir, self.formName, self.doc)
+      self.dirty = false
+      if self.codeDirty then self:saveCode() end
+      self:retitle()
+      self:status("Saved " .. self.formName .. (known and "; forms on screen use the old one until the designer is opened again" or ""))
+      if not known then self:loadControls() end
+      return
+    end
     project.save(self.dir, self.formName, self.doc)
     self.dirty = false
     if self.codeDirty then self:saveCode() end
@@ -591,7 +646,7 @@ function M.start(opts)
   ---------------------------------------------------------------- code
 
   function d:codePath()
-    return self.dir .. "/forms/" .. self.formName .. ".lua"
+    return self.dir .. (self.docKind == "Component" and "/components/" or "/forms/") .. self.formName .. ".lua"
   end
 
   local function stamp(path)
@@ -603,7 +658,13 @@ function M.start(opts)
     self.assist:closeList()
     self.assist:hideTip()
     local path = self:codePath()
-    if not project.exists(path) then project.addForm(self.dir, self.formName) end
+    if not project.exists(path) then
+      if self.docKind == "Component" then
+        project.saveComponent(self.dir, self.formName, self.doc)
+      else
+        project.addForm(self.dir, self.formName)
+      end
+    end
     local f = io.open(path, "r")
     self.codeBox.text = f and f:read("*a") or ""
     if f then f:close() end
@@ -709,10 +770,9 @@ function M.start(opts)
     if line then
       line = line + 1
     else
-      text, line = code.addHandler(text, var, name, event, node.kind)
+      text, line, indent = code.addHandler(text, var, name, event, node.kind)
       self.codeBox.text = text
       self:markCodeDirty()
-      indent = 2
     end
     self.views.selected = 2
     self:fillObjects()
@@ -816,8 +876,26 @@ function M.start(opts)
       return
     end
     project.addForm(self.dir, name)
-    self.tree.items = project.forms(self.dir)
+    self:fillTree()
     self:openForm(name)
+  end
+
+  function d:addComponent()
+    local n = 1
+    while project.exists(project.componentPath(self.dir, "Component" .. n)) or project.exists(self.dir .. "/controls/Component" .. n .. ".lua") do n = n + 1 end
+    local name = self:prompt("A name for the new component (a capital first):", "Add Component", "Component" .. n)
+    if not name or name == "" then return end
+    if not name:match("^%u[%w_]*$") or model.kinds()[name] then
+      self:ask(name .. " cannot be a component's name: start with a capital, and pick one that is not taken.", "ok", "Add Component")
+      return
+    end
+    if not project.addComponent(self.dir, name) then
+      self:ask("There is a controls/" .. name .. ".lua already.", "ok", "Add Component")
+      return
+    end
+    self:fillTree()
+    self:loadControls()
+    self:openComponent(name)
   end
 
   function d:newProject()
@@ -980,6 +1058,7 @@ function M.start(opts)
     } },
     { "&Project", {
       { "&Add Form...", function() d:addForm() end },
+      { "Add C&omponent...", function() d:addComponent() end },
       { "Set as &Startup Form", function() d:setStartup() end },
       "-",
       { "&New Control...", function() d:newControl() end },

@@ -16,6 +16,9 @@ myapp/
   forms/Form1.lua       the code: yours
   forms/Form1.d.lua     what the form holds, for a language server: written by the designer
   controls/Counter.lua  a control of the project's own: yours
+  components/Field.comp.lua  a component's layout: written by the designer
+  components/Field.lua       its code: yours
+  controls/Field.lua        what makes it a control: written by the designer
 ```
 
 - **The layout** (`Form1.form.lua`) is the designer's. It is rewritten
@@ -146,6 +149,30 @@ no project. A folder chosen that has no project is offered as a new one.
 - **Export Bundle:** File > Export Bundle saves everything and packs the
   project into a `.ztl` bundle with `tlua bundle`: one file that
   `tlua app.ztl` runs on any platform, with no executable made for each.
+
+## Components
+
+A component is a group of controls that work together, designed like a form
+and used like a control: [gui.md](gui.md#components) describes what it is.
+- **Making one:** Project > Add Component asks for a name (a capital first)
+  and opens an empty component beside the forms in the project tree. It is
+  designed on the same surface, with the same toolbox, properties and code
+  window; it has a size, no caption, and no menu.
+- **Its files:** `components/Name.comp.lua` is the layout, written whole
+  on every save. `components/Name.lua` is yours: a function of the component
+  and its parts, which the designer starts and then only adds handlers to,
+  inside it, as `function parts.txt:onChange()`. `Name.d.lua` tells a language
+  server what `parts` and the component hold. `controls/Name.lua` is written
+  again on every save and only says `gui.component`; it is a control of the
+  project's own like any in [Controls of your own](#controls-of-your-own).
+- **In the toolbox:** a component is among the project's own controls, marked
+  U, on every form and in other components, except in itself.
+- **On a form:** an instance is one control. It is placed, moved and given
+  props like any, and the layout keeps its kind and props, not its parts.
+- **Not yet:** the component's props and events (what it shows of itself)
+  are written into the layout by hand for now; a form open in the designer
+  keeps the version of a component it started with until the designer is
+  opened again. See [components-plan.md](components-plan.md).
 
 ## Help with the code
 

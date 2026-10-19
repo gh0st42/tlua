@@ -46,7 +46,9 @@ function M.new(area, d)
     local w, h = g:size()
     g:color("#2a5ca8"); g:fill(0, 0, w, h)
     g:color("white"); g:font("sans", 13)
-    g:text(tostring(model.value(s.doc, "caption") or ""), 8, 0, w - 16, h, "left")
+    local title = model.value(s.doc, "caption")
+    if s.doc and s.doc.kind == "Component" then title = "Component " .. tostring(s.doc.name) end
+    g:text(tostring(title or ""), 8, 0, w - 16, h, "left")
   end
 
   s.host = area:Panel { left = MARGIN, top = MARGIN + TITLE, width = 100, height = 100 }

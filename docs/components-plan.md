@@ -2,7 +2,8 @@
 
 Status: phase 1 is built (2026-10-19): `gui.component`, private part
 names, forwarded props and events, in docs/gui.md ("Components") and
-`examples/gui/components.lua`. The designer's side (phases 2 to 6) is not.
+`examples/gui/components.lua`. Phase 2 is built: Project > Add Component, a component opens
+like a form (`d:openComponent`), saves its files, and is in the toolbox. Phases 3 to 6 are not.
 
 ## What it is
 
@@ -192,7 +193,7 @@ the whole component; parts cannot be moved on a form (that is the point).
    and `library/gui.lua`; hand-written component files work with `gui.load`
    and `gui.kinds` before the designer knows them. Parts' names are kept per
    component (a name scope), props forward through a link on the object.
-2. **Components in the designer.** `Component` kind on the surface, the
+2. **Components in the designer.** Done. `Component` kind on the surface, the
    Components list in the project tree, New Component, saving the three
    files, the toolbox entry, building on forms. docs/design.md.
 3. **The interface dialog.** Props with `to`, event forwarding, public
