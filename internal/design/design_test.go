@@ -140,7 +140,9 @@ local code = require "design.code"
 local text = 'local gui = require "gui"\nlocal frm = gui.load "Form1"\n\nreturn frm\n'
 assert(code.formVar(text) == "frm")
 assert(code.formVar('local win = gui.load "Main"') == "win")
-assert(code.defaultEvent("Button") == "onClick" and code.defaultEvent("Label") == nil)
+assert(code.defaultEvent("Button") == "onClick" and code.defaultEvent("Label") == "onClick" and code.defaultEvent("Form") == "onLoad")
+assert(code.defaultEvent("Panel") == nil and code.params("onClick", "Label") == "x, y" and code.params("onClick", "Button") == "")
+assert(code.params("onPaint", "Panel") == "g" and code.params("onScroll", "Scroll") == "x, y")
 
 local t2, line = code.addHandler(text, "frm", "Button1", "onClick")
 assert(t2 == 'local gui = require "gui"\nlocal frm = gui.load "Form1"\n\nfunction frm.Button1:onClick()\n  \nend\n\nreturn frm\n', t2)

@@ -218,13 +218,20 @@ module is known too.
 ## Code
 
 - **Double-click to write a handler.** Double-clicking a control opens its
-  code at the event VB6 went to: `onClick` for a Button, `onChange` for a
-  TextBox and the other inputs, `onDraw` for a Canvas, `onClose` for the
-  form. If the handler isn't written yet, it is added, empty, just above the
-  `return frm` at the end, with the cursor inside it.
+  code at the event VB6 went to: `onClick` for a Button, a Label and an
+  Image, `onChange` for a TextBox and the other inputs, `onDraw` for a
+  Canvas, `onScroll` for a Scroll, `onLoad` for the form. If the handler
+  isn't written yet, it is added, empty, just above the `return frm` at the
+  end, with the cursor inside it.
 - **The two boxes above the code** are VB6's: pick a control (or the form),
   then one of its events, and the code goes to that handler, writing it if
-  needed. Events that have a handler already are marked •.
+  needed. Events that have a handler already are marked •. They list every
+  event the control has: besides the usual ones, `onLoad`, `onActivate` and
+  `onDeactivate` for the form; `onFocus` and `onBlur` for the controls that
+  take the keyboard; `onShow`, `onHide`, `onResize` and `onPaint` for all;
+  `onClick` and the mouse's for a Label and an Image; `onScroll` for a Scroll.
+  `docs/gui.md` says what each is for; a handler is written with the
+  arguments it is given, as `function frm.Panel1:onPaint(g)`.
 - **Switching views:** F7 shows the code and Shift-F7 the form (View menu).
 - **The code box:** line numbers and Lua's colours. Tab indents, and Enter
   keeps the indentation. Cmd-F finds, Cmd-G finds the next, Cmd-L goes to a

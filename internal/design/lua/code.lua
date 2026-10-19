@@ -13,7 +13,8 @@ local defaults = {
   Button = "onClick", TextBox = "onChange", CheckBox = "onChange",
   RadioButton = "onChange", ComboBox = "onChange", ListBox = "onChange",
   Tree = "onChange", Table = "onChange", Slider = "onChange", Spinner = "onChange",
-  Tabs = "onChange", Canvas = "onDraw", Form = "onClose", Menu = "onClick",
+  Tabs = "onChange", Canvas = "onDraw", Form = "onLoad", Menu = "onClick",
+  Label = "onClick", Image = "onClick", Scroll = "onScroll",
 }
 
 function M.defaultEvent(kind)
@@ -22,14 +23,21 @@ end
 
 -- What each handler is given, after self.
 local params = {
-  onKey = "key, text", onDrop = "text, lines", onDraw = "g",
+  onKey = "key, text", onDrop = "text, lines", onDraw = "g", onPaint = "g",
+  onScroll = "x, y", onKeyPreview = "key, text",
   onMouseDown = "x, y, button, double", onMouseUp = "x, y, button",
   onMouseMove = "x, y", onMouseDrag = "x, y", onMouseWheel = "dx, dy",
   onToggle = "path, open", onContextMenu = "name, caption, checked",
 }
 
--- A Menu's onClick says which item; a Button's says nothing.
-local kindParams = { Menu = { onClick = "name, caption, checked" } }
+-- A Menu's onClick says which item; a Button's says nothing; a Label's, an
+-- Image's and a Canvas's say where it was.
+local kindParams = {
+  Menu = { onClick = "name, caption, checked" },
+  Label = { onClick = "x, y", onDoubleClick = "x, y" },
+  Image = { onClick = "x, y", onDoubleClick = "x, y" },
+  Canvas = { onClick = "x, y", onDoubleClick = "x, y" },
+}
 
 function M.params(event, kind)
   return kindParams[kind] and kindParams[kind][event] or params[event] or ""
