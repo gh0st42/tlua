@@ -87,3 +87,20 @@ other:add(q)
 assert(p.parent == form and q.parent == other)
 form:TextBox{name = "txt"}   -- the form's own txt, not the parts'`)
 }
+
+func TestComponentIsDefinedAgain(t *testing.T) {
+	L, _ := newState(t)
+	run(t, L, `
+local function def(caption)
+  gui.component{layout = { name = "Again", { kind = "Label", name = "x", caption = caption } }}
+end
+def("old")
+form = gui.Form{}
+a = form:Again{}
+assert(a:find("x").caption == "old")
+def("new")
+b = form:Again{}
+assert(b:find("x").caption == "new" and a:find("x").caption == "old", "instances made before keep their parts")
+gui.define{name = "Plain", build = function(parent) return parent:Frame{} end}`)
+	fails(t, L, `gui.component{layout = {name = "Plain"}}`, "Plain is already defined")
+}

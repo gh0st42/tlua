@@ -177,9 +177,12 @@ and used like a control: [gui.md](gui.md#components) describes what it is.
   *Parts* are private to the component unless marked public, which makes
   them fields of it. The dialog refuses what a component cannot carry: a
   name every control has, a part or property that is not there.
-- **Not yet:** a form open in the designer keeps the version of a component
-  it started with until the designer is opened again. See
-  [components-plan.md](components-plan.md).
+- **Saving it** writes its files and defines it again, so a form opened
+  afterwards uses the new one. A prop renamed or taken away in the interface
+  is renamed or taken away in the layouts of the forms and components that
+  use it, and the output pane says which files changed. An event renamed or
+  taken away cannot be put right in code; the pane lists the code that
+  mentions it instead.
 
 ## Help with the code
 

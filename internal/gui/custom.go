@@ -32,6 +32,9 @@ type customKind struct {
 	// what a layout keeps, and what is set on the control when it is made
 	// with them.
 	props map[string]customProp
+	// component is set on one made by gui.component, which a designer
+	// defines again when the component is changed.
+	component bool
 	// builtin is a control that comes with tlua, written in Lua as a
 	// script's own are, rather than one the script defined.
 	builtin bool

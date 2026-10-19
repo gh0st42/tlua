@@ -841,6 +841,11 @@ local field = form:LabeledField { label = "Surname", left = 10, top = 10 }
   form that uses it. A component can hold components; one that holds itself
   is an error.
 
+- **Again.** Calling `gui.component` again with the name of a component
+  replaces it: forms made from then on use the new one, and those made
+  before keep their parts. That is how a designer applies a change; a name
+  made by `gui.define` or a built-in kind is never replaced.
+
 `examples/gui/components.lua` uses one.
 
 ## Forms in files

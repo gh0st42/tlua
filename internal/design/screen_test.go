@@ -1172,5 +1172,21 @@ func TestDesignerMakesComponents(t *testing.T) {
 		if err != nil || strings.TrimSpace(string(out)) != "Surname\tnil\tnil" {
 			s.t.Errorf("running it: %v\n%s", err, out)
 		}
+
+		// Renaming a prop puts the forms that use the component right, and
+		// saving it defines it again, so the form opens with the new one.
+		s.lua(`D:openComponent("LabeledField"); D:showDesign(); E = {}; D.interfaceHooks = E`)
+		later(func() {
+			s.lua(`assert(E.props[1][1] == "label"); E.props[1][1] = "title"`)
+			x, y := s.at("E.ok", 10, 10)
+			in.Click(x, y)
+		})
+		s.lua(`D:editInterface(); D:save()`)
+		layout, _ = os.ReadFile(filepath.Join(s.dir, "forms/Form1.form.lua"))
+		if !strings.Contains(string(layout), `title = "Surname"`) || strings.Contains(string(layout), "label") {
+			s.t.Errorf("the form should say title now:\n%s", layout)
+		}
+		s.lua(`D:openForm("Form1")`)
+		s.expect(`D.doc[1].title == "Surname" and D.surface.entries[1].obj.title == "Surname" and D.surface.entries[1].obj.label == nil`)
 	})
 }

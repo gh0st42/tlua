@@ -105,6 +105,7 @@ function gui.component(spec)
     end
   end
 
+  host.undefine(name) -- a component defined before is replaced
   gui.define {
     name = name,
     events = eventNames,
@@ -137,4 +138,5 @@ function gui.component(spec)
       return frame
     end,
   }
+  host.mark(name)
 end

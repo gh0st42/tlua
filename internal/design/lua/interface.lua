@@ -19,13 +19,13 @@ local types = { "string", "number", "integer", "boolean", "color" }
 function M.rows(doc)
   local props, events, parts = {}, {}, {}
   for name, d in pairs(doc.props or {}) do
-    props[#props + 1] = { name, d.type or "string", d.default ~= nil and tostring(d.default) or "", d.to or "" }
+    props[#props + 1] = { name, d.type or "string", d.default ~= nil and tostring(d.default) or "", d.to or "", orig = name }
   end
   for k, v in pairs(doc.events or {}) do
     if type(k) == "number" then
-      events[#events + 1] = { v, "" }
+      events[#events + 1] = { v, "", orig = v }
     else
-      events[#events + 1] = { k, v ~= true and tostring(v) or "" }
+      events[#events + 1] = { k, v ~= true and tostring(v) or "", orig = k }
     end
   end
   table.sort(props, function(a, b) return a[1] < b[1] end)
@@ -127,12 +127,33 @@ function M.apply(doc, props, events, parts)
   end)
 end
 
+-- changes says what became of the names a list started with: the ones that
+-- are called something else now, and the ones that are gone. Rows made in
+-- the dialog have no orig.
+function M.changes(start, rows)
+  local renamed, removed, present = {}, {}, {}
+  for _, r in ipairs(rows) do
+    if r.orig then
+      present[r.orig] = true
+      if r.orig ~= r[1] then renamed[r.orig] = r[1] end
+    end
+  end
+  for _, name in ipairs(start) do
+    if not present[name] then removed[name] = true end
+  end
+  return { renamed = renamed, removed = removed }
+end
+
 -- edit shows the dialog on a component's layout and changes the layout if
--- OK is pressed, returning true. ed is filled in with its parts, for tests.
+-- OK is pressed, returning what became of its props and events (see
+-- changes). ed is filled in with its parts, for tests.
 function M.edit(doc, ed)
   ed = ed or {}
   local props, events, parts = M.rows(doc)
   local saved
+  local started = { props = {}, events = {} }
+  for _, r in ipairs(props) do started.props[#started.props + 1] = r[1] end
+  for _, r in ipairs(events) do started.events[#started.events + 1] = r[1] end
 
   local dlg = gui.Form { caption = "Component Interface: " .. tostring(doc.name), width = 600, height = 560 }
   ed.form = dlg
@@ -217,7 +238,7 @@ function M.edit(doc, ed)
         return
       end
       M.apply(doc, props, events, parts)
-      saved = true
+      saved = { props = M.changes(started.props, props), events = M.changes(started.events, events) }
       dlg:close()
     end,
   }

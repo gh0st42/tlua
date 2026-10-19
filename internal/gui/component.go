@@ -24,6 +24,7 @@ type partProp struct {
 // hostComponent adds to host what component.lua uses:
 //
 //	layout(path)                     reads a component's layout file
+//	undefine(name), mark(name)       a component can be defined again
 //	scope(frame)                     makes frame the keeper of its parts' names
 //	expose(frame, name)              lets frame.<name> reach the part
 //	forward(frame, prop, part, prop) frame.prop is part.prop
@@ -40,6 +41,19 @@ func (a *app) hostComponent(L *lua.LState, host *lua.LTable) {
 		}
 		L.Push(t)
 		return 1
+	}))
+	host.RawSetString("undefine", L.NewFunction(func(L *lua.LState) int {
+		name := L.CheckString(1)
+		if ck := a.custom[name]; ck != nil && ck.component {
+			delete(a.custom, name)
+		}
+		return 0
+	}))
+	host.RawSetString("mark", L.NewFunction(func(L *lua.LState) int {
+		if ck := a.custom[L.CheckString(1)]; ck != nil {
+			ck.component = true
+		}
+		return 0
 	}))
 	host.RawSetString("scope", L.NewFunction(func(L *lua.LState) int {
 		checkObject(L, 1).scope = true

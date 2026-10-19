@@ -309,6 +309,65 @@ function M.readComponent(dir, name)
   return doc
 end
 
+-- rewriteUses changes the layouts that use a component after its props were
+-- renamed or taken away: forms and other components. It returns the names
+-- of the layouts it rewrote.
+function M.rewriteUses(dir, kind, renamed, removed)
+  local changed = {}
+  local function fix(doc)
+    local touched = false
+    model.walk(doc, function(node)
+      if node.kind == kind then
+        for old, new in pairs(renamed) do
+          if node[old] ~= nil then node[new], node[old], touched = node[old], nil, true end
+        end
+        for old in pairs(removed) do
+          if node[old] ~= nil then node[old], touched = nil, true end
+        end
+      end
+    end)
+    return touched
+  end
+  for _, name in ipairs(M.forms(dir)) do
+    local doc = M.read(dir, name)
+    if doc and fix(doc) then
+      gui.save(doc, M.layoutPath(dir, name))
+      changed[#changed + 1] = name .. ".form.lua"
+    end
+  end
+  for _, name in ipairs(M.components(dir)) do
+    local doc = name ~= kind and M.readComponent(dir, name)
+    if doc and fix(doc) then
+      gui.save(doc, M.componentPath(dir, name))
+      changed[#changed + 1] = name .. ".comp.lua"
+    end
+  end
+  return changed
+end
+
+-- mentions lists the code files of the project's forms and components that
+-- name a word as a field or a method (.word or :word).
+function M.mentions(dir, word)
+  local found = {}
+  local function look(folder)
+    if not exists(dir .. "/" .. folder) then return end
+    for file in lfs.dir(dir .. "/" .. folder) do
+      local path = dir .. "/" .. folder .. "/" .. file
+      if file:match("%.lua$") and not file:match("%.form%.lua$") and not file:match("%.comp%.lua$")
+          and not file:match("%.d%.lua$") then
+        local f = io.open(path, "r")
+        local text = f and f:read("*a") or ""
+        if f then f:close() end
+        if text:find("[%.:]" .. word .. "%f[^%w_]") then found[#found + 1] = folder .. "/" .. file end
+      end
+    end
+  end
+  look("forms")
+  look("components")
+  table.sort(found)
+  return found
+end
+
 -- saveComponent writes a component's layout and what goes with it; its code
 -- is the programmer's, and stays as it is.
 function M.saveComponent(dir, name, doc)

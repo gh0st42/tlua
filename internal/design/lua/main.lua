@@ -628,13 +628,16 @@ function M.start(opts)
     if not self.doc then return end
     self:offerRename()
     if self.docKind == "Component" then
-      local known = model.kinds()[self.formName] and model.kinds()[self.formName].defined
       project.saveComponent(self.dir, self.formName, self.doc)
       self.dirty = false
       if self.codeDirty then self:saveCode() end
+      self:putUsesRight()
+      -- Defined again, so that forms opened from now on get the new one.
+      package.loaded["controls." .. self.formName] = nil
+      package.loaded["components." .. self.formName] = nil
+      self:loadControls()
       self:retitle()
-      self:status("Saved " .. self.formName .. (known and "; forms on screen use the old one until the designer is opened again" or ""))
-      if not known then self:loadControls() end
+      self:status("Saved " .. self.formName)
       return
     end
     project.save(self.dir, self.formName, self.doc)
@@ -889,11 +892,66 @@ function M.start(opts)
       return
     end
     self:checkpoint()
-    if interface.edit(self.doc, self.interfaceHooks) then
+    local changes = interface.edit(self.doc, self.interfaceHooks)
+    if changes then
+      self:noteChanges(changes)
       self:changed()
       self.surface:load(self.doc, selectedNames())
       self.props:list(self.doc)
       self:status("The interface is kept when the component is saved")
+    end
+  end
+
+  -- noteChanges keeps what became of the component's props and events until
+  -- it is saved, when the forms that use it are put right. A name changed
+  -- twice is changed once, from what it was when the component was opened.
+  function d:noteChanges(changes)
+    local pending = self.pending
+    if not pending or pending.name ~= self.formName then
+      pending = { name = self.formName, props = { renamed = {}, removed = {} }, events = { renamed = {}, removed = {} } }
+      self.pending = pending
+    end
+    for _, what in ipairs { "props", "events" } do
+      local into, from = pending[what], changes[what]
+      for old, new in pairs(from.renamed) do
+        local first = old
+        for was, now in pairs(into.renamed) do
+          if now == old then first = was; into.renamed[was] = nil end
+        end
+        into.renamed[first] = new
+      end
+      for old in pairs(from.removed) do
+        local first = old
+        for was, now in pairs(into.renamed) do
+          if now == old then first = was; into.renamed[was] = nil end
+        end
+        into.removed[first] = true
+      end
+    end
+  end
+
+  -- putUsesRight rewrites the layouts that use the component for the props
+  -- renamed or removed since it was opened, and says which code mentions an
+  -- event that is called something else now.
+  function d:putUsesRight()
+    local pending = self.pending
+    self.pending = nil
+    if not pending or pending.name ~= self.formName then return end
+    local p = pending.props
+    if next(p.renamed) or next(p.removed) then
+      local files = project.rewriteUses(self.dir, self.formName, p.renamed, p.removed)
+      if #files > 0 then self:print("Props of " .. self.formName .. " changed in " .. table.concat(files, ", ")) end
+    end
+    local e = pending.events
+    local gone = {}
+    for old in pairs(e.renamed) do gone[#gone + 1] = old end
+    for old in pairs(e.removed) do gone[#gone + 1] = old end
+    table.sort(gone)
+    for _, old in ipairs(gone) do
+      local files = project.mentions(self.dir, old)
+      if #files > 0 then
+        self:print(("%s no longer has %s; the code that mentions it: %s"):format(self.formName, old, table.concat(files, ", ")))
+      end
     end
   end
 
