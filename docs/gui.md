@@ -968,6 +968,18 @@ own and the default, `"gtk+"`, softer edges, `"gleam"`, glossy gradients,
 borderless text boxes. It can be called before a form is shown or after,
 and returns the look in effect; `gui.scheme()` only returns it.
 
+`gui.colors(t)` gives every window colours of its own, for a dark look
+say. It takes `background` (what windows and controls are made of),
+`background2` (what text boxes and lists are) and `foreground` (their text,
+and labels), each `"#rrggbb"` or a colour name, and any of them may be left
+out. It can be called before a form is shown or after, and returns what has
+been asked for. A control's own `color` and `textColor` still win over it.
+FLTK has no call for going back to its own colours.
+
+```lua
+gui.colors { background = "#202020", background2 = "#141414", foreground = "#d0d0d0" }
+```
+
 The user has the last word: `TLUA_SCHEME=oxy tlua app.lua` runs any program
 in that look, whatever it asks for, and `gui.scheme` then returns the
 user's. `tlua -E` ignores the variable, as it does the other `TLUA_` ones.

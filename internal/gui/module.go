@@ -326,6 +326,10 @@ type app struct {
 	// schemed is set once one of them is in effect.
 	scheme, userScheme string
 	schemed            bool
+	// colors are the colours of every window the program asked for with
+	// gui.colors, by FLTK's names for them (background, background2,
+	// foreground).
+	colors map[string][3]uint8
 	// read is where a fused program's own files come from, archive first;
 	// nil for a program on disk.
 	read func(string) ([]byte, error)
@@ -460,6 +464,7 @@ func (a *app) open(L *lua.LState) int {
 		"spawn":       a.spawn,
 		"openurl":     a.openURL,
 		"scheme":      a.schemeFunc,
+		"colors":      a.colorsFunc,
 		"after":       a.timerFunc(false),
 		"every":       a.timerFunc(true),
 	})
@@ -1306,6 +1311,7 @@ func (a *app) requestClose(f *guiObject) {
 // build puts a form's window together, if it has none, and keeps track of it.
 func (a *app) build(f *guiObject) error {
 	a.applyScheme()
+	a.applyColors()
 	if err := buildForm(f); err != nil {
 		return err
 	}
@@ -1637,6 +1643,72 @@ func (a *app) applyScheme() {
 	}
 	a.schemed = true
 	setScheme(a.currentScheme())
+}
+
+// colorKeys are what gui.colors sets, in the order FLTK wants them: the
+// background first, since it works out the greys of every control's face.
+var colorKeys = []string{"background", "background2", "foreground"}
+
+// applyColors gives FLTK the colours the program asked for, once a form is
+// about to be shown, and at once for those already up.
+func (a *app) applyColors() {
+	if len(a.colors) == 0 {
+		return
+	}
+	var set [3]*[3]uint8
+	for i, k := range colorKeys {
+		if c, ok := a.colors[k]; ok {
+			c := c
+			set[i] = &c
+		}
+	}
+	setColors(set[0], set[1], set[2])
+	for _, f := range a.forms {
+		redraw(f)
+	}
+}
+
+// colorsFunc is gui.colors([t]): the colours of every window, as
+// background (what controls and windows are made of), background2 (what
+// text boxes and lists are) and foreground (their text and labels). It
+// returns what has been asked for, as "#rrggbb"; there is no way back to
+// FLTK's own other than not asking.
+func (a *app) colorsFunc(L *lua.LState) int {
+	if L.GetTop() >= 1 {
+		t := L.CheckTable(1)
+		var bad string
+		t.ForEach(func(k, _ lua.LValue) {
+			if s, ok := k.(lua.LString); !ok || !slices.Contains(colorKeys, string(s)) {
+				bad = k.String()
+			}
+		})
+		if bad != "" {
+			L.ArgError(1, fmt.Sprintf("a colour is one of %s, not %q", strings.Join(colorKeys, ", "), bad))
+		}
+		next := map[string][3]uint8{}
+		for k, c := range a.colors {
+			next[k] = c
+		}
+		for _, k := range colorKeys {
+			if v := t.RawGetString(k); v != lua.LNil {
+				r, g, b, err := parseColor(lua.LVAsString(v))
+				if err != nil {
+					L.ArgError(1, err.Error())
+				}
+				next[k] = [3]uint8{r, g, b}
+			}
+		}
+		a.colors = next
+		if a.schemed || len(a.forms) > 0 {
+			a.applyColors()
+		}
+	}
+	out := L.NewTable()
+	for k, c := range a.colors {
+		out.RawSetString(k, lua.LString(fmt.Sprintf("#%02x%02x%02x", c[0], c[1], c[2])))
+	}
+	L.Push(out)
+	return 1
 }
 
 // schemeFunc is gui.scheme([name]): the look of every window, one of

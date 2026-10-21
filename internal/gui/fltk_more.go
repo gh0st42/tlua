@@ -307,6 +307,31 @@ func setScheme(name string) {
 	fltk.SetScheme(name)
 }
 
+// rgbColor is a true colour for FLTK. Black has to be FLTK's own black: as
+// an RGB it is the number 0, which FLTK reads as its foreground colour, and
+// that is whatever gui.colors made it.
+func rgbColor(r, g, b uint8) fltk.Color {
+	if r == 0 && g == 0 && b == 0 {
+		return fltk.BLACK
+	}
+	return fltk.ColorFromRgb(r, g, b)
+}
+
+// setColors gives FLTK its colours: the background, which it works the
+// greys of the controls out of, then those of text boxes and of text. Any
+// may be nil, to leave it.
+func setColors(background, background2, foreground *[3]uint8) {
+	if background != nil {
+		fltk.SetBackgroundColor(background[0], background[1], background[2])
+	}
+	if background2 != nil {
+		fltk.SetBackground2Color(background2[0], background2[1], background2[2])
+	}
+	if foreground != nil {
+		fltk.SetForegroundColor(foreground[0], foreground[1], foreground[2])
+	}
+}
+
 func setClipboard(text string) error {
 	fltk.CopyToClipboard(text)
 	return nil
@@ -441,10 +466,10 @@ func treeKey(o *guiObject, e fltk.Event) bool {
 // ---------------------------------------------------------------- Table
 
 var (
-	gridColor      = fltk.ColorFromRgb(220, 220, 220)
-	selectionColor = fltk.ColorFromRgb(56, 117, 215)
-	black          = fltk.ColorFromRgb(0, 0, 0)
-	white          = fltk.ColorFromRgb(255, 255, 255)
+	gridColor      = rgbColor(220, 220, 220)
+	selectionColor = rgbColor(56, 117, 215)
+	black          = rgbColor(0, 0, 0)
+	white          = rgbColor(255, 255, 255)
 )
 
 // tableState is what a Table keeps beside its widget: the selected row, as
@@ -725,7 +750,7 @@ func tableEvent(o *guiObject, e fltk.Event) bool {
 const kpEnter = 0xff80 + 'r'
 
 // refusedColor is the editor's when onEdit has said no to what is in it.
-var refusedColor = fltk.ColorFromRgb(255, 214, 214)
+var refusedColor = rgbColor(255, 214, 214)
 
 // cellEditable says whether column col can be edited: editable is true for
 // all of them, or a list of the ones that can.
@@ -1415,7 +1440,7 @@ func drawingAPI(o *guiObject, c *canvas) *lua.LTable {
 		if err != nil {
 			L.RaiseError("%s", err.Error())
 		}
-		fltk.SetDrawColor(fltk.ColorFromRgb(r, gr, b))
+		fltk.SetDrawColor(rgbColor(r, gr, b))
 		return 0
 	})
 	def("width", func(L *lua.LState, _, _ int) int {

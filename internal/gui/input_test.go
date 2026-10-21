@@ -907,3 +907,39 @@ form:show()`, func(s *scene) {
 		s.expect(`overDraws > before`)
 	})
 }
+
+// Colours given to gui.colors reach FLTK when a form is shown, and at once
+// for one already up.
+func TestColorsOnScreen(t *testing.T) {
+	onScreen(t, `
+gui.colors{background = "#202020", background2 = "#101010", foreground = "#e0e0e0"}
+form = gui.Form{width = 200, height = 100}
+list = form:ListBox{name = "list", left = 0, top = 0, width = 100, height = 80}
+list.items = {"one", "two"}
+form:show()`, func(s *scene) {
+		s.expect(`gui.colors().background == "#202020"`)
+		s.lua(`gui.colors{foreground = "#ffffff"}`)
+		s.pump()
+		s.expect(`gui.colors().foreground == "#ffffff" and list.selected == 0`)
+	})
+}
+
+// Black is black, whatever foreground gui.colors gave: FLTK reads the colour
+// number 0 as the foreground, so an RGB of 0, 0, 0 must not become it.
+func TestBlackIsBlackWithColors(t *testing.T) {
+	onScreen(t, `
+gui.colors{background = "#202020", background2 = "#101010", foreground = "#f0f0f0"}
+form = gui.Form{width = 100, height = 100}
+canvas = form:Canvas{left = 0, top = 0, width = 100, height = 100,
+  onDraw = function(self, g)
+    g:color("#ffffff"); g:fill(0, 0, 100, 100)
+    g:color("#000000"); g:fill(10, 10, 30, 30)
+    g:color("black"); g:fill(60, 10, 30, 30)
+  end}
+form:show()`, func(s *scene) {
+		s.lua(`pic = canvas:snapshot()`)
+		s.expect(`select(1, pic:get(20, 20)) == 0 and select(2, pic:get(20, 20)) == 0 and select(3, pic:get(20, 20)) == 0`)
+		s.expect(`select(1, pic:get(70, 20)) == 0 and select(2, pic:get(70, 20)) == 0`)
+		s.expect(`select(1, pic:get(50, 80)) == 255`)
+	})
+}

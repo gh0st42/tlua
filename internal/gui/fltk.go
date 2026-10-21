@@ -434,7 +434,7 @@ func build(o *guiObject) error {
 		o.widget = s
 	case "ProgressBar":
 		p := fltk.NewProgress(x, y, w, h)
-		p.SetSelectionColor(fltk.ColorFromRgb(70, 130, 200))
+		p.SetSelectionColor(rgbColor(70, 130, 200))
 		o.widget = p
 	case "Image":
 		o.widget = fltk.NewBox(fltk.NO_BOX, x, y, w, h)
@@ -501,12 +501,12 @@ func build(o *guiObject) error {
 // The colours of Lua, a style a letter: text, keywords, the standard
 // library, strings, numbers, comments.
 var luaStyles = []fltk.StyleTableEntry{
-	{Color: fltk.ColorFromRgb(0, 0, 0), Font: fltk.COURIER, Size: 14},
-	{Color: fltk.ColorFromRgb(0, 0, 160), Font: fltk.COURIER_BOLD, Size: 14},
-	{Color: fltk.ColorFromRgb(0, 110, 60), Font: fltk.COURIER, Size: 14},
-	{Color: fltk.ColorFromRgb(160, 40, 0), Font: fltk.COURIER, Size: 14},
-	{Color: fltk.ColorFromRgb(0, 120, 140), Font: fltk.COURIER, Size: 14},
-	{Color: fltk.ColorFromRgb(120, 120, 120), Font: fltk.COURIER_ITALIC, Size: 14},
+	{Color: rgbColor(0, 0, 0), Font: fltk.COURIER, Size: 14},
+	{Color: rgbColor(0, 0, 160), Font: fltk.COURIER_BOLD, Size: 14},
+	{Color: rgbColor(0, 110, 60), Font: fltk.COURIER, Size: 14},
+	{Color: rgbColor(160, 40, 0), Font: fltk.COURIER, Size: 14},
+	{Color: rgbColor(0, 120, 140), Font: fltk.COURIER, Size: 14},
+	{Color: rgbColor(120, 120, 120), Font: fltk.COURIER_ITALIC, Size: 14},
 }
 
 // colourLua colours an editor's text as Lua, again after every change. The
@@ -551,8 +551,8 @@ func buildTextBox(o *guiObject, x, y, w, h int) {
 		if propBool(o, "lineNumbers") {
 			e.SetLinenumberWidth(44)
 			e.SetLinenumberSize(12)
-			e.SetLinenumberFgcolor(fltk.ColorFromRgb(130, 130, 130))
-			e.SetLinenumberBgcolor(fltk.ColorFromRgb(238, 238, 238))
+			e.SetLinenumberFgcolor(rgbColor(130, 130, 130))
+			e.SetLinenumberBgcolor(rgbColor(238, 238, 238))
 		}
 		if propString(o, "syntax") == "lua" {
 			colourLua(e, buf)
@@ -651,7 +651,7 @@ func applyProp(o *guiObject, name string, value lua.LValue) error {
 		if err != nil {
 			return err
 		}
-		c := fltk.ColorFromRgb(r, g, b)
+		c := rgbColor(r, g, b)
 		if name == "color" {
 			w.SetColor(c)
 			// A Label is drawn on whatever is under it until it is given a

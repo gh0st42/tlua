@@ -1027,6 +1027,19 @@ function gui.clipboard() end
 ---@return gui.Scheme
 function gui.scheme(name) end
 
+---@class gui.Colors
+---@field background? string what windows and controls are made of ("#rrggbb" or a name)
+---@field background2? string what text boxes and lists are
+---@field foreground? string their text, and labels
+
+--- The colours of every window, for a dark look, say: `gui.colors{
+--- background = "#202020", background2 = "#141414", foreground = "#d0d0d0" }`.
+--- What is not given is left as it is. It works before a form is shown or
+--- after, and returns what has been asked for; nothing returns FLTK's own.
+---@param colors? gui.Colors
+---@return gui.Colors
+function gui.colors(colors) end
+
 --- Opens a web address in the browser, a mail address in the mail
 --- program, or a file in the program it belongs to. It returns once that
 --- program has started.
