@@ -309,6 +309,33 @@ function M.readComponent(dir, name)
   return doc
 end
 
+-- holders lists the components of the project that hold the named one,
+-- directly or through others: the ones it cannot hold in turn.
+function M.holders(dir, name)
+  local direct = {}
+  for _, comp in ipairs(M.components(dir)) do
+    local doc = M.readComponent(dir, comp)
+    direct[comp] = {}
+    if doc then
+      model.walk(doc, function(node) direct[comp][node.kind] = true end)
+    end
+  end
+  local out, queue = {}, { name }
+  while #queue > 0 do
+    local target = table.remove(queue)
+    for comp, uses in pairs(direct) do
+      if uses[target] and not out[comp] then
+        out[comp] = true
+        queue[#queue + 1] = comp
+      end
+    end
+  end
+  local list = {}
+  for comp in pairs(out) do list[#list + 1] = comp end
+  table.sort(list)
+  return list
+end
+
 -- rewriteUses changes the layouts that use a component after its props were
 -- renamed or taken away: forms and other components. It returns the names
 -- of the layouts it rewrote.
@@ -341,6 +368,44 @@ function M.rewriteUses(dir, kind, renamed, removed)
       gui.save(doc, M.componentPath(dir, name))
       changed[#changed + 1] = name .. ".comp.lua"
     end
+  end
+  return changed
+end
+
+-- rewriteEvents changes the code that handles an event of a component under
+-- a name it no longer has: frm.field:onOld, frm.field.onOld and
+-- function frm.field:onOld, for each instance of the component in a form
+-- (or parts.field, in a component). It returns the files it changed.
+function M.rewriteEvents(dir, kind, renamed)
+  local code = require "design.code"
+  local changed = {}
+  local function fix(path, doc)
+    local f = io.open(path, "r")
+    if not f then return end
+    local text = f:read("*a")
+    f:close()
+    local var = code.formVar(text)
+    local before = text
+    model.walk(doc, function(node)
+      if node.kind == kind and node.name then
+        for old, new in pairs(renamed) do
+          local pattern = "(" .. var:gsub("%p", "%%%0") .. "%." .. node.name:gsub("%p", "%%%0") .. "[:%.])" .. old:gsub("%p", "%%%0") .. "%f[^%w_]"
+          text = text:gsub(pattern, "%1" .. new:gsub("%%", "%%%%"))
+        end
+      end
+    end)
+    if text ~= before then
+      write(path, text)
+      changed[#changed + 1] = path:sub(#dir + 2)
+    end
+  end
+  for _, name in ipairs(M.forms(dir)) do
+    local doc = M.read(dir, name)
+    if doc then fix(dir .. "/forms/" .. name .. ".lua", doc) end
+  end
+  for _, name in ipairs(M.components(dir)) do
+    local doc = name ~= kind and M.readComponent(dir, name)
+    if doc then fix(dir .. "/components/" .. name .. ".lua", doc) end
   end
   return changed
 end

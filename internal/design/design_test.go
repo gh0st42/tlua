@@ -338,3 +338,29 @@ project.save(dir, "Form1", doc)`)
 		t.Errorf("%d warnings, where there should be one:\n%s", n, report)
 	}
 }
+
+func TestComponentsHoldingComponents(t *testing.T) {
+	r, _ := newLua(t)
+	run(t, r.L, `dir = ...`) // placeholder so the chunk below can use dir
+	r.L.SetGlobal("dir", lua.LString(t.TempDir()))
+	run(t, r.L, `
+local project = require "design.project"
+local model = require "design.model"
+gui = require "gui"
+project.create(dir)
+assert(project.addComponent(dir, "Inner"))
+assert(project.addComponent(dir, "Middle"))
+assert(project.addComponent(dir, "Outer"))
+assert(project.addComponent(dir, "Alone"))
+-- Middle holds Inner, Outer holds Middle.
+local middle = project.readComponent(dir, "Middle")
+middle[1] = { kind = "Inner", name = "i" }
+project.saveComponent(dir, "Middle", middle)
+local outer = project.readComponent(dir, "Outer")
+outer[1] = { kind = "Middle", name = "m" }
+project.saveComponent(dir, "Outer", outer)
+assert(table.concat(project.holders(dir, "Inner"), ",") == "Middle,Outer")
+assert(table.concat(project.holders(dir, "Middle"), ",") == "Outer")
+assert(#project.holders(dir, "Outer") == 0 and #project.holders(dir, "Alone") == 0)
+assert(table.concat(project.components(dir), ",") == "Alone,Inner,Middle,Outer")`)
+}

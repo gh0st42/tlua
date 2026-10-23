@@ -134,6 +134,38 @@ function glyphs.Defined(g, x, y)
   g:font("sans", 9); g:text("U", x + 1, y + 1, 18, 14, "center")
 end
 
+-- miniature draws a component's layout small, in the box: what it is made
+-- of, as a picture of its own for its row. Parts are boxes, with a fill that
+-- says what kind they are.
+local fills = { TextBox = "white", Button = "#d8d8d8", ComboBox = "white", ListBox = "white",
+  Table = "white", Tree = "white", Canvas = "white", Image = "#bfe0ff", Panel = "#c8c8c8" }
+
+local function miniature(g, x, y, doc)
+  local w, h = doc.width or 240, doc.height or 120
+  local k = math.min(18 / w, 14 / h)
+  local ox, oy = x + 1 + (18 - w * k) / 2, y + 1 + (14 - h * k) / 2
+  g:color("#a06a00"); g:rect(x, y, 20, 16)
+  local function draw(node, left, top)
+    for _, child in ipairs(node) do
+      if child.kind ~= "Menu" and child.kind ~= "Page" then
+        local cl, ct = left + (child.left or 0), top + (child.top or 0)
+        local cw = child.width or (model.kinds()[child.kind] or {}).width or 60
+        local ch = child.height or (model.kinds()[child.kind] or {}).height or 24
+        local px, py = math.floor(ox + cl * k), math.floor(oy + ct * k)
+        local pw, ph = math.max(2, math.floor(cw * k)), math.max(2, math.floor(ch * k))
+        if child.kind == "Label" then
+          g:color("#404040"); g:line(px, py + math.floor(ph / 2), px + pw, py + math.floor(ph / 2))
+        else
+          g:color(fills[child.kind] or "#f0f0f0"); g:fill(px, py, pw, ph)
+          g:color("#404040"); g:rect(px, py, pw, ph)
+        end
+        draw(child, cl, ct)
+      end
+    end
+  end
+  draw(doc, 0, 0)
+end
+
 function glyphs.Tabs(g, x, y)
   g:color("#404040")
   g:rect(x + 1, y + 5, 18, 10); g:rect(x + 1, y + 1, 7, 5); g:rect(x + 8, y + 2, 7, 4)
@@ -145,6 +177,9 @@ function M.new(parent, opts)
   local tools = { "Pointer" }
   for _, k in ipairs(model.tools) do tools[#tools + 1] = k end
   local builtIn = #tools
+
+  local layouts = {}  -- components by name, for their pictures
+  local extra = {}    -- rows after the tools: palettes, and what they hold
 
   local c = parent:Canvas {
     left = opts.left, top = opts.top, width = opts.width, height = opts.height,
@@ -159,14 +194,38 @@ function M.new(parent, opts)
       if i == self.picked then
         g:color("#cfe0f7"); g:fill(0, y, w, ROW)
       end
-      (glyphs[kind] or glyphs.Defined)(g, 6, y + 3)
+      if layouts[kind] then
+        miniature(g, 6, y + 3, layouts[kind])
+      else
+        (glyphs[kind] or glyphs.Defined)(g, 6, y + 3)
+      end
       g:color("black"); g:font("sans", 13)
       g:text(kind, 34, y, w - 34, ROW, "left")
+    end
+    -- The palettes: a heading for each, and its components not in the
+    -- project yet, which a click brings in.
+    for j, row in ipairs(extra) do
+      local y = (#tools + j - 1) * ROW
+      if row.entry then
+        g:color("#707070"); g:font("sans", 13)
+        g:text(row.entry.name, 34, y, w - 34, ROW, "left")
+        g:color("#a06a00"); g:font("sans", 12)
+        g:text("+", 8, y, 18, ROW, "center")
+      else
+        g:color("#e8e8e8"); g:fill(0, y, w, ROW)
+        g:color("#505050"); g:font("sans", 11)
+        g:text(row.heading, 6, y, w - 6, ROW, "left")
+      end
     end
   end
 
   function c:onMouseDown(x, y, button, double)
     local i = math.floor(y / ROW) + 1
+    if i > #tools and extra[i - #tools] then
+      local row = extra[i - #tools]
+      if row.entry and opts.onPalette then opts.onPalette(row.entry) end
+      return
+    end
     if not tools[i] then return end
     self.picked = i
     local kind = i > 1 and tools[i] or nil
@@ -189,12 +248,38 @@ function M.new(parent, opts)
   end
 
   -- setTools puts the project's own controls after the built-in ones.
-  function c:setTools(defined)
+  -- components says which of them are components, by name, with each one's
+  -- layout, to draw as its picture.
+  function c:setTools(defined, components)
     for i = #tools, builtIn + 1, -1 do tools[i] = nil end
     for _, k in ipairs(defined) do tools[#tools + 1] = k end
+    layouts = components or {}
     if self.picked > #tools then self.picked = 1 end
-    self.height = #tools * ROW
+    self.height = (#tools + #extra) * ROW
     self:redraw()
+  end
+
+  -- setPalette lists what the palettes hold: entries are { folder =, name = },
+  -- in the order of their folders.
+  function c:setPalette(entries)
+    extra = {}
+    local last
+    for _, e in ipairs(entries) do
+      if e.folder ~= last then
+        extra[#extra + 1] = { heading = "Palette  " .. (e.folder:match("([^/\\]+)[/\\]?$") or e.folder) }
+        last = e.folder
+      end
+      extra[#extra + 1] = { entry = e }
+    end
+    self.height = (#tools + #extra) * ROW
+    self:redraw()
+  end
+
+  -- paletteRow is where a palette component's row is, for tests.
+  function c:paletteRow(name)
+    for j, row in ipairs(extra) do
+      if row.entry and row.entry.name == name then return 40, (#tools + j - 1) * ROW + ROW / 2 end
+    end
   end
 
   -- rowOf is where a kind's row is, for tests: its middle, in the toolbox.

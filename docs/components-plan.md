@@ -205,29 +205,27 @@ the whole component; parts cannot be moved on a form (that is the point).
    that use them. Events renamed or removed are only reported, with the code
    that mentions them. The `.d.lua` declarations let the code window complete
    `form.field.label` (done with phase 2).
-5. **Palettes.** Done: `TLUA_PALETTE`, Save to palette and Add from palette
-   as Project menu dialogs, and a record of where a copy came from. A
-   drawer in the toolbox for each folder is left for later, as is a
-   `tlua lib`-style export for handing components around.
-6. **Maybe later.** Nested-component cycles in the UI, an icon per component
-   for the toolbox, component bundles (`.ztl`), a gallery of examples.
+5. **Palettes.** Done: `TLUA_PALETTE`; a heading per folder in the toolbox
+   with the components not in the project yet, which a click copies in;
+   Save to palette and Add from palette in the Project menu; and a record of
+   where a copy came from. `examples/palette` has three components.
+6. **Finishing.** Done: components named in errors; no component offered
+   inside one that holds it; a picture of its parts for each in the toolbox;
+   events renamed followed in the handlers of the forms; examples; parts
+   follow when an instance is resized (checked, nothing needed). Not done,
+   and not planned: a bundle format for components (a palette is a folder, and
+   a folder is easy to zip or keep in git), and an icon the author draws.
 
-Phase 1 is useful alone: it turns the pattern in `examples/gui/custom.lua`'s
-composite control into data.
+## Questions, answered
 
-## Open questions
-
-- **Part access.** Is `public` per part enough, or should a component
-  expose a whole sub-tree? Recommend per part, to start.
-- **Layout (anchors) inside a component.** Parts use `grow` and anchors as
-  on a form; an instance resized on a form should resize its parts. The
-  Frame already does this; check it holds for nested defined controls.
-- **Where the code runs.** The user's function gets the component; should it
-  also get its parts by name (`self.txt`)? Recommend yes, privately, as
-  upvalue-style access: `local parts = ...`; not as fields on the
-  component, or `public` means nothing.
-- **Form-like events of a component** (`onLoad` when built, `onResize`):
-  they exist for every control now (see docs/gui.md), so nothing new is
-  needed; check the order against its parts' events.
-- **Naming.** "Component" in the designer; `gui.component` at runtime.
-  Fine, unless "control" should cover both, which would match the toolbox.
+- **Part access.** `public` per part was enough; a whole sub-tree is not
+  offered. A component that wants to show more makes it a prop or a method.
+- **Layout inside a component.** Parts follow when an instance is resized
+  (`grow` and anchors work as on a form), also in a component inside a
+  component; `TestComponentResizesItsParts` checks it.
+- **Where the code runs.** The function gets the component and its parts by
+  name, as a second argument, so the parts stay private to the code.
+- **Form-like events of a component** are the ones every control has now;
+  nothing of its own was needed.
+- **Naming.** "Component" in the designer and `gui.component` at runtime; in
+  the toolbox it is one of the project's controls.

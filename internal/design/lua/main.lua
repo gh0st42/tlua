@@ -124,6 +124,7 @@ function M.start(opts)
     left = 0, top = 0, width = LEFT - 12 - 16, height = (#model.tools + 1) * toolbox.ROW,
     onPick = function() end,
     onPlace = function(kind) if d.doc then d.surface:place(kind) end end,
+    onPalette = function(entry) d:takeFromPalette(entry) end,
   })
 
   -- The middle: the form on one tab, its code on the other.
@@ -559,13 +560,30 @@ function M.start(opts)
   end
 
   -- fillTools puts the project's own controls in the toolbox. A component
-  -- being designed is left out of its own: it cannot hold itself.
+  -- being designed is left out of its own, and so are those that hold it: it
+  -- cannot hold itself.
   function d:fillTools()
+    local out = {}
+    if self.docKind == "Component" then
+      out[self.formName] = true
+      -- Nor one that holds it, which would hold itself.
+      for _, kind in ipairs(project.holders(self.dir, self.formName)) do out[kind] = true end
+    end
     local tools = {}
     for _, kind in ipairs(model.definedKinds()) do
-      if not (self.docKind == "Component" and kind == self.formName) then tools[#tools + 1] = kind end
+      if not out[kind] then tools[#tools + 1] = kind end
     end
-    self.toolbox:setTools(tools)
+    local layouts = {}
+    for _, name in ipairs(project.components(self.dir)) do
+      layouts[name] = project.readComponent(self.dir, name) or nil
+    end
+    self.toolbox:setTools(tools, layouts)
+    -- What the palettes hold that the project has not got yet.
+    local offered = {}
+    for _, e in ipairs(palette.list()) do
+      if not layouts[e.name] and not model.kinds()[e.name] then offered[#offered + 1] = e end
+    end
+    self.toolbox:setPalette(offered)
   end
 
   -- fillTree lists the forms and the components in the project tree.
@@ -968,8 +986,12 @@ function M.start(opts)
       if #files > 0 then self:print("Props of " .. self.formName .. " changed in " .. table.concat(files, ", ")) end
     end
     local e = pending.events
+    if next(e.renamed) then
+      local files = project.rewriteEvents(self.dir, self.formName, e.renamed)
+      if #files > 0 then self:print("Handlers of " .. self.formName .. " renamed in " .. table.concat(files, ", ")) end
+    end
+    -- Events taken away cannot be put right here, only found.
     local gone = {}
-    for old in pairs(e.renamed) do gone[#gone + 1] = old end
     for old in pairs(e.removed) do gone[#gone + 1] = old end
     table.sort(gone)
     for _, old in ipairs(gone) do
@@ -991,8 +1013,14 @@ function M.start(opts)
     local items = {}
     for i, e in ipairs(entries) do items[i] = e.name .. "    " .. e.folder end
     local i = self:choose("Add Component from Palette", items)
-    if not i then return end
-    local entry = entries[i]
+    if i then self:takeFromPalette(entries[i], true) end
+  end
+
+  -- takeFromPalette brings one component in: asking before it replaces one
+  -- of the project's, and opening it when open says so. From the toolbox it
+  -- only becomes a control to place.
+  function d:takeFromPalette(entry, open)
+    if not self.dir then return end
     if project.exists(project.componentPath(self.dir, entry.name)) then
       if self:ask("The project has a " .. entry.name .. " already. Replace it with the one from the palette?", "yesno", "Add Component from Palette") ~= "yes" then
         return
@@ -1001,7 +1029,7 @@ function M.start(opts)
       self:ask("There is a controls/" .. entry.name .. ".lua already.", "ok", "Add Component from Palette")
       return
     end
-    if not self:keepOrLose() then return end
+    if open and not self:keepOrLose() then return end
     local ok, missing = palette.take(self.dir, entry.folder, entry.name)
     if not ok then
       self:ask(tostring(missing), "ok", "Add Component from Palette")
@@ -1012,11 +1040,16 @@ function M.start(opts)
     end
     package.loaded["controls." .. entry.name] = nil
     package.loaded["components." .. entry.name] = nil
-    self.dirty, self.codeDirty = false, false
-    self.formName, self.docKind = nil, nil -- so that it is opened again
     self:fillTree()
-    self:loadControls()
-    self:openComponent(entry.name)
+    if open then
+      self.dirty, self.codeDirty = false, false
+      self.formName, self.docKind = nil, nil -- so that it is opened again
+      self:loadControls()
+      self:openComponent(entry.name)
+    else
+      self:loadControls()
+      self:status(entry.name .. " is in the project now, and in the toolbox")
+    end
   end
 
   -- saveToPalette copies the component being designed into a palette.

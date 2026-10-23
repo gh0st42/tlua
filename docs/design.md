@@ -165,8 +165,10 @@ and used like a control: [gui.md](gui.md#components) describes what it is.
   server what `parts` and the component hold. `controls/Name.lua` is written
   again on every save and only says `gui.component`; it is a control of the
   project's own like any in [Controls of your own](#controls-of-your-own).
-- **In the toolbox:** a component is among the project's own controls, marked
-  U, on every form and in other components, except in itself.
+- **In the toolbox:** a component is among the project's own controls, on
+  every form and in other components, drawn as a small picture of its parts.
+  A component is not offered inside itself or inside one that holds it, which
+  would hold itself.
 - **On a form:** an instance is one control. It is placed, moved and given
   props like any, and the layout keeps its kind and props, not its parts.
 - **The interface:** Tools > Component Interface says what the component
@@ -180,9 +182,10 @@ and used like a control: [gui.md](gui.md#components) describes what it is.
 - **Saving it** writes its files and defines it again, so a form opened
   afterwards uses the new one. A prop renamed or taken away in the interface
   is renamed or taken away in the layouts of the forms and components that
-  use it, and the output pane says which files changed. An event renamed or
-  taken away cannot be put right in code; the pane lists the code that
-  mentions it instead.
+  use it, and an event renamed is renamed in their handlers
+  (`frm.field:onOld`, `frm.field.onOld`, `function frm.field:onOld`); the
+  output pane says which files changed. An event taken away cannot be put
+  right in code; the pane lists the code that mentions it instead.
 
 ### Palettes
 
@@ -190,12 +193,15 @@ A palette is a folder of components that projects share: two files for each,
 `Name.comp.lua` and `Name.lua`. `TLUA_PALETTE` lists the folders, separated
 by `:` (`;` on Windows), and without it there is one, `~/.tlua/palette`.
 Nothing is written to a palette unless you ask.
+- **In the toolbox,** below the project's controls, each palette is a heading
+  with the components it holds that the project lacks. A click on one copies
+  it into the project, and it is among the controls to place.
 - **Project > Save Component to Palette** copies the component being
   designed into a palette (asking which when there are several, and before
   replacing one).
 - **Project > Add Component from Palette** lists what the palettes hold and
   copies the one you pick into the project, makes it a control there and
-  opens it. It is a copy, so the project stays complete in itself and packs
+  opens it. `examples/palette` holds three to try. It is a copy, so the project stays complete in itself and packs
   with Make EXE without the palette. A component that uses others says which
   the project lacks.
 - **Newer copies.** `components/Name.palette` records where a copy came from

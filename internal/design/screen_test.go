@@ -1192,6 +1192,21 @@ func TestDesignerMakesComponents(t *testing.T) {
 		s.lua(`D:openForm("Form1")`)
 		s.expect(`D.doc[1].title == "Surname" and D.surface.entries[1].obj.title == "Surname" and D.surface.entries[1].obj.label == nil`)
 
+		// Handlers of an event renamed in the interface follow it.
+		os.WriteFile(filepath.Join(s.dir, "forms/Form1.lua"), []byte("local gui = require \"gui\"\nlocal frm = gui.load \"Form1\"\n\nfunction frm.fldName:onSubmit(text) end\nfrm.fldName.onSubmit = nil\nfunction frm.other:onSubmit() end\n\nreturn frm\n"), 0o644)
+		s.lua(`D:openComponent("LabeledField"); D:showDesign(); E = {}; D.interfaceHooks = E`)
+		later(func() {
+			s.lua(`assert(E.events[2][1] == "onSubmit"); E.events[2][1] = "onEnter"`)
+			x, y := s.at("E.ok", 10, 10)
+			in.Click(x, y)
+		})
+		s.lua(`D:editInterface(); D:save()`)
+		forms, _ := os.ReadFile(filepath.Join(s.dir, "forms/Form1.lua"))
+		if !strings.Contains(string(forms), "function frm.fldName:onEnter(text)") || !strings.Contains(string(forms), "frm.fldName.onEnter = nil") ||
+			!strings.Contains(string(forms), "function frm.other:onSubmit()") {
+			s.t.Errorf("handlers of the instance follow the event, and only those:\n%s", forms)
+		}
+
 		// A palette is a folder of components that projects share.
 		s.lua(`D:openComponent("LabeledField"); D.answerChoice = 1; D:saveToPalette()`)
 		for _, f := range []string{"LabeledField.comp.lua", "LabeledField.lua"} {
@@ -1216,5 +1231,34 @@ func TestDesignerMakesComponents(t *testing.T) {
 			s.t.Errorf("what goes with it is written again: %v", err)
 		}
 		s.expect(`D.docKind == "Component" and D.formName == "LabeledField" and not require("design.palette").behind(D.dir, "LabeledField")`)
+	})
+}
+
+func TestDesignerPaletteDrawer(t *testing.T) {
+	pal := t.TempDir()
+	os.WriteFile(filepath.Join(pal, "Greeting.comp.lua"), []byte(`return { kind = "Component", name = "Greeting", width = 120, height = 40,
+  { kind = "Label", name = "who", caption = "Hello", left = 4, top = 4, width = 100 } }`), 0o644)
+	os.WriteFile(filepath.Join(pal, "Greeting.lua"), []byte("return function(self, parts) end\n"), 0o644)
+	t.Setenv("TLUA_PALETTE", pal)
+	withDesigner(t, func(s *scene) {
+		// The palette's components are rows under the project's controls.
+		s.lua(`D:fillTools()`)
+		s.expect(`D.toolbox:paletteRow("Greeting") ~= nil and D.toolbox:rowOf("Greeting") == nil`)
+		// The row is below what the pane shows until it is scrolled to.
+		s.lua(`__tx, __ty = D.toolbox:paletteRow("Greeting"); D.toolbox.parent.scrollY = __ty - 100; __s = D.toolbox.parent.scrollY`)
+		x, y := s.at("D.toolbox", int(lua.LVAsNumber(s.L.GetGlobal("__tx"))), int(lua.LVAsNumber(s.L.GetGlobal("__ty"))))
+		y -= int(lua.LVAsNumber(s.L.GetGlobal("__s")))
+		in.Click(x, y)
+		s.pump()
+		// A click brings it into the project as a control, without leaving the form.
+		s.expect(`D.toolbox:rowOf("Greeting") ~= nil and D.toolbox:paletteRow("Greeting") == nil and D.docKind == "Form"`)
+		for _, f := range []string{"components/Greeting.comp.lua", "components/Greeting.lua", "controls/Greeting.lua"} {
+			if _, err := os.Stat(filepath.Join(s.dir, f)); err != nil {
+				s.t.Errorf("not in the project: %v", err)
+			}
+		}
+		s.lua(`D.toolbox.parent.scrollY = 0`)
+		s.place("Greeting", 20, 20, 0, 0, "greet")
+		s.expect(`D.doc[1].kind == "Greeting" and D.surface.entries[1].obj.width == 120`)
 	})
 }
