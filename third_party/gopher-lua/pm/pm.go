@@ -170,6 +170,7 @@ const (
 	opPSave
 	opBrace
 	opNumber
+	opFrontier
 )
 
 type inst struct {
@@ -298,6 +299,10 @@ type numberPattern struct {
 	N int
 }
 
+type frontierPattern struct {
+	Class class
+}
+
 type bracePattern struct {
 	Begin int
 	End   int
@@ -396,6 +401,12 @@ func parsePattern(sc *scanner, toplevel bool) *seqPattern {
 				panic(newError(sc.CurrentPos(), "invalid capture index"))
 			case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 				pat.Patterns = append(pat.Patterns, &numberPattern{sc.Next() - 48})
+			case 'f':
+				sc.Next()
+				if sc.Peek() != '[' {
+					panic(newError(sc.CurrentPos(), "missing '[' after '%%f' in pattern"))
+				}
+				pat.Patterns = append(pat.Patterns, &frontierPattern{parseClass(sc, true)})
 			case 'b':
 				sc.Next()
 				pat.Patterns = append(pat.Patterns, &bracePattern{sc.Next(), sc.Next()})
@@ -507,6 +518,8 @@ func compilePattern(p pattern, ps ...*iptr) []inst {
 		ptr.insts = append(ptr.insts, inst{opSave, nil, c0, -1})
 		compilePattern(pat.Pattern, ptr)
 		ptr.insts = append(ptr.insts, inst{opSave, nil, c1, -1})
+	case *frontierPattern:
+		ptr.insts = append(ptr.insts, inst{opFrontier, pat.Class, -1, -1})
 	case *bracePattern:
 		ptr.insts = append(ptr.insts, inst{opBrace, nil, pat.Begin, pat.End})
 	case *numberPattern:
@@ -570,6 +583,21 @@ redo:
 		return false, sp, m
 	case opPSave:
 		m.addPosCapture(inst.Operand1, sp+1)
+		pc++
+		goto redo
+	case opFrontier:
+		// %f[set]: here the previous character is not in the set and the next
+		// one is, the start and the end of the string counting as "\0".
+		prev, next := 0, 0
+		if sp > 0 {
+			prev = int(src[sp-1])
+		}
+		if sp < len(src) {
+			next = int(src[sp])
+		}
+		if inst.Class.Matches(prev) || !inst.Class.Matches(next) {
+			return false, sp, m
+		}
 		pc++
 		goto redo
 	case opBrace:

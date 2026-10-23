@@ -121,3 +121,12 @@ and any other in Go's shortest exact form, so `0.1 + 0.2` was
 5.1 writes every number with `%.14g` (LUAI_NUMFFORMAT): `0.3`,
 `9.007199254741e+15`, `-0`. Now so does tlua, and JSON or other text a
 Lua library writes from numbers comes out as it does under Lua 5.1.
+
+## pm/pm.go: frontier patterns
+
+`%f[set]`, Lua 5.1's frontier pattern, was not understood: `%f` matched the
+letter f, so `("hello"):find("hello%f[%W]")` found nothing and
+`%f[%a]%a+%f[%A]` could not pick out a word. It is now a pattern of its own:
+it matches where the character before is not in the set and the one after is,
+the start and the end of the string counting as a zero byte, and it is an
+error without a `[` after it.

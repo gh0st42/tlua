@@ -66,6 +66,16 @@ func TestGopherLuaPatches(t *testing.T) {
 				return out
 			end
 			assert(#lines("a\nb") == 2)`,
+		"frontier patterns": `
+			assert(select("#", ("THE (quick) fox"):find("%f[%a]%a+%f[%A]")) == 2)
+			local i, j = ("THE (quick) fox"):find("%f[%a]%a+%f[%A]")
+			assert(i == 1 and j == 3)
+			assert(("hello world"):find("hello%f[%W]") == 1)
+			assert(("hello"):find("hello%f[%z]") == 1, "the end of the string counts as a zero")
+			assert(("xhello"):find("%f[%w]hello") == nil)
+			assert(("a.b:onSubmit(x)"):gsub("(a%.b[:%.])onSubmit%f[^%w_]", "%1onEnter") == "a.b:onEnter(x)")
+			assert(("onSubmitted"):find("onSubmit%f[^%w_]") == nil)
+			assert(not pcall(string.find, "x", "%fx"), "%f needs a set")`,
 		"generic for with two expressions": `
 			local function f()
 				do local a, b, c = 1, 2, "stale" end
