@@ -1,0 +1,11 @@
+return { kind = "Component", name = "RgbPicker", width = 268, height = 90,
+  events = { "onChange" },
+  { kind = "Label", name = "lblR", caption = "R", left = 0, top = 2, width = 16 },
+  { kind = "Slider", name = "r", left = 20, top = 0, width = 150, height = 24, min = 0, max = 255, value = 128 },
+  { kind = "Label", name = "lblG", caption = "G", left = 0, top = 30, width = 16 },
+  { kind = "Slider", name = "g", left = 20, top = 28, width = 150, height = 24, min = 0, max = 255, value = 128 },
+  { kind = "Label", name = "lblB", caption = "B", left = 0, top = 58, width = 16 },
+  { kind = "Slider", name = "b", left = 20, top = 56, width = 150, height = 24, min = 0, max = 255, value = 128 },
+  { kind = "Panel", name = "swatch", color = "#808080", left = 180, top = 0, width = 88, height = 62 },
+  { kind = "Label", name = "hex", caption = "#808080", align = "center", left = 180, top = 66, width = 88 },
+}

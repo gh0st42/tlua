@@ -134,7 +134,12 @@ function gui.component(spec)
         return frame, parts
       end)
       building[name] = nil
-      if not ok then error(frame, 0) end
+      if not ok then
+        -- Say whose layout it was, not which Lua line of ours noticed.
+        local why = tostring(frame):gsub("^=gui/component%.lua:%d+: ", ""):gsub("^gui%.load layout, ", "")
+        if why:find("^gui%.component") then error(why, 0) end
+        error(("gui.component %s: %s"):format(name, why), 0)
+      end
       return frame
     end,
   }

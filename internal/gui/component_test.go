@@ -1,6 +1,11 @@
 package gui
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+
+	lua "github.com/yuin/gopher-lua"
+)
 
 const fieldDef = `
 gui.component{
@@ -67,7 +72,7 @@ func TestComponentChecksItsInput(t *testing.T) {
 gui.component{layout = {name = "Loop", { kind = "Loop", name = "again" }}}
 gui.component{layout = {name = "Bad", { kind = "Nonsense", name = "x" }}}`)
 	fails(t, L, `gui.Form{}:Loop{}`, "Loop holds itself")
-	fails(t, L, `gui.Form{}:Bad{}`, "there is no kind \"Nonsense\"")
+	fails(t, L, `gui.Form{}:Bad{}`, "gui.component Bad: at x: there is no kind \"Nonsense\"")
 	run(t, L, `gui.Form{}:Label{name = "x"}`) // the failed build left no mark
 }
 
@@ -103,4 +108,42 @@ b = form:Again{}
 assert(b:find("x").caption == "new" and a:find("x").caption == "old", "instances made before keep their parts")
 gui.define{name = "Plain", build = function(parent) return parent:Frame{} end}`)
 	fails(t, L, `gui.component{layout = {name = "Plain"}}`, "Plain is already defined")
+}
+
+// The components in examples/palette build, and do what their README says.
+func TestPaletteExamples(t *testing.T) {
+	dir, err := filepath.Abs("../../examples/palette")
+	if err != nil {
+		t.Fatal(err)
+	}
+	L, _ := newState(t)
+	L.SetGlobal("palette", lua.LString(dir))
+	run(t, L, `
+package.path = palette .. "/?.lua;" .. package.path
+for _, name in ipairs { "LabeledField", "SearchBox", "RgbPicker" } do
+  gui.component{layout = palette .. "/" .. name, code = name}
+end
+form = gui.Form{}
+
+field = form:LabeledField{label = "City", text = "Oslo"}
+assert(field.label == "City" and field.text == "Oslo")
+field:clear()
+assert(field.text == "")
+
+box = form:SearchBox{text = "lua"}
+found = {}
+box.onSearch = function(self, text) found[#found + 1] = text end
+box:find("go"):fire("click")
+assert(#found == 1 and found[1] == "lua")
+
+picker = form:RgbPicker{}
+assert(picker.rgb == "#808080" and picker:find("hex").caption == "#808080")
+picker:set("#ff8000")
+assert(picker.rgb == "#ff8000" and picker:find("r").value == 255 and picker:find("swatch").color == "#ff8000")
+local got
+picker.onChange = function(self, rgb) got = rgb end
+picker:find("b").value = 16
+picker:find("b"):fire("change")
+assert(got == "#ff8010" and picker.rgb == "#ff8010", tostring(got))`)
+	fails(t, L, `picker:set("red")`, "wants")
 }

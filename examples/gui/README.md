@@ -15,7 +15,8 @@ need a tlua built with cgo (`make build`, not `make static`).
   on a Canvas, and a colour picker made of sliders in a Frame.
 - `components.lua` - a control made from a layout file with `gui.component`:
   two labelled fields whose parts do not clash, with a method and an event.
-  (`components/` holds its layout.)
+  (`components/` holds its layout.) `../palette/` has more, for the
+  designer's palette.
 - `paint.lua` - a pixel editor: a picture from `require "png"` drawn on a
   Canvas, painted with the mouse, opened and saved as PNG, and packed into
   a zip with `require "zip"`.
