@@ -226,6 +226,7 @@ function Container:Splitter(opts) end
 
 ---@class gui.Form: gui.Container
 ---@field resizable boolean given when it is made
+---@field fullscreen boolean the window fills the screen, with no frame; set or read at any time
 ---@field onClose? fun(self: gui.Form): boolean? the close box, Escape or close(); false keeps it open
 ---@field onUnload? fun(self: gui.Form): boolean? runs after onClose; false keeps it open too
 ---@field onKey? fun(self: gui.Form, key: string, text: string): boolean? a key the focused control did not use, as "a", "Ctrl+s", "F5"; true keeps it from going further
@@ -253,6 +254,7 @@ function Form:Menu(items) end
 
 ---@class gui.FormOptions: gui.Options
 ---@field resizable? boolean
+---@field fullscreen? boolean
 ---@field onClose? fun(self: gui.Form): boolean?
 ---@field onUnload? fun(self: gui.Form): boolean?
 ---@field onKey? fun(self: gui.Form, key: string, text: string): boolean?

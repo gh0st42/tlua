@@ -66,7 +66,7 @@ behind its siblings, which is also the order a layout lists them in.
 
 | Kind          | Own properties                                       | Events |
 |---------------|------------------------------------------------------|--------|
-| `Form`        | `resizable`                                          | `onLoad`, `onClose`, `onUnload`, `onKey`, `onKeyPreview`, `onActivate`, `onDeactivate` |
+| `Form`        | `resizable`, `fullscreen`                            | `onLoad`, `onClose`, `onUnload`, `onKey`, `onKeyPreview`, `onActivate`, `onDeactivate` |
 | `Menu`        | `items` (see below); Form only                       | — |
 | `Label`       | `align` (`"left"`, `"center"`, `"right"`), `image`; `text` is `caption`; `pointer` | `onClick`, `onDoubleClick`, `onMouseDown`, `onMouseUp`, `onMouseMove`, `onMouseEnter`, `onMouseLeave` |
 | `Button`      | `default` (Enter presses it), `image` beside the caption | `onClick` |
@@ -244,6 +244,9 @@ Forms do not resize unless they say so:
 - Everything else keeps its size and moves with the edge beyond it.
 - `resizable = true` with nothing marked `grow` scales everything.
 - A form never shrinks below the size it opened at.
+- A Form's `fullscreen` makes its window fill the screen when set to true,
+  with no frame, and gives it back its size when false. It may be set
+  before the form is shown, and reads back what is in effect.
 - Inside a Frame or Page, the same rule applies to its children.
 - A Scroll's `scrollX` and `scrollY` are how far its content is scrolled, in
   pixels, from 0 at the corner. Set them to scroll, as a hand tool or a

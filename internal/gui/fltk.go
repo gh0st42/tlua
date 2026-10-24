@@ -723,6 +723,10 @@ func applyProp(o *guiObject, name string, value lua.LValue) error {
 		setSelected(o, int(lua.LVAsNumber(value)))
 	case "min", "max", "step", "value":
 		setNumber(o, name, float64(lua.LVAsNumber(value)))
+	case "fullscreen":
+		if win := window(o); win != nil && o.kind == "Form" {
+			win.SetFullscreen(lua.LVAsBool(value))
+		}
 	case "scrollX", "scrollY":
 		if sc, ok := o.widget.(*fltk.Scroll); ok {
 			x, y := sc.XPosition(), sc.YPosition()
@@ -1149,6 +1153,10 @@ func readProp(o *guiObject, name string) (lua.LValue, bool) {
 			x, y = x-ox, y-oy
 		}
 		return lua.LNumber(map[string]int{"left": x, "top": y, "width": g.W(), "height": g.H()}[name]), true
+	case "fullscreen":
+		if win := window(o); win != nil && o.kind == "Form" {
+			return lua.LBool(win.FullscreenActive()), true
+		}
 	case "scrollX", "scrollY":
 		if sc, ok := o.widget.(*fltk.Scroll); ok {
 			if name == "scrollX" {

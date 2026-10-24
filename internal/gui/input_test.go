@@ -943,3 +943,22 @@ form:show()`, func(s *scene) {
 		s.expect(`select(1, pic:get(50, 80)) == 255`)
 	})
 }
+
+// A form's fullscreen can be set before it is shown or after, and reads back.
+func TestFormFullscreen(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 200, height = 100}
+form.fullscreen = true
+form:Label{caption = "hello", left = 10, top = 10, width = 100, height = 20}
+form:show()`, func(s *scene) {
+		s.expect(`form.fullscreen == true`)
+		s.lua(`form.fullscreen = false`)
+		s.pump()
+		s.expect(`form.fullscreen == false`)
+		s.lua(`form.fullscreen = true`)
+		s.pump()
+		s.expect(`form.fullscreen == true`)
+		s.lua(`form.fullscreen = false`)
+		s.pump()
+	})
+}

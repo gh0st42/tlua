@@ -60,7 +60,7 @@ var kinds = map[string]*kind{
 		w: 360, h: 240,
 		events: []string{"onClose", "onUnload", "onKey", "onKeyPreview"},
 		holds:  append([]string{"Menu"}, controls...),
-		props:  map[string]lua.LValue{"resizable": lua.LFalse},
+		props:  map[string]lua.LValue{"resizable": lua.LFalse, "fullscreen": lua.LFalse},
 		fixed:  []string{"resizable"},
 	},
 	"Label": {
