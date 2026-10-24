@@ -14,6 +14,7 @@ local code = require "design.code"
 local menueditor = require "design.menueditor"
 local interface = require "design.interface"
 local palette = require "design.palette"
+local newproject = require "design.newproject"
 local assist = require "design.assist"
 
 local M = {}
@@ -43,16 +44,16 @@ local function shortPath(dir, width)
   return dir
 end
 
-local function startDialog(dir, hasForms)
+local function startDialog(dir, hasProject)
   local choice = "none"
   local f = gui.Form { caption = "tlua design", width = 480, height = 150 }
   f:Label {
     left = 16, top = 14, width = 448, height = 24,
-    caption = hasForms and "The current folder has a project:" or "The current folder has no project yet:",
+    caption = hasProject and "The current folder has a project:" or "The current folder has no project yet:",
   }
   f:Label { left = 16, top = 40, width = 448, height = 24, caption = shortPath(dir, 448), font = "mono", fontSize = 12, textColor = "#404040" }
   local function pick(c) return function() choice = c; f:close() end end
-  f:Button { caption = hasForms and "Open It" or "Start One Here", left = 16, top = 100, width = 140, default = true, onClick = pick("here") }
+  f:Button { caption = hasProject and "Open It" or "Start One Here", left = 16, top = 100, width = 140, default = true, onClick = pick("here") }
   f:Button { caption = "Choose a Folder...", left = 166, top = 100, width = 160, onClick = pick("choose") }
   f:Button { caption = "No Project", left = 336, top = 100, width = 128, onClick = pick("none") }
   function f:onKey(key)
@@ -62,25 +63,44 @@ local function startDialog(dir, hasForms)
   return choice
 end
 
+-- startNew makes a project in dir, of the type the user picks in the New
+-- Project dialog, which can also change the folder; it returns the folder,
+-- or nil when cancelled. opts.create makes a GUI application (or the type
+-- opts.answerType names) without asking, which is how tests and scripts
+-- keep it from waiting.
+local function startNew(dir, opts)
+  local made
+  if opts.create or opts.answerType then
+    made = { dir = dir, type = opts.answerType or "gui" }
+  else
+    made = newproject.ask(dir, "gui")
+  end
+  if not made then return nil end
+  project.createProject(made.dir, made.type)
+  return made.dir
+end
+
 -- pickProject is the folder the designer opens when none was named: the
 -- current one, or one the user picks, made into a project when it has
 -- none and the user says so; nil for none. opts.answerStart and
 -- opts.answerDir answer its questions for tests, and then it asks once.
 local function pickProject(dir, opts)
   while true do
-    local hasForms = project.forms(dir)[1] ~= nil
-    local choice = opts.answerStart or startDialog(dir, hasForms)
+    local hasProject = project.kind(dir) ~= nil
+    local choice = opts.answerStart or startDialog(dir, hasProject)
     if choice == "here" then
-      if not hasForms then project.create(dir) end
-      return dir
+      if hasProject then return dir end
+      local made = startNew(dir, opts)
+      if made then return made end
+      if opts.answerStart then return nil end
     elseif choice == "choose" then
       local other = opts.answerDir
       if other == nil then other = gui.choosedir { title = "Open a project, or a folder for a new one" } end
       if other then
-        if project.forms(other)[1] then return other end
-        if opts.create or gui.msgbox("There is no project in " .. other .. ". Start one there?", "yesno", "tlua design") == "yes" then
-          project.create(other)
-          return other
+        if project.kind(other) then return other end
+        if opts.create or opts.answerType or gui.msgbox("There is no project in " .. other .. ". Start one there?", "yesno", "tlua design") == "yes" then
+          local made = startNew(other, opts)
+          if made then return made end
         end
       end
       if opts.answerStart then return nil end
@@ -107,17 +127,22 @@ function M.start(opts)
   local center = split:Panel { left = LEFT, top = 0, width = W - LEFT - RIGHT, height = splitH }
   local rightPane = split:Panel { left = W - RIGHT, top = 0, width = RIGHT, height = splitH }
 
-  leftPane:Label { caption = "Project", left = 6, top = 2, width = LEFT - 12, height = 20 }
+  d.projectLabel = leftPane:Label { caption = "Project", left = 6, top = 2, width = LEFT - 12, height = 20 }
   d.tree = leftPane:Tree {
     left = 6, top = 22, width = LEFT - 12, height = 110,
     onDoubleClick = function(self)
+      if d.kind ~= "gui" then
+        -- A project of files: a leaf is a file, a branch a folder.
+        if self.path ~= "" and lfs.attributes(d.dir .. "/" .. self.path, "mode") == "file" then d:openFile(self.path) end
+        return
+      end
       -- A branch opens and closes; a leaf is a form or a component.
       local group, name = self.path:match("^([^/]+)/(.+)$")
       if group == "Forms" then d:openForm(name) elseif group == "Components" then d:openComponent(name) end
     end,
   }
   d.startupLine = leftPane:Label { left = 6, top = 134, width = LEFT - 12, height = 20, fontSize = 12 }
-  leftPane:Label { caption = "Toolbox", left = 6, top = 158, width = LEFT - 12, height = 20 }
+  d.toolboxLabel = leftPane:Label { caption = "Toolbox", left = 6, top = 158, width = LEFT - 12, height = 20 }
   -- The toolbox scrolls, for a project with many controls of its own.
   local tools = leftPane:Scroll { left = 6, top = 178, width = LEFT - 12, height = splitH - 184, grow = true, color = "#ffffff" }
   d.toolbox = toolbox.new(tools, {
@@ -133,11 +158,17 @@ function M.start(opts)
     left = 0, top = 0, width = CW, height = splitH, grow = true,
     onChange = function(self) if self.selected == 2 then d:showCode() end end,
   }
+  d.tools = tools
   local designPage = d.views:Page { caption = "Design" }
   local codePage = d.views:Page { caption = "Code" }
   local pageH = splitH - 25
+  d.pageH = pageH
   d.area = designPage:Scroll { left = 0, top = 0, width = CW, height = pageH, grow = true, color = "#8a8f99" }
   d.surface = surface.new(d.area, d)
+  -- What the Design tab says in a project that has no forms.
+  d.noDesign = designPage:Label {
+    left = 20, top = 20, width = CW - 40, height = 60, visible = false, textColor = "#ffffff", fontSize = 14,
+  }
 
   -- VB6's two boxes over the code: an object, then one of its events.
   d.objectBox = codePage:ComboBox {
@@ -156,7 +187,7 @@ function M.start(opts)
   -- Completion and help from a language server, laid over the code.
   d.assist = assist.new(d, d.codeBox, codePage)
 
-  rightPane:Label { caption = "Properties", left = 6, top = 2, width = RIGHT - 12, height = 20 }
+  d.propsLabel = rightPane:Label { caption = "Properties", left = 6, top = 2, width = RIGHT - 12, height = 20 }
   d.props = props.new(rightPane, d, { left = 6, top = 24, width = RIGHT - 12, height = splitH - 30 })
 
   d.output = win:ListBox {
@@ -465,7 +496,7 @@ function M.start(opts)
   end
 
   function d:setStartup()
-    if not self.formName then return end
+    if not self.formName or self:onlyGui("A startup form") then return end
     if self.docKind == "Component" then
       self:status("A component is a control, not a window: a form is shown first")
       return
@@ -484,15 +515,17 @@ function M.start(opts)
   function d:pack(command, out, what)
     self:save()
     self.output.items = {}
-    self:print("> tlua " .. command .. " -o " .. out .. " .")
-    gui.spawn {
-      gui.interpreter, command, "-o", out, self.dir,
-      onOutput = function(line) d:print(line) end,
-      onExit = function(status)
-        d:print(status == 0 and ("> made " .. out) or ("> " .. command .. " exited with " .. status))
-        d:status(status == 0 and ("Made " .. out) or (what .. " failed"))
-      end,
-    }
+    self:print("> tlua " .. command .. " -o " .. out .. (self.kind == "game" and " -play" or "") .. " .")
+    local args = { gui.interpreter, command, "-o", out }
+    -- A game may not say boot(), so it is packed to open the console.
+    if self.kind == "game" then args[#args + 1] = "-play" end
+    args[#args + 1] = self.dir
+    args.onOutput = function(line) d:print(line) end
+    args.onExit = function(status)
+      d:print(status == 0 and ("> made " .. out) or ("> " .. command .. " exited with " .. status))
+      d:status(status == 0 and ("Made " .. out) or (what .. " failed"))
+    end
+    gui.spawn(args)
   end
 
   -- packTo asks where to write what the project is packed into, beside the
@@ -588,13 +621,77 @@ function M.start(opts)
 
   -- fillTree lists the forms and the components in the project tree.
   function d:fillTree()
+    if self.kind ~= "gui" then
+      self.tree.items = self:fileTree()
+      return
+    end
     self.tree.items = {
       { "Forms", project.forms(self.dir), open = true },
       { "Components", project.components(self.dir), open = true },
     }
   end
 
+  -- fileTree is the project's Lua files as the Tree shows them: folders as
+  -- branches, open, with the files in them.
+  function d:fileTree()
+    local root = { children = {} }
+    for _, rel in ipairs(project.files(self.dir)) do
+      local node = root
+      local parts = {}
+      for part in rel:gmatch("[^/]+") do parts[#parts + 1] = part end
+      for i = 1, #parts - 1 do
+        local sub = node.children[parts[i]]
+        if not sub then
+          sub = { children = {}, order = {} }
+          node.children[parts[i]] = sub
+          node.order = node.order or {}
+          node.order[#node.order + 1] = parts[i]
+        end
+        node = sub
+      end
+      node.files = node.files or {}
+      node.files[#node.files + 1] = parts[#parts]
+    end
+    local function build(node)
+      local items = {}
+      -- Folders first, then files, each in order.
+      local names = node.order or {}
+      table.sort(names)
+      for _, name in ipairs(names) do
+        items[#items + 1] = { name, build(node.children[name]), open = true }
+      end
+      for _, file in ipairs(node.files or {}) do items[#items + 1] = file end
+      return items
+    end
+    return build(root)
+  end
+
+  -- setMode shows the designer for the kind of project open: the toolbox,
+  -- the form and the properties for a GUI application; for the others only
+  -- a code window, with the project's files on the left.
+  function d:setMode(kind)
+    self.kind = kind
+    local forms = kind == "gui"
+    self.projectLabel.caption = forms and "Project" or "Files"
+    self.toolboxLabel.caption = forms and "Toolbox" or ""
+    self.propsLabel.caption = forms and "Properties" or ""
+    self.tools.visible = forms
+    self.props.picker.visible = forms
+    self.props.grid.visible = forms
+    self.area.visible = forms
+    self.noDesign.visible = not forms
+    local what = ({ console = "console", game = "game" })[kind]
+    self.noDesign.caption = what and ("A " .. what .. " has no forms to design: its Lua files are on the left, and the Code tab is where they are written.") or ""
+    self.objectBox.visible = forms
+    self.eventBox.visible = forms
+    self.codeBox.top = forms and 34 or 0
+    self.codeBox.height = self.pageH - self.codeBox.top
+    self.startupLine.visible = forms
+    if forms then self.views.selected = 1 end
+  end
+
   function d:newControl()
+    if self:onlyGui("Controls") then return end
     local n = 1
     while project.exists(self.dir .. "/controls/Control" .. n .. ".lua") do n = n + 1 end
     local name = self:prompt("A name for the new control (a capital first):", "New Control", "Control" .. n)
@@ -613,6 +710,9 @@ function M.start(opts)
 
   function d:openProject(dir)
     self.dir = dir
+    self.formName, self.docKind, self.doc = nil, nil, nil
+    self:setMode(project.kind(dir) or "gui")
+    if self.kind ~= "gui" then return self:openSources(dir) end
     -- The project's modules, its own controls among them, are found from
     -- its folder, as they are when it runs.
     package.path = dir .. "/?.lua;" .. package.path
@@ -626,6 +726,36 @@ function M.start(opts)
     self:showStartup()
     self:retitle()
     if forms[1] then self:openForm(forms[1]) end
+  end
+
+  -- openSources opens a project that is Lua files: the tree lists them, and
+  -- main.lua is the first one shown.
+  function d:openSources(dir)
+    package.path = dir .. "/?.lua;" .. package.path
+    lfs.chdir(dir)
+    self.assist:start(dir)
+    self:fillTree()
+    self:showStartup()
+    self:retitle()
+    local files = project.files(dir)
+    local first = project.exists(dir .. "/main.lua") and "main.lua" or files[1]
+    if first then self:openFile(first) end
+  end
+
+  -- openFile shows one of the files of a project of source files in the
+  -- code window.
+  function d:openFile(rel)
+    if rel == "" or (self.docKind == "File" and rel == self.formName) then return end
+    if not self:keepOrLose() then return end
+    self.doc, self.formName, self.docKind, self.dirty = nil, rel, "File", false
+    self.selection, self.namedAs = nil, nil
+    self:loadCode()
+    self.objectBox.items, self.eventBox.items = {}, {}
+    self.tree.path = rel
+    self.views.selected = 2
+    self:retitle()
+    self:status("")
+    self.codeBox:focus()
   end
 
   function d:openForm(name)
@@ -668,6 +798,12 @@ function M.start(opts)
   end
 
   function d:save()
+    if self.docKind == "File" then
+      if self.codeDirty then self:saveCode() end
+      self:retitle()
+      self:status("Saved " .. self.formName)
+      return
+    end
     if not self.doc then return end
     self:offerRename()
     if self.docKind == "Component" then
@@ -692,7 +828,14 @@ function M.start(opts)
 
   ---------------------------------------------------------------- code
 
+  -- codeFile is the name of the file in the code window.
+  function d:codeFile()
+    if self.docKind == "File" then return self.formName end
+    return self.formName .. ".lua"
+  end
+
   function d:codePath()
+    if self.docKind == "File" then return self.dir .. "/" .. self.formName end
     return self.dir .. (self.docKind == "Component" and "/components/" or "/forms/") .. self.formName .. ".lua"
   end
 
@@ -705,7 +848,7 @@ function M.start(opts)
     self.assist:closeList()
     self.assist:hideTip()
     local path = self:codePath()
-    if not project.exists(path) then
+    if not project.exists(path) and self.docKind ~= "File" then
       if self.docKind == "Component" then
         project.saveComponent(self.dir, self.formName, self.doc)
       else
@@ -723,7 +866,7 @@ function M.start(opts)
   function d:saveCode()
     local path = self:codePath()
     if stamp(path) ~= self.codeStamp then
-      local answer = self:ask(self.formName .. ".lua has changed on disk since it was opened here. Write over it?", "yesno", "tlua design")
+      local answer = self:ask(self:codeFile() .. " has changed on disk since it was opened here. Write over it?", "yesno", "tlua design")
       if answer ~= "yes" then return end
     end
     local f = assert(io.open(path, "w"))
@@ -738,13 +881,13 @@ function M.start(opts)
   function d:syncCode()
     if self.formName and not self.codeDirty and stamp(self:codePath()) ~= self.codeStamp then
       self:loadCode()
-      self:status(self.formName .. ".lua changed on disk, and was read again")
+      self:status(self:codeFile() .. " changed on disk, and was read again")
     end
   end
 
   -- showCode switches to the code, with the object box on the selection.
   function d:showCode()
-    if not self.doc then return end
+    if not self.doc and self.docKind ~= "File" then return end
     self:offerRename()
     self:syncCode()
     self.views.selected = 2
@@ -761,6 +904,7 @@ function M.start(opts)
   -- fillObjects lists the form and its controls in the object box, and the
   -- events of the one selected in the event box.
   function d:fillObjects()
+    if self.docKind == "File" then return end
     self.codeNodes = { self.doc }
     local items = { "(" .. self.formName .. ")" }
     model.walk(self.doc, function(node)
@@ -879,6 +1023,7 @@ function M.start(opts)
 
   -- jumpToError opens the code where an error message says it happened.
   function d:jumpToError(message)
+    if self.kind ~= "gui" then return self:jumpToFileError(message) end
     local form, line = code.errorAt(message or "")
     if not form then return false end
     if form ~= self.formName then
@@ -887,6 +1032,24 @@ function M.start(opts)
     end
     self:showCode()
     self.codeBox.line = line
+    self.codeBox:focus()
+    return true
+  end
+
+  -- jumpToFileError opens the file an error message names, if it is one of
+  -- the project's, at the line.
+  function d:jumpToFileError(message)
+    local file, line = (message or ""):match("([%w_%./\\%-]+%.lua):(%d+):")
+    if not file then return false end
+    file = file:gsub("\\", "/")
+    local root = self.dir:gsub("\\", "/") .. "/"
+    if file:sub(1, #root) == root then file = file:sub(#root + 1) end
+    file = file:gsub("^%./", "")
+    if not project.exists(self.dir .. "/" .. file) then return false end
+    self:openFile(file)
+    if self.formName ~= file then return false end
+    self:showCode()
+    self.codeBox.line = tonumber(line)
     self.codeBox:focus()
     return true
   end
@@ -906,10 +1069,19 @@ function M.start(opts)
       opener = { os_name == "Darwin" and "open" or "xdg-open", path }
     end
     gui.spawn(opener)
-    self:status("Opened " .. self.formName .. ".lua elsewhere; it is read again here when it changes")
+    self:status("Opened " .. self:codeFile() .. " elsewhere; it is read again here when it changes")
+  end
+
+  -- onlyGui says why a command for forms does nothing in a project of
+  -- source files, and returns true when that is so.
+  function d:onlyGui(what)
+    if self.kind == "gui" then return false end
+    self:status(what .. " is for GUI applications; this project is " .. (self.kind == "game" and "a game" or "a console program"))
+    return true
   end
 
   function d:addForm()
+    if self:onlyGui("Forms") then return end
     local n = 1
     while project.exists(project.layoutPath(self.dir, "Form" .. n)) do n = n + 1 end
     local name = self:prompt("A name for the new form:", "Add Form", "Form" .. n)
@@ -930,6 +1102,7 @@ function M.start(opts)
   -- editInterface shows what the component being designed offers to the
   -- forms that use it: its props, events and public parts.
   function d:editInterface()
+    if self.kind ~= "gui" then self:onlyGui("Components") return end
     if self.docKind ~= "Component" then
       self:status("Only a component has an interface")
       return
@@ -1004,7 +1177,7 @@ function M.start(opts)
 
   -- addFromPalette copies a component of a palette into the project.
   function d:addFromPalette()
-    if not self.dir then return end
+    if not self.dir or self:onlyGui("Components") then return end
     local entries = palette.list()
     if #entries == 0 then
       self:ask("There are no components in the palettes: " .. table.concat(palette.folders(), ", "), "ok", "Add Component from Palette")
@@ -1082,7 +1255,29 @@ function M.start(opts)
     end
   end
 
+  -- addFile starts a Lua file in a project of source files.
+  function d:addFile()
+    if self.kind == "gui" then
+      self:status("A GUI application is made of forms; Add Form starts one")
+      return
+    end
+    local name = self:prompt("A name for the new file (folders allowed, as lib/util.lua):", "New File", "util.lua")
+    if not name or name == "" then return end
+    if not name:match("%.lua$") then name = name .. ".lua" end
+    if not name:match("^[%w_%-%.]+[%w_%-%./]*$") or name:find("%.%.") or name:sub(1, 1) == "/" then
+      self:ask(name .. " is not a name for a file in the project.", "ok", "New File")
+      return
+    end
+    if not project.addFile(self.dir, name) then
+      self:ask("There is a " .. name .. " already.", "ok", "New File")
+      return
+    end
+    self:fillTree()
+    self:openFile(name)
+  end
+
   function d:addComponent()
+    if self:onlyGui("Components") then return end
     local n = 1
     while project.exists(project.componentPath(self.dir, "Component" .. n)) or project.exists(self.dir .. "/controls/Component" .. n .. ".lua") do n = n + 1 end
     local name = self:prompt("A name for the new component (a capital first):", "Add Component", "Component" .. n)
@@ -1100,22 +1295,37 @@ function M.start(opts)
     self:openComponent(name)
   end
 
+  -- newProject asks what kind of project and where, and opens it.
+  -- answerNew, when set, is the answer ({ dir =, type = }, or false), which
+  -- is how tests keep the dialog from waiting.
   function d:newProject()
-    local dir = gui.choosedir { title = "A folder for the new project" }
-    if not dir or not self:keepOrLose() then return end
-    project.create(dir)
-    self.formName = nil
-    self:openProject(dir)
+    if not self:keepOrLose() then return end
+    local made
+    if self.answerNew ~= nil then
+      made = self.answerNew or nil
+    else
+      made = newproject.ask(nil, "gui", self.newProjectHooks)
+    end
+    if not made then return end
+    project.createProject(made.dir, made.type)
+    self:openProject(made.dir)
   end
 
   function d:chooseProject()
     local dir = gui.choosedir { title = "Open a project" }
     if not dir or not self:keepOrLose() then return end
-    if not project.forms(dir)[1] then
-      self:ask("There are no forms in " .. dir .. ".", "ok", "Open Project")
-      return
+    self:openFolder(dir)
+  end
+
+  -- openFolder opens the project in dir, or offers to start one there.
+  function d:openFolder(dir)
+    if not project.kind(dir) then
+      if self:ask("There is no project in " .. dir .. ". Start one there?", "yesno", "Open Project") ~= "yes" then return end
+      local made = self.answerNew ~= nil and (self.answerNew or nil) or newproject.ask(dir, "gui", self.newProjectHooks)
+      if not made then return end
+      project.createProject(made.dir, made.type)
+      dir = made.dir
     end
-    self.formName = nil
     self:openProject(dir)
   end
 
@@ -1134,9 +1344,21 @@ function M.start(opts)
     if self.proc and self.proc.running() then self.proc.kill() end
     self:save()
     self.output.items = {}
-    self:print("> tlua main.lua")
+    -- A game runs on the console; the rest are scripts: main.lua, or else
+    -- the file open.
+    local command
+    if self.kind == "game" then
+      command = { "play", "." }
+    else
+      local main = (self.kind ~= "gui" and not project.exists(self.dir .. "/main.lua") and self.docKind == "File") and self.formName or "main.lua"
+      command = { main }
+    end
+    self:print("> tlua " .. table.concat(command, " "))
+    local args = { gui.interpreter }
+    for _, a in ipairs(command) do args[#args + 1] = a end
+    args.dir = self.dir
     self.proc = gui.spawn {
-      gui.interpreter, "main.lua", dir = self.dir,
+      args[1], args[2], args[3], dir = self.dir,
       onOutput = function(line) d:print(line) end,
       onExit = function(status)
         d:print(status == 0 and "> finished" or ("> exited with " .. status))
@@ -1266,6 +1488,8 @@ function M.start(opts)
       { "Set as &Startup Form", function() d:setStartup() end },
       "-",
       { "&New Control...", function() d:newControl() end },
+      "-",
+      { "New &File...", function() d:addFile() end },
     } },
     { "&Tools", {
       { "&Menu Editor...", function() d:editMenu() end, shortcut = "Cmd+E" },
@@ -1296,9 +1520,9 @@ function M.start(opts)
   local dir = opts.dir
   if dir and opts.pick then
     dir = pickProject(dir, opts)
-  elseif dir and not project.forms(dir)[1] then
-    if opts.create or gui.msgbox("Start a new project in " .. dir .. "?", "yesno", "tlua design") == "yes" then
-      project.create(dir)
+  elseif dir and not project.kind(dir) then
+    if opts.create or opts.answerType or gui.msgbox("Start a new project in " .. dir .. "?", "yesno", "tlua design") == "yes" then
+      dir = startNew(dir, opts)
     else
       dir = nil
     end

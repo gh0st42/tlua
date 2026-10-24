@@ -7,6 +7,33 @@ tlua: a folder that runs with `tlua main.lua`, and packs with `tlua fuse` or
 [rad-plan.md](rad-plan.md) is the plan it is being built to; this is what
 there is so far.
 
+## Kinds of project
+
+File > New Project asks what kind of project and which folder:
+- **GUI application:** forms, designed with the mouse, as the rest of this
+  page describes. It is what a folder with a `forms/` folder in it is.
+- **Console application:** Lua files for the terminal. The designer is a code
+  window with the project's files on the left; there is no form and no
+  toolbox. F5 runs `tlua main.lua` and shows its output in the pane below, so
+  a program that wants the keyboard or the whole terminal is run from one
+  instead.
+- **Game:** Lua files for `tlua play`: `main.lua` starts with `boot()`, and
+  `_init`, `_update` and `_draw` (see [pico.md](pico.md)). F5 runs `tlua play .`
+  and Make EXE and Export Bundle pack it with `-play`.
+
+The two kinds that are only code keep a file `.tlua-project` that says
+which (`return { type = "game" }`). Without it a folder with a `main.lua` is a
+game when it defines `_draw` or `_update`, and a console program otherwise,
+so any folder of Lua can be opened. A new project does not touch files that
+are there already; an existing `main.lua` is used as it is.
+
+In these projects Project > New File starts a Lua file, in a folder if the
+name has one (`lib/util.lua`); a double click in the tree opens a file; the
+language server completes and shows help as it does for a form's code; and
+double-clicking a line of an error in the output pane opens the file at that
+line. Forms, components and controls are for GUI applications, and say so
+when asked for in the others.
+
 ## A project
 
 ```

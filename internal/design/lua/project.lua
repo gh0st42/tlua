@@ -90,6 +90,137 @@ function M.create(dir, first)
   M.addForm(dir, first)
 end
 
+---------------------------------------------------------------- kinds of project
+
+-- The kinds of project there are. A GUI application is forms and the code
+-- behind them; the others are Lua source files, edited in the designer's
+-- code window: a console program, and a game for tlua play.
+M.types = {
+  { id = "gui", title = "GUI application", about = "Windows made of forms, designed with the mouse. Run with tlua." },
+  { id = "console", title = "Console application", about = "A program for the terminal, in plain Lua files. Run with tlua." },
+  { id = "game", title = "Game", about = "A program with _update and _draw for tlua play: sprites, sound and input." },
+}
+
+local marker = ".tlua-project"
+
+local function consoleLua(name)
+  return ([[#!/usr/bin/env tlua
+-- %s: a console program. Run it with F5 in the designer, or "tlua main.lua".
+-- arg holds what follows the program on the command line.
+
+local who = arg and arg[1] or "world"
+print("Hello, " .. who .. "!")
+]]):format(name)
+end
+
+local function gameLua(name)
+  return ([[#!/usr/bin/env tlua
+-- %s: a game for tlua play. Run it with F5 in the designer, or "tlua play .".
+-- The console is a fixed screen and palette; docs/pico.md lists what it offers.
+
+-- boot() says this program wants a window and the console, so that it also
+-- runs as "tlua main.lua" and packed with Make EXE. It goes first.
+boot()
+
+local w, h = screen()
+local x, y = w / 2, h / 2
+
+function _init()
+end
+
+function _update()
+  if btn(0) then x = x - 1 end
+  if btn(1) then x = x + 1 end
+  if btn(2) then y = y - 1 end
+  if btn(3) then y = y + 1 end
+end
+
+function _draw()
+  cls(1)
+  circfill(x, y, 6, 12)
+  print("arrows move, ctrl-Q quits", 4, h - 10, 7)
+end
+]]):format(name)
+end
+
+-- kind says what a folder is: the type its .tlua-project names, else a GUI
+-- application when it has forms, else a game or a console program by what
+-- main.lua does. nil when there is no project in it.
+function M.kind(dir)
+  local fn = loadfile(dir .. "/" .. marker)
+  if fn then
+    setfenv(fn, {})
+    local ok, info = pcall(fn)
+    if ok and type(info) == "table" then
+      for _, t in ipairs(M.types) do
+        if t.id == info.type then return t.id end
+      end
+    end
+  end
+  if M.forms(dir)[1] then return "gui" end
+  local f = io.open(dir .. "/main.lua", "r")
+  if not f then return nil end
+  local text = f:read("*a")
+  f:close()
+  if text:find("function%s+_draw%f[^%w_]") or text:find("function%s+_update%f[^%w_]") then return "game" end
+  return "console"
+end
+
+-- createProject makes a project of a type in dir. A GUI application is a
+-- form and a main.lua to show it; the others get a main.lua and a
+-- .tlua-project that says what they are. Whatever is there stays.
+function M.createProject(dir, kind)
+  kind = kind or "gui"
+  if kind == "gui" then
+    M.create(dir)
+    return
+  end
+  lfs.mkdir(dir)
+  local name = dir:match("([^/\\]+)[/\\]?$") or "app"
+  if not exists(dir .. "/main.lua") then
+    write(dir .. "/main.lua", kind == "game" and gameLua(name) or consoleLua(name))
+  end
+  write(dir .. "/" .. marker, ("-- What kind of project this is, for tlua design.\nreturn { type = %q }\n"):format(kind))
+end
+
+-- files lists the Lua files of a project that is not forms, as paths from
+-- its folder with /, in order. Folders that start with a dot are left out,
+-- and so are declaration files (.d.lua).
+function M.files(dir)
+  local out = {}
+  local function walk(rel, depth)
+    local path = rel == "" and dir or (dir .. "/" .. rel)
+    for name in lfs.dir(path) do
+      if name:sub(1, 1) ~= "." then
+        local child = rel == "" and name or (rel .. "/" .. name)
+        local mode = lfs.attributes(dir .. "/" .. child, "mode")
+        if mode == "directory" and depth < 6 then
+          walk(child, depth + 1)
+        elseif mode == "file" and name:match("%.lua$") and not name:match("%.d%.lua$") and #out < 2000 then
+          out[#out + 1] = child
+        end
+      end
+    end
+  end
+  if exists(dir) then walk("", 0) end
+  table.sort(out)
+  return out
+end
+
+-- addFile starts a Lua file in a project, with the folders above it. It
+-- returns false when the file is there already.
+function M.addFile(dir, rel)
+  local path = dir .. "/" .. rel
+  if exists(path) then return false end
+  local folder = ""
+  for part in rel:gmatch("([^/]+)/") do
+    folder = folder == "" and part or (folder .. "/" .. part)
+    lfs.mkdir(dir .. "/" .. folder)
+  end
+  write(path, "-- " .. rel .. "\n\n")
+  return true
+end
+
 -- addForm adds a form: an empty layout, and the code that loads it.
 function M.addForm(dir, name)
   lfs.mkdir(dir .. "/forms")

@@ -364,3 +364,42 @@ assert(table.concat(project.holders(dir, "Middle"), ",") == "Outer")
 assert(#project.holders(dir, "Outer") == 0 and #project.holders(dir, "Alone") == 0)
 assert(table.concat(project.components(dir), ",") == "Alone,Inner,Middle,Outer")`)
 }
+
+func TestProjectKinds(t *testing.T) {
+	r, _ := newLua(t)
+	r.L.SetGlobal("dir", lua.LString(t.TempDir()))
+	run(t, r.L, `
+local project = require "design.project"
+gui = require "gui"
+local lfs = require "lfs"
+assert(project.kind(dir) == nil, "an empty folder is no project")
+
+local con, game, app = dir .. "/con", dir .. "/game", dir .. "/app"
+project.createProject(con, "console")
+project.createProject(game, "game")
+project.createProject(app, "gui")
+assert(project.kind(con) == "console" and project.kind(game) == "game" and project.kind(app) == "gui")
+assert(io.open(con .. "/.tlua-project"):read("*a"):find('type = "console"'))
+assert(io.open(game .. "/main.lua"):read("*a"):find("function _draw"))
+assert(not lfs.attributes(app .. "/.tlua-project"), "a GUI application is told by its forms")
+
+-- Without the marker, a folder with a main.lua is read for what it is.
+os.remove(game .. "/.tlua-project")
+assert(project.kind(game) == "game", "_draw makes it a game")
+os.remove(con .. "/.tlua-project")
+assert(project.kind(con) == "console")
+local f = io.open(dir .. "/plain.lua", "w"); f:write("print(1)"); f:close()
+
+-- What was there stays.
+local f = io.open(con .. "/main.lua", "w"); f:write("print('mine')"); f:close()
+project.createProject(con, "console")
+assert(io.open(con .. "/main.lua"):read("*a") == "print('mine')")
+
+-- Files: Lua only, nested, without the dotted folders and declarations.
+assert(project.addFile(con, "lib/util.lua") and not project.addFile(con, "lib/util.lua"))
+assert(project.addFile(con, "a/b/c.lua"))
+lfs.mkdir(con .. "/.git"); local g = io.open(con .. "/.git/x.lua", "w"); g:write("x"); g:close()
+local d = io.open(con .. "/lib/util.d.lua", "w"); d:write("x"); d:close()
+local n = io.open(con .. "/notes.txt", "w"); n:write("x"); n:close()
+assert(table.concat(project.files(con), ",") == "a/b/c.lua,lib/util.lua,main.lua", table.concat(project.files(con), ","))`)
+}

@@ -25,9 +25,12 @@ func TestDesignerPicksAProjectWhenNoneIsNamed(t *testing.T) {
 	for _, c := range []struct {
 		name, answer, answerDir string
 		create                  bool
+		kind                    string // the type picked for a new project, when it is asked
 		want                    string // "here", "other", "none" or "empty"
 	}{
-		{name: "this folder, made a project", answer: "here", want: "here"},
+		{name: "this folder, made a project", answer: "here", kind: "gui", want: "here"},
+		{name: "this folder, made a game", answer: "here", kind: "game", want: "here"},
+		{name: "this folder, made a console program", answer: "here", kind: "console", want: "here"},
 		{name: "another project", answer: "choose", answerDir: other, want: "other"},
 		{name: "an empty folder, made a project", answer: "choose", answerDir: "empty", create: true, want: "empty"},
 		{name: "an empty folder, but no", answer: "choose", answerDir: "empty", want: "none"},
@@ -46,13 +49,16 @@ func TestDesignerPicksAProjectWhenNoneIsNamed(t *testing.T) {
 			L.SetGlobal("answer", lua.LString(c.answer))
 			L.SetGlobal("answerDir", lua.LString(answerDir))
 			L.SetGlobal("create", lua.LBool(c.create))
+			L.SetGlobal("kind", lua.LString(c.kind))
 			L.SetGlobal("want", lua.LString(dir))
 			run(t, L, `
 local gui = require "gui"
 -- No project in the empty folder, when asked: what a user who says no does.
 gui.msgbox = function() return "no" end
 local D = require("design.main").start{dir = here, pick = true, show = false,
-  answerStart = answer, answerDir = answerDir ~= "" and answerDir or nil, create = create}
+  answerStart = answer, answerDir = answerDir ~= "" and answerDir or nil, create = create,
+  answerType = kind ~= "" and kind or nil}
+if kind ~= "" then assert(D.kind == kind, "opened as " .. tostring(D.kind)) end
 assert(D.dir == (want ~= "" and want or nil), "opened " .. tostring(D.dir) .. ", not " .. want)
 D.win:close()`)
 			// Starting a project here makes one; anything else leaves it be.

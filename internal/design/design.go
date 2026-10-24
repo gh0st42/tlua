@@ -24,11 +24,14 @@ var sources embed.FS
 
 const usage = `usage: tlua design [directory]
 
-Opens the form designer on the project in directory, or the current one.
-A project is main.lua and a forms/ folder: each form a layout file the
-designer writes (Name.form.lua) and the code that goes with it (Name.lua).
-A directory with no forms in it can be made into a new project. With no
-directory named, it asks whether to use the current one or another.
+Opens the designer on the project in directory, or the current one.
+A GUI application is main.lua and a forms/ folder: each form a layout file
+the designer writes (Name.form.lua) and the code that goes with it
+(Name.lua). A console application or a game is Lua files, edited in the
+code window, with a .tlua-project file that says which; a folder with a
+main.lua and no forms is read for what it is. A directory with no project
+in it can be made into a new one, of the kind you pick. With no directory
+named, it asks whether to use the current one or another.
 `
 
 // Command runs tlua design.

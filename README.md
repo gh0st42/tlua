@@ -357,6 +357,8 @@ state, and functions among them serve as its methods.
 **`tlua design`** draws forms the way Visual Basic 6 did: a toolbox, the
 form with its real controls to drag about, a properties grid, and F5 to run.
 It writes the layout files, and leaves the code to you.
+It is also a code window for console programs and games, with a New Project
+dialog to pick which.
 [docs/design.md](docs/design.md) describes it.
 
 [docs/gui.md](docs/gui.md) describes all of it, and

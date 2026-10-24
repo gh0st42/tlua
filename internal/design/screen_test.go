@@ -1262,3 +1262,95 @@ func TestDesignerPaletteDrawer(t *testing.T) {
 		s.expect(`D.doc[1].kind == "Greeting" and D.surface.entries[1].obj.width == 120`)
 	})
 }
+
+func TestDesignerEditsSourceProjects(t *testing.T) {
+	root := t.TempDir()
+	con := filepath.Join(root, "tool")
+	game := filepath.Join(root, "arcade")
+	app := filepath.Join(root, "app2")
+	withDesigner(t, func(s *scene) {
+		// What runs is recorded instead of started.
+		s.lua(`spawned = {}
+		  require("gui").spawn = function(a) spawned[#spawned + 1] = a; return { running = function() return false end, kill = function() end } end`)
+
+		// A console program: files on the left, the code window, no design.
+		s.L.SetGlobal("dir2", lua.LString(con))
+		s.lua(`D.answerNew = { dir = dir2, type = "console" }; D:newProject()`)
+		s.expect(`D.kind == "console" and D.docKind == "File" and D.formName == "main.lua" and D.dir == dir2`)
+		s.expect(`D.views.selected == 2 and D.codeBox.text:find("Hello, ") and D.tools.visible == false and D.area.visible == false`)
+		s.expect(`D.projectLabel.caption == "Files" and D.objectBox.visible == false and D.noDesign.visible`)
+		s.expect(`D.win.caption:find("main.lua")`)
+		// Edit, save, add a file in a folder, and the tree follows.
+		s.lua(`D.codeBox.text = D.codeBox.text .. "\nprint('more')\n"; D:markCodeDirty(); D:save()`)
+		data, _ := os.ReadFile(filepath.Join(con, "main.lua"))
+		if !strings.Contains(string(data), "print('more')") {
+			s.t.Errorf("not saved:\n%s", data)
+		}
+		s.lua(`D.answerText = "lib/util.lua"; D:addFile()`)
+		s.expect(`D.formName == "lib/util.lua" and D.tree.path == "lib/util.lua" and D.codeBox.text:find("lib/util.lua")`)
+		s.expect(`D:codePath() == D.dir .. "/lib/util.lua"`)
+		// Forms are not for this kind of project.
+		s.lua(`D.answerText = "Form2"; D:addForm()`)
+		s.expect(`D.statusLine.caption:find("GUI applications") and not require("design.project").exists(D.dir .. "/forms")`)
+		s.lua(`D:setStartup()`)
+		s.expect(`not io.open(D.dir .. "/main.lua"):read("*a"):find("forms%.")`)
+		// F5 runs main.lua; an error in a file is a click away.
+		s.lua(`D:run()`)
+		s.expect(`spawned[#spawned][2] == "main.lua" and spawned[#spawned].dir == D.dir`)
+		s.lua(`D:openFile("main.lua"); D:jumpToError(D.dir .. "/lib/util.lua:1: boom")`)
+		s.expect(`D.formName == "lib/util.lua" and D.codeBox.line == 1`)
+		s.lua(`D:jumpToError("./main.lua:2: boom")`)
+		s.expect(`D.formName == "main.lua" and D.codeBox.line == 2`)
+
+		// A game runs on the console and is packed to open it.
+		s.L.SetGlobal("dir3", lua.LString(game))
+		s.lua(`D.answerNew = { dir = dir3, type = "game" }; D:newProject()`)
+		s.expect(`D.kind == "game" and D.codeBox.text:find("function _draw")`)
+		s.lua(`D:run()`)
+		s.expect(`spawned[#spawned][2] == "play" and spawned[#spawned][3] == "."`)
+		s.lua(`D:makeExeTo(D.dir .. "/out")`)
+		s.expect(`spawned[#spawned][2] == "fuse" and spawned[#spawned][5] == "-play"`)
+
+		// Back to a GUI application: the designer is whole again.
+		s.L.SetGlobal("dir4", lua.LString(app))
+		s.lua(`D.answerNew = { dir = dir4, type = "gui" }; D:newProject()`)
+		s.expect(`D.kind == "gui" and D.docKind == "Form" and D.tools.visible and D.area.visible and not D.noDesign.visible`)
+		s.expect(`D.projectLabel.caption == "Project" and D.objectBox.visible and D.codeBox.top == 34`)
+		s.place("Button", 20, 20, 120, 50, "cmdGo")
+		s.expect(`#D.doc == 1`)
+		// Opening a folder of either kind finds what it is.
+		s.lua(`D.answer = "no"; D:save(); D:openFolder(dir2)`)
+		s.expect(`D.kind == "console" and D.dir == dir2`)
+		s.lua(`D:openFolder(dir4)`)
+		s.expect(`D.kind == "gui" and D.formName == "Form1"`)
+	})
+}
+
+func TestNewProjectDialog(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "mygame")
+	withDesigner(t, func(s *scene) {
+		s.L.SetGlobal("target", lua.LString(target))
+		s.lua(`E = {}; D.newProjectHooks = E`)
+		later(func() {
+			// Pick Game, name the folder, and create.
+			x, y := s.at("E.radios.game", 10, 10)
+			in.Click(x, y)
+			s.lua(`E.folder.text = target`)
+			x, y = s.at("E.ok", 10, 10)
+			in.Click(x, y)
+		})
+		s.lua(`D:newProject()`)
+		s.expect(`D.kind == "game" and D.dir == target`)
+		if _, err := os.Stat(filepath.Join(target, ".tlua-project")); err != nil {
+			s.t.Errorf("the project is not marked: %v", err)
+		}
+		// Cancelling changes nothing.
+		later(func() {
+			x, y := s.at("E.form", 5, 5)
+			in.Click(x, y)
+			s.lua(`E.form:close()`)
+		})
+		s.lua(`D:newProject()`)
+		s.expect(`D.kind == "game" and D.dir == target`)
+	})
+}
