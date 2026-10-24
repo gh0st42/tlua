@@ -980,7 +980,9 @@ libraries above, LuaSocket, and Lua 5.1 itself, function by function.
   small pixel editor built on it.
 - `zip`: besides LuaZip's way of reading, `arc:list()`, `arc:read(name)`,
   `arc:info(name)`, `zip.load(bytes)`, and `zip.create([path])` to write an
-  archive to a file or into a string.
+  archive to a file or into a string. Files can be encrypted with AES-256, as
+  7-Zip does it: `zip.create(path, {password = "..."})`, `zip.open(path,
+  {password = "..."})`. [docs/modules/zip.md](docs/modules/zip.md) has it all.
 - `zlib` adds `zlib.gzip(s)`, `zlib.gunzip(s)` and `zlib.crc32(s)` for a
   string at once.
 - `markdown`: Markdown read into blocks and written back

@@ -46,9 +46,14 @@ LuaSocket 3.1, whose C half tlua carries written in Go (Linux and macOS).
 
 `ssl` (LuaSec, for TLS) is described in the README's TLS section.
 
+## Files and archives
+
+- [zip](zip.md): zip archives to read and write, files encrypted with AES-256
+  in the form 7-Zip reads.
+
 ## Elsewhere
 
-The README covers `lfs`, `zlib`, `zip`, `png`, `markdown` and `ssl`, and
+The README covers `lfs`, `zlib`, `png`, `markdown` and `ssl`, and
 how modules are found. [gui.md](../gui.md) is the desktop GUI and
 [pico.md](../pico.md) the game console. A program's own module of the
 same name as any of these is found first.
