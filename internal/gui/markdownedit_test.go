@@ -66,3 +66,35 @@ form:show()`, func(s *scene) {
 		s.expect(`linked == "#one" and edit.ed.caret.b == 2`)
 	})
 }
+
+// A table is edited in its cells: a click puts the caret in one, typing
+// goes in it, Tab moves on, and a Tab past the last cell adds a row.
+func TestMarkdownEditTables(t *testing.T) {
+	onScreen(t, `
+form = gui.Form{width = 420, height = 260}
+edit = form:MarkdownEdit{left = 10, top = 10, width = 400, height = 240}
+edit:load("intro\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n")
+form:show()`, func(s *scene) {
+		s.pump()
+		s.lua(`
+local lay = edit:layout()
+local x, y, w, h = lay:cellRect(2, 2, 2)
+cellX, cellY = 16 + x + w / 2, 16 + y + h / 2`)
+		// The table's page y is its block's y; the text column starts 16
+		// in and 16 down.
+		dx := int(luaNumber(s, "cellX"))
+		dy := int(luaNumber(s, "cellY"))
+		x, y := s.at("edit", dx, dy)
+		s.focus("edit")
+		in.Click(x, y)
+		s.expect(`edit.ed.cell and edit.ed.cell.r == 2 and edit.ed.cell.k == 2`)
+		in.Type("x")
+		s.expect(`edit:markdown():find("| 1 | 2x |", 1, true)`)
+		in.Key(fltk.TAB, "", 0)
+		s.expect(`#edit.ed.blocks[2].rows == 3 and edit.ed.cell.r == 3 and edit.ed.cell.k == 1`)
+		in.Type("n")
+		s.expect(`edit:markdown():find("| n |  |", 1, true)`)
+		in.Key(fltk.ESCAPE, "", 0)
+		s.expect(`edit.ed.cell == nil and edit.ed.caret.o == 1`)
+	})
+}

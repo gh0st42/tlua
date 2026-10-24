@@ -9,6 +9,7 @@
 --   measure(text, font) -> width     font = { face, size, bold, italic }
 --   imageSize(src)      -> w, h      or nil when the picture is missing
 --   opts.scale                       every size and space times this (1)
+--   opts.minCell                     the narrowest a table column is let be (its text's)
 --   opts.face                        a font for all the text, code too, by
 --                                    its name; "" or nil for sans and mono
 --
@@ -193,14 +194,14 @@ end
 -- cell when they all fit, and otherwise the room shared out by how much
 -- more each would like than its longest word, the cells' text wrapped to
 -- fit. Its cells' lines are L.subs, each placed in the block.
-local function tableOf(L, b, st, width, measure)
+local function tableOf(L, b, st, width, measure, minCell)
   local pad = st.pad
   local ncol = #b.align
   local head = {}
   for k, v in pairs(st) do head[k] = v end
   head.bold = true
   local nat, min = {}, {}
-  for k = 1, ncol do nat[k], min[k] = 2 * pad + 8, 2 * pad + 8 end
+  for k = 1, ncol do nat[k], min[k] = math.max(2 * pad + 8, minCell or 0), 2 * pad + 8 end
   for r, row in ipairs(b.rows) do
     local cst = r == 1 and head or st
     for k = 1, ncol do
@@ -233,7 +234,7 @@ local function tableOf(L, b, st, width, measure)
   end
   local colX, x = {}, 0
   for k = 1, ncol do colX[k], x = x, x + widths[k] end
-  L.colX, L.colW, L.tableW, L.rows, L.subs = colX, widths, x, {}, {}
+  L.colX, L.colW, L.tableW, L.rows, L.subs, L.cells = colX, widths, x, {}, {}, {}
   local y = 0
   for r, row in ipairs(b.rows) do
     local cst = r == 1 and head or st
@@ -245,8 +246,13 @@ local function tableOf(L, b, st, width, measure)
       cells[k] = lines
       rowH = math.max(rowH, h + 2 * pad)
     end
+    L.cells[r] = {}
     for k = 1, ncol do
       local cw, ly = widths[k] - 2 * pad, y + pad
+      -- The cell's own lines, with y inside the cell, for editing it.
+      local cy = 0
+      for _, line in ipairs(cells[k]) do line.y, cy = cy, cy + line.h end
+      L.cells[r][k] = { x = colX[k] + pad, y = y + pad, w = cw, lines = cells[k] }
       for _, line in ipairs(cells[k]) do
         local a = b.align[k]
         local ax = a == "center" and math.floor((cw - line.w) / 2) or a == "right" and cw - line.w or 0
@@ -317,7 +323,7 @@ function M.build(blocks, width, measure, imageSize, cache, opts)
     y = y + (i > 1 and (st.before or 0) or 0)
     L.y = y
     if b.type == "table" then
-      local w, h = tableOf(L, b, st, width, measure)
+      local w, h = tableOf(L, b, st, width, measure, opts and opts.minCell)
       L.h, L.contentH = h + st.after, h
       L.lines = { { y = 0, h = h, o1 = 0, o2 = 1, frags = {}, object = true, w = w } }
     elseif b.type == "toc" then
@@ -429,8 +435,89 @@ function Layout:caret(p)
   return x, L.y + line.y, line.h
 end
 
+local offsetIn -- below
+
+-- cellOf is the laid-out cell k of row r of block b, with its lines.
+function Layout:cellOf(b, r, k)
+  local L = self.blocks[b]
+  local row = L and L.cells and L.cells[r]
+  return row and row[k], L
+end
+
+-- cellLine is the line of a cell that offset o is on, and the cell's
+-- lines standing as a block's for lineAt.
+local function cellLine(cell, o)
+  return lineAt({ lines = cell.lines }, o)
+end
+
+-- cellCaret is where the caret at offset o of a cell is drawn: x, y and
+-- height on the page.
+function Layout:cellCaret(b, r, k, o)
+  local cell, L = self:cellOf(b, r, k)
+  if not cell then return 0, 0, 16 end
+  local line = cellLine(cell, o)
+  local ax = 0
+  local a = L.block.align[k]
+  if a == "center" then ax = math.floor((cell.w - line.w) / 2)
+  elseif a == "right" then ax = cell.w - line.w end
+  return L.x + cell.x + math.max(0, ax) + xAt(self, L, line, o), L.y + cell.y + line.y, line.h
+end
+
+-- cellHit is the cell at a point on the page, and the offset in its text
+-- nearest to it: r, k, o, or nil when the point is not in b's table.
+function Layout:cellHit(b, x, y)
+  local L = self.blocks[b]
+  if not (L and L.cells) then return nil end
+  local ly, lx = y - L.y, x - L.x
+  local r = #L.rows
+  for i, row in ipairs(L.rows) do
+    if ly < row.y + row.h then r = i break end
+  end
+  local k = #L.colX
+  for i = 1, #L.colX do
+    if lx < L.colX[i] + L.colW[i] then k = i break end
+  end
+  local cell = L.cells[r][k]
+  local line = cell.lines[#cell.lines]
+  for _, ln in ipairs(cell.lines) do
+    if ly < cell.y + ln.y + ln.h then line = ln break end
+  end
+  local a = L.block.align[k]
+  local ax = 0
+  if a == "center" then ax = math.floor((cell.w - line.w) / 2)
+  elseif a == "right" then ax = cell.w - line.w end
+  return r, k, offsetIn(self, line, lx - cell.x - math.max(0, ax))
+end
+
+-- cellLineEdge is the offset at the start (-1) or end (1) of the cell's
+-- line that offset o is on.
+function Layout:cellLineEdge(b, r, k, o, dir)
+  local cell = self:cellOf(b, r, k)
+  if not cell then return o end
+  local line, n = cellLine(cell, o)
+  if dir < 0 then return line.o1 end
+  local e = line.o2
+  -- A wrapped line ends before the space it wrapped at.
+  local nxt = cell.lines[n + 1]
+  if nxt and nxt.o1 == e and e > line.o1 then
+    local text = ""
+    for _, c in ipairs(cell.lines) do
+      for _, f in ipairs(c.frags) do text = text .. f.text end
+    end
+    if text:sub(e, e) == " " then e = e - 1 end
+  end
+  return e
+end
+
+-- cellRect is a cell's rectangle on the page: x, y, width, height.
+function Layout:cellRect(b, r, k)
+  local L = self.blocks[b]
+  if not (L and L.cells and L.cells[r]) then return nil end
+  return L.x + L.colX[k], L.y + L.rows[r].y, L.colW[k], L.rows[r].h
+end
+
 -- offsetIn is the offset on a line nearest to x along it.
-local function offsetIn(lay, line, x)
+function offsetIn(lay, line, x)
   if line.object then return x < line.w / 2 and 0 or 1 end
   local best, bestD = line.o1, math.huge
   for _, f in ipairs(line.frags) do

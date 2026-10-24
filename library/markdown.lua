@@ -152,6 +152,36 @@ function Editor:linkAt(p) end
 ---@param alt? string
 function Editor:insertImage(src, alt) end
 function Editor:insertRule() end
+---@param rows? integer 3 when not given; the first is the header
+---@param columns? integer 3 when not given
+function Editor:insertTable(rows, columns) end
+---@param after? boolean false puts the row before the caret's (never above the header)
+---@return boolean inTable false when the caret is not on a table
+function Editor:insertRow(after) end
+---@param after? boolean false puts the column before the caret's
+---@return boolean
+function Editor:insertColumn(after) end
+---@return boolean false when the table has only its header
+function Editor:deleteRow() end
+---@return boolean false when the table has only one column
+function Editor:deleteColumn() end
+---@param how "left"|"center"|"right"|false the caret's column
+---@return boolean
+function Editor:setAlign(how) end
+---@param b integer the table's block
+---@param r integer row
+---@param k integer column
+---@param o? integer offset in the cell's text; the end when not given
+---@return boolean
+function Editor:enterCell(b, r, k, o) end
+---@param dir integer 1 for the next cell, -1 for the one before; a new row after the last
+---@return boolean false when the caret is not on a table
+function Editor:cellTab(dir) end
+---@param before? boolean
+function Editor:leaveTable(before) end
+---@return table? table the table block the caret is on or in
+---@return integer? block
+function Editor:tableAt() end
 ---@param text string Markdown, or plain text
 function Editor:paste(text) end
 ---@return string Markdown of the selection

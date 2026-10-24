@@ -227,4 +227,185 @@ test("a block put in at a paragraph's start goes before it", function()
   eq(e:markdown(), "[[toc]]\n\n# One\n\nte\n\n---\n\nxt\n")
 end)
 
+
+---------------------------------------------------------------- tables
+
+local TABLE = "| Name | Qty |\n| :--- | ---: |\n| Tea | 2 |\n| Milk | 1 |\n"
+
+test("a table is edited a cell at a time", function()
+  local e = ed("before\n\n" .. TABLE .. "\nafter\n")
+  e:setCaret { b = 2, o = 0 }
+  ok(e:cellTab(1), "tab enters the table")
+  eq(e.cell.r, 1) eq(e.cell.k, 1) eq(e.cell.o, 4) -- the end of "Name"
+  typeText(e, "s")
+  e:cellTab(1)
+  e:backspace()
+  typeText(e, "Count | n")
+  eq(md.textOf { runs = e:cellRuns() }, "QtCount | n")
+  ok(e:markdown():find("| Names | QtCount \\| n |", 1, true), "the pipe is escaped")
+end)
+
+test("Tab and Enter move between cells, and Tab at the end adds a row", function()
+  local e = ed(TABLE)
+  e:enterCell(1, 2, 2, 0)
+  e:cellTab(1)
+  eq(e.cell.r, 3) eq(e.cell.k, 1)
+  e:cellTab(1) e:cellTab(1)
+  eq(e.cell.r, 4) eq(e.cell.k, 1)
+  eq(#e.blocks[1].rows, 4)
+  e:cellTab(-1)
+  eq(e.cell.r, 3) eq(e.cell.k, 2)
+  e:enter() -- down
+  eq(e.cell.r, 4) eq(e.cell.k, 2)
+  e:enter() -- out of the last row: a paragraph after the table
+  eq(e.caret.b, 2) eq(e.blocks[2].type, "p") ok(e.cell == nil, "left the table")
+end)
+
+test("the arrows walk through a table's cells and out of it", function()
+  local e = ed("a\n\n" .. TABLE .. "\nb\n")
+  e:setCaret { b = 1, o = 1 }
+  e:move(1) -- into the table, its first cell
+  ok(e.cell, "in a cell") eq(e.caret.b, 2) eq(e.cell.o, 0)
+  e:move(1) e:move(1) e:move(1) e:move(1) -- through "Name"
+  eq(e.cell.k, 1) eq(e.cell.o, 4)
+  e:move(1) -- the next cell
+  eq(e.cell.k, 2) eq(e.cell.o, 0)
+  e:move(-1) -- back to the end of the one before
+  eq(e.cell.k, 1) eq(e.cell.o, 4)
+  e:enterCell(2, 3, 2, 1)
+  e:move(1) -- the last cell's end: out, after the table
+  ok(e.cell == nil, "out") eq(e.caret.b, 2) eq(e.caret.o, 1)
+  e:move(-1) -- and back into the last cell
+  eq(e.cell.r, 3) eq(e.cell.k, 2)
+end)
+
+test("Delete and Backspace stay inside a cell", function()
+  local e = ed(TABLE)
+  e:enterCell(1, 2, 1, 0)
+  e:backspace() -- the start of a cell: nothing
+  eq(md.textOf { runs = e:cellRuns() }, "Tea")
+  e:delete()
+  eq(md.textOf { runs = e:cellRuns() }, "ea")
+  e.cell.o = 2
+  e:delete() -- the end: nothing, the next cell is not joined
+  eq(md.textOf { runs = e:cellRuns() }, "ea")
+  e:backspace()
+  eq(md.textOf { runs = e:cellRuns() }, "e")
+end)
+
+test("typing in a cell keeps the style of the text before it", function()
+  local e = ed("| **a** | b |\n| --- | --- |\n| c | d |\n")
+  e:enterCell(1, 1, 1)
+  typeText(e, "z")
+  ok(e:markdown():find("| **az** | b |", 1, true), e:markdown())
+end)
+
+test("paste in a cell is one line", function()
+  local e = ed(TABLE)
+  e:enterCell(1, 2, 2)
+  e:paste("x\ny")
+  eq(md.textOf { runs = e:cellRuns() }, "2x y")
+end)
+
+test("inserting a table", function()
+  local e = ed("text\n")
+  e:setCaret { b = 1, o = 4 }
+  e:insertTable(2, 3)
+  local t = e.blocks[2]
+  eq(t.type, "table") eq(#t.rows, 2) eq(#t.align, 3)
+  eq(e.cell.r, 1) eq(e.cell.k, 1)
+  typeText(e, "A")
+  e:cellTab(1) typeText(e, "B")
+  ok(e:markdown():find("| A | B |  |", 1, true), e:markdown())
+  eq(e.blocks[3].type, "p") -- somewhere to go on typing
+  local f = ed()
+  f:insertTable()
+  eq(f.blocks[1].type, "table") eq(#f.blocks[1].rows, 3)
+end)
+
+test("rows and columns are added and removed", function()
+  local e = ed(TABLE)
+  local function cell(r, k) return md.textOf { runs = e.blocks[1].rows[r][k] } end
+  e:enterCell(1, 2, 1) -- "Tea"
+  e:insertRow(true)
+  eq(#e.blocks[1].rows, 4) eq(cell(3, 1), "") eq(cell(4, 1), "Milk")
+  eq(e.cell.r, 2)
+  e:insertRow(false) -- above the row: the caret goes with it
+  eq(#e.blocks[1].rows, 5) eq(e.cell.r, 3) eq(cell(3, 1), "Tea")
+  e:deleteRow() e:deleteRow()
+  eq(#e.blocks[1].rows, 3) eq(cell(2, 1), "")
+  e:enterCell(1, 1, 1)
+  e:insertRow(false) -- never above the header
+  eq(cell(1, 1), "Name") eq(cell(2, 1), "")
+  e:enterCell(1, 1, 2)
+  e:insertColumn(true)
+  eq(#e.blocks[1].align, 3) eq(#e.blocks[1].rows[3], 3)
+  eq(cell(1, 2), "Qty")
+  e:insertColumn(false)
+  eq(e.cell.k, 3)
+  e:deleteColumn() e:deleteColumn()
+  eq(#e.blocks[1].align, 2)
+  ok(e:deleteColumn() and not e:deleteColumn(), "a table keeps a column")
+  local one = ed("| a |\n| --- |\n")
+  one:enterCell(1, 1, 1)
+  ok(not one:deleteRow(), "a table keeps its header")
+end)
+
+test("alignment is set for the caret's column", function()
+  local e = ed(TABLE)
+  e:enterCell(1, 2, 1)
+  e:setAlign("center")
+  ok(e:markdown():find("| :---: | ---: |", 1, true), e:markdown())
+  e:setAlign(false)
+  ok(e:markdown():find("| --- | ---: |", 1, true), e:markdown())
+end)
+
+test("undo restores a table's cells", function()
+  local e = ed(TABLE)
+  e:enterCell(1, 2, 1)
+  typeText(e, "!")
+  e:insertRow(true)
+  e:undo()
+  eq(#e.blocks[1].rows, 3)
+  ok(e:markdown():find("| Tea! |", 1, true), e:markdown())
+  e:undo()
+  eq(e:markdown(), TABLE)
+  e:redo() e:redo()
+  eq(#e.blocks[1].rows, 4)
+  ok(e.cell == nil, "undo leaves the cell")
+end)
+
+test("a table's words are counted", function()
+  local w = ed(TABLE):stats()
+  eq(w, 6)
+end)
+
+test("cells are found in a layout", function()
+  local layout = require "markdown.layout"
+  local function measure(text) return #text * 7 end
+  local e = ed("before\n\n" .. TABLE)
+  local lay = layout.build(e.blocks, 400, measure, nil, {}, {})
+  e:enterCell(2, 3, 1, 2)
+  local x, y, h = lay:cellCaret(2, 3, 1, 2)
+  local rx, ry, rw, rh = lay:cellRect(2, 3, 1)
+  ok(x > rx and x < rx + rw and y >= ry and y + h <= ry + rh, "the caret is in its cell")
+  local r, k, o = lay:cellHit(2, x + 1, y + 2)
+  eq(r, 3, "row") eq(k, 1, "col") eq(o, 2, "offset")
+  -- Up and down by lines.
+  ok(e:cellLine(lay, -1), "up a row")
+  eq(e.cell.r, 2, "row after up")
+  ok(e:cellLine(lay, 1), "down a row")
+  eq(e.cell.r, 3)
+  e:enterCell(2, 1, 1, 1)
+  ok(not e:cellLine(lay, -1), "up out of the table")
+  e:moveLine(lay, -1)
+  eq(e.caret.b, 1) ok(e.cell == nil, "out")
+  e:moveLine(lay, 1)
+  ok(e.cell ~= nil, "down into the table") eq(e.cell.r, 1)
+  e:cellEdge(lay, 1)
+  eq(e.cell.o, 4)
+  e:cellEdge(lay, -1)
+  eq(e.cell.o, 0)
+end)
+
 if #failed > 0 then error(#failed .. " failed:\n" .. table.concat(failed, "\n"), 0) end

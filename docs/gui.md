@@ -671,8 +671,18 @@ edit.ed:toggle("b") edit:changed()                     -- a Bold button
   for words, Cmd or Home and End for the line), Page Up and Down, Shift to
   select, a double click for a word. `# `, `## `, `- `, `1. ` and `> ` at a
   paragraph's start make it a heading, a list item or a quote, and `---`
-  then Enter a rule. Tables, `[[toc]]` and pictures are kept whole: the
-  caret steps over each as one character.
+  then Enter a rule. `[[toc]]` and pictures are kept whole: the caret
+  steps over each as one character.
+- **Tables.** A click puts the caret in a cell, and a cell is edited like a
+  line of text: typing, Backspace, Delete and the arrows (which go on into
+  the next cell and out of the table at its ends) work in it, Tab and
+  Shift+Tab go to the next cell or the one before (a Tab past the last
+  adds a row), Enter goes down a cell, and Escape leaves the table. The
+  program adds `edit.ed:insertTable(rows, columns)`, `insertRow(after)`,
+  `insertColumn(after)`, `deleteRow()`, `deleteColumn()` and
+  `setAlign("left" | "center" | "right" | false)`, the last four on the
+  caret's row or column; each is followed by `edit:changed()`. A cell holds
+  one line of styled text; a line break typed or pasted becomes a space.
 - **What a program adds.** `edit.ed` is the `markdown.editor` underneath:
   its `toggle("b")`, `setType("h2")`, `setLink(url)`, `insertImage(src)`,
   `undo()`, `copyText()`, `paste(text)` and the rest are a program's menus

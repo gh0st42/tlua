@@ -41,6 +41,17 @@ local function copyBlock(b)
     c.runs = {}
     for i, r in ipairs(b.runs) do c.runs[i] = copyRun(r) end
   end
+  if b.rows then
+    c.rows, c.align = {}, {}
+    for k, a in ipairs(b.align) do c.align[k] = a end
+    for r, row in ipairs(b.rows) do
+      c.rows[r] = {}
+      for k, cell in ipairs(row) do
+        c.rows[r][k] = {}
+        for i, run in ipairs(cell) do c.rows[r][k][i] = copyRun(run) end
+      end
+    end
+  end
   return c
 end
 M.copyBlock = copyBlock
@@ -120,7 +131,7 @@ function Editor:load(blocks)
   self.blocks = blocks
   self.caret = { b = 1, o = 0 }
   self.anchor = { b = 1, o = 0 }
-  self.pending = nil
+  self.pending, self.cell = nil, nil
   self.undoStack, self.redoStack = {}, {}
   self.lastKind = nil
   self.dirty = false
@@ -141,6 +152,7 @@ function Editor:range()
 end
 
 function Editor:setCaret(p, extend)
+  self.cell = nil
   self.caret = { b = p.b, o = p.o }
   if not extend then self.anchor = { b = p.b, o = p.o } end
   self.pending = nil
@@ -148,6 +160,7 @@ function Editor:setCaret(p, extend)
 end
 
 function Editor:selectAll()
+  self.cell = nil
   self.anchor = { b = 1, o = 0 }
   local last = #self.blocks
   self.caret = { b = last, o = M.length(self.blocks[last]) }
@@ -183,7 +196,7 @@ end
 local function restore(self, s)
   self.blocks = s.blocks
   self.caret, self.anchor = s.caret, s.anchor
-  self.pending, self.lastKind = nil, nil
+  self.pending, self.lastKind, self.cell = nil, nil, nil
   self.dirty = true
 end
 
@@ -483,6 +496,7 @@ end
 
 -- insertRuns puts styled text in at the caret, in place of the selection.
 function Editor:insertRuns(runs, kind)
+  if self.cell then return self:cellInsert(runs, kind) end
   if self:hasSelection() then
     self:checkpoint("delete")
     remove(self, self:range())
@@ -534,13 +548,14 @@ function Editor:type(text)
       end
     end
   end
-  local style = self.pending or self:styleAt(p)
+  local style = self.pending or (self.cell and self:cellStyle()) or self:styleAt(p)
   local run = { text = text, b = style.b, i = style.i, code = style.code, link = style.link, wiki = style.wiki }
   self:insertRuns({ run }, "type")
 end
 
 -- lineBreak is Shift+Enter: a new line in the same block.
 function Editor:lineBreak()
+  if self.cell then return end
   local b = self.blocks[self.caret.b]
   if not hasText(b) then return self:enter() end
   local style = self.pending or self:styleAt(self.caret)
@@ -551,6 +566,7 @@ local function isList(b) return b.type == "ul" or b.type == "ol" end
 
 -- enter is Enter: a new block, or a new line in a code block.
 function Editor:enter()
+  if self.cell then return self:cellEnter() end
   self:deleteSelection()
   local p = self.caret
   local b = self.blocks[p.b]
@@ -603,6 +619,7 @@ function Editor:enter()
 end
 
 function Editor:backspace()
+  if self.cell then return self:cellDelete(-1) end
   if self:deleteSelection() then return end
   local p = self.caret
   local b = self.blocks[p.b]
@@ -645,6 +662,7 @@ function Editor:backspace()
 end
 
 function Editor:delete()
+  if self.cell then return self:cellDelete(1) end
   if self:deleteSelection() then return end
   local p = self.caret
   local b = self.blocks[p.b]
@@ -672,6 +690,7 @@ end
 
 -- deleteWord is Alt+Backspace: back to the start of the word.
 function Editor:deleteWord()
+  if self.cell then return self:cellDelete(-1, true) end
   if self:hasSelection() then return self:deleteSelection() end
   local p = self.caret
   local b = self.blocks[p.b]
@@ -685,6 +704,7 @@ end
 
 -- move goes a character (or a word) left or right, across blocks.
 function Editor:move(dir, extend, byWord)
+  if self.cell then return self:cellMove(dir, byWord) end
   if not extend and self:hasSelection() then
     local s, e = self:range()
     self:setCaret(dir < 0 and s or e)
@@ -696,15 +716,23 @@ function Editor:move(dir, extend, byWord)
   local o
   if dir < 0 then
     if p.o == 0 then
-      if p.b > 1 then self:setCaret({ b = p.b - 1, o = M.length(self.blocks[p.b - 1]) }, extend) end
+      if p.b > 1 then
+        self:setCaret({ b = p.b - 1, o = M.length(self.blocks[p.b - 1]) }, extend)
+        if not extend then self:intoTable(-1) end
+      end
       return
     end
+    if b.type == "table" and not extend then return self:intoTable(-1) end
     o = not hasText(b) and 0 or (byWord and wordLeft(text, p.o) or prevChar(text, p.o))
   else
     if p.o >= M.length(b) then
-      if p.b < #self.blocks then self:setCaret({ b = p.b + 1, o = 0 }, extend) end
+      if p.b < #self.blocks then
+        self:setCaret({ b = p.b + 1, o = 0 }, extend)
+        if not extend then self:intoTable(1) end
+      end
       return
     end
+    if b.type == "table" and not extend then return self:intoTable(1) end
     o = not hasText(b) and 1 or (byWord and wordRight(text, p.o) or nextChar(text, p.o))
   end
   self:setCaret({ b = p.b, o = o }, extend)
@@ -717,20 +745,29 @@ end
 
 -- These go by the lines the layout has broken the text into.
 function Editor:moveLine(lay, dir, extend)
+  if self.cell then
+    if self:cellLine(lay, dir) then return end
+    -- Out of the table: on to the block above or below it.
+    self:setCaret({ b = self.caret.b, o = dir < 0 and 0 or 1 })
+  end
   local goal = self.goalX
   local p, x = lay:vertical(self.caret, dir, goal)
   self:setCaret(p, extend)
   self.goalX = x
+  if not extend then self:intoTable(dir, lay, x) end
 end
 
 function Editor:moveLineEdge(lay, dir, extend)
+  if self.cell then return self:cellEdge(lay, dir) end
   self:setCaret(dir < 0 and lay:lineStart(self.caret) or lay:lineEnd(self.caret), extend)
 end
 
 function Editor:movePage(lay, dir, extend, height)
+  if self.cell then self:setCaret { b = self.caret.b, o = dir < 0 and 0 or 1 } end
   local p, x = lay:vertical(self.caret, dir, self.goalX, height)
   self:setCaret(p, extend)
   self.goalX = x
+  if not extend then self:intoTable(dir, lay, x) end
 end
 
 -- selectWord selects the word at p, for a double click.
@@ -787,6 +824,7 @@ end
 function Editor:paste(text)
   text = text:gsub("\r\n?", "\n")
   if text == "" then return end
+  if self.cell then text = text:gsub("\n+", " ") end
   local here = self.blocks[self.caret.b]
   if here.type == "code" and not self:hasSelection() then
     return self:insertRuns({ { text = text } }, "paste")
@@ -833,12 +871,334 @@ function Editor:paste(text)
   end
 end
 
+---------------------------------------------------------------- tables
+
+-- A table is edited a cell at a time. The caret stays on the table (o = 0)
+-- and e.cell = { r = row, k = column, o = offset in the cell's text } says
+-- which cell it is in; it is nil when the caret is anywhere else. Typing,
+-- Backspace, Delete, Enter, the arrows and paste work in the cell as in a
+-- paragraph, but for a cell being one line and having no selection.
+
+local function cellLen(runs)
+  local n = 0
+  for _, r in ipairs(runs) do n = n + #r.text end
+  return n
+end
+
+local function cellString(runs)
+  local t = {}
+  for i, r in ipairs(runs) do t[i] = r.text end
+  return table.concat(t)
+end
+
+-- tableAt is the table the caret is on or in, or nil.
+function Editor:tableAt()
+  local b = self.blocks[self.caret.b]
+  if b and b.type == "table" then return b, self.caret.b end
+end
+
+-- cellRuns are the runs of the cell the caret is in, or nil.
+function Editor:cellRuns()
+  local t = self.cell and self:tableAt()
+  return t and t.rows[self.cell.r][self.cell.k]
+end
+
+-- enterCell puts the caret in a cell of the table that is block b; o is the
+-- offset in its text, the end when not given.
+function Editor:enterCell(b, r, k, o)
+  local t = self.blocks[b]
+  if not t or t.type ~= "table" then return false end
+  r = math.max(1, math.min(#t.rows, r))
+  k = math.max(1, math.min(#t.align, k))
+  local len = cellLen(t.rows[r][k])
+  o = o == nil and len or math.max(0, math.min(len, o))
+  self:setCaret { b = b, o = 0 }
+  self.cell = { r = r, k = k, o = o }
+  return true
+end
+
+-- intoTable moves the caret on a table into one of its cells: the first
+-- going forward (1), the last going back (-1), or, with the layout and
+-- the column x, the one below or above x.
+function Editor:intoTable(dir, lay, x)
+  local t, b = self:tableAt()
+  if not t or self.cell then return end
+  if lay and x then
+    local L = lay.blocks[b]
+    local r, k, o = lay:cellHit(b, x, dir > 0 and L.y + 1 or L.y + L.contentH - 1)
+    if r then return self:enterCell(b, r, k, o) end
+  end
+  if dir > 0 then self:enterCell(b, 1, 1, 0)
+  else self:enterCell(b, #t.rows, #t.align) end
+end
+
+-- leaveTable puts the caret out of the cell: after the table, or before it.
+function Editor:leaveTable(before)
+  local _, b = self:tableAt()
+  if b then self:setCaret { b = b, o = before and 0 or 1 } end
+end
+
+-- cellStyle is the style typing in the cell takes: that of the text before
+-- the caret, without a link.
+function Editor:cellStyle()
+  local runs = self:cellRuns()
+  if not runs then return {} end
+  local at, found = 0, nil
+  for _, r in ipairs(runs) do
+    if self.cell.o > at and self.cell.o <= at + #r.text then found = r break end
+    at = at + #r.text
+  end
+  found = found or runs[1]
+  if not found then return {} end
+  return { b = found.b, i = found.i, code = found.code }
+end
+
+-- cellInsert puts runs into the cell at the caret; a line break is a space.
+function Editor:cellInsert(runs, kind)
+  local t = self:tableAt()
+  if not t then return end
+  local c = self.cell
+  local clean, n = {}, 0
+  for i, r in ipairs(runs) do
+    clean[i] = copyRun(r, (r.text:gsub("[\r\n]+", " ")))
+    n = n + #clean[i].text
+  end
+  self:checkpoint(kind or "insert")
+  local left, right = split(t.rows[c.r][c.k], c.o)
+  t.rows[c.r][c.k] = concat(left, clean, right)
+  c.o = c.o + n
+  self.lastKind = kind
+end
+
+-- cellDelete deletes the character (or word) before the caret in the cell
+-- (dir -1) or after it (1).
+function Editor:cellDelete(dir, byWord)
+  local runs = self:cellRuns()
+  if not runs then return end
+  local c = self.cell
+  local text = cellString(runs)
+  local a, z = c.o, c.o
+  if dir < 0 then
+    if c.o == 0 then return end
+    a = byWord and wordLeft(text, c.o) or prevChar(text, c.o)
+  else
+    if c.o >= #text then return end
+    z = nextChar(text, c.o)
+  end
+  self:checkpoint(dir < 0 and "backspace" or "delete")
+  local t = self:tableAt()
+  local left = split(runs, a)
+  local _, right = split(runs, z)
+  t.rows[c.r][c.k] = concat(left, right)
+  c.o = a
+  self.lastKind = dir < 0 and "backspace" or "delete"
+end
+
+-- cellMove goes a character (or a word) left or right in the cell, and on
+-- into the next cell, or out of the table, at its ends.
+function Editor:cellMove(dir, byWord)
+  local t, b = self:tableAt()
+  local runs = self:cellRuns()
+  if not runs then return end
+  local c = self.cell
+  local text = cellString(runs)
+  self.lastKind, self.pending = nil, nil
+  if dir < 0 then
+    if c.o > 0 then
+      c.o = byWord and wordLeft(text, c.o) or prevChar(text, c.o)
+    elseif c.k > 1 then self:enterCell(b, c.r, c.k - 1)
+    elseif c.r > 1 then self:enterCell(b, c.r - 1, #t.align)
+    else self:leaveTable(true) end
+  else
+    if c.o < #text then
+      c.o = byWord and wordRight(text, c.o) or nextChar(text, c.o)
+    elseif c.k < #t.align then self:enterCell(b, c.r, c.k + 1, 0)
+    elseif c.r < #t.rows then self:enterCell(b, c.r + 1, 1, 0)
+    else self:leaveTable() end
+  end
+end
+
+-- cellLine goes a line up or down inside the table, keeping to the column;
+-- false when that would leave the table.
+function Editor:cellLine(lay, dir)
+  local t, b = self:tableAt()
+  if not t or not self.cell then return false end
+  local c = self.cell
+  local x, y, h = lay:cellCaret(b, c.r, c.k, c.o)
+  x = self.goalX or x
+  local L = lay.blocks[b]
+  -- Above the first line of a cell is the cell above, below the last the
+  -- one below.
+  local _, ry, _, rh = lay:cellRect(b, c.r, c.k)
+  local pad = L.style.pad
+  local ty
+  if dir < 0 then ty = y - 2 < ry + pad and ry - 1 or y - 2
+  else ty = y + h + 1 > ry + rh - pad and ry + rh + 1 or y + h + 1 end
+  if ty < L.y or ty >= L.y + L.contentH then return false end
+  local r, k, o = lay:cellHit(b, x, ty)
+  if not r then return false end
+  self:enterCell(b, r, k, o)
+  self.goalX = x
+  return true
+end
+
+-- cellEdge goes to the start (-1) or end (1) of the line in the cell.
+function Editor:cellEdge(lay, dir)
+  local _, b = self:tableAt()
+  local c = self.cell
+  if not c then return end
+  local o = lay:cellLineEdge(b, c.r, c.k, c.o, dir)
+  c.o = o
+end
+
+-- cellEnter is Enter in a cell: down to the cell below, and out of the
+-- table, into the paragraph after it, from the last row.
+function Editor:cellEnter()
+  local t, b = self:tableAt()
+  if not t or not self.cell then return end
+  local c = self.cell
+  if c.r < #t.rows then return self:enterCell(b, c.r + 1, c.k, c.o) end
+  self:checkpoint("enter")
+  if not self.blocks[b + 1] then self.blocks[b + 1] = newParagraph() end
+  self:setCaret { b = b + 1, o = 0 }
+end
+
+-- cellTab is Tab (1) or Shift+Tab (-1) in a table: to the next cell or the
+-- one before, with a new row after the last cell. It enters the table's
+-- first cell when the caret is on it but not in a cell. False when the
+-- caret is not on a table.
+function Editor:cellTab(dir)
+  local t, b = self:tableAt()
+  if not t then return false end
+  local c = self.cell
+  if not c then return self:enterCell(b, 1, 1) end
+  if dir < 0 then
+    if c.k > 1 then self:enterCell(b, c.r, c.k - 1)
+    elseif c.r > 1 then self:enterCell(b, c.r - 1, #t.align) end
+  else
+    if c.k < #t.align then self:enterCell(b, c.r, c.k + 1)
+    elseif c.r < #t.rows then self:enterCell(b, c.r + 1, 1)
+    else
+      self:insertRow(true)
+      self:enterCell(b, #t.rows, 1)
+    end
+  end
+  return true
+end
+
+local function emptyRow(n)
+  local row = {}
+  for k = 1, n do row[k] = {} end
+  return row
+end
+
+-- insertTable puts a table of rows by columns (the first row is its
+-- header) in after the caret's block, as a picture or a rule goes, and the
+-- caret in its first cell.
+function Editor:insertTable(rows, cols)
+  rows, cols = math.max(1, rows or 3), math.max(1, cols or 3)
+  local t = { type = "table", align = {}, rows = {} }
+  for k = 1, cols do t.align[k] = false end
+  for r = 1, rows do t.rows[r] = emptyRow(cols) end
+  self:insertBlock(t)
+  local b = self.caret.b - 1
+  self:enterCell(b, 1, 1, 0)
+  return true
+end
+
+-- cellOrLast is the row and column an edit of the table's shape is about:
+-- the cell the caret is in, or the table's last row and first column.
+local function whereIn(self, t)
+  local c = self.cell
+  if c then return c.r, c.k end
+  return #t.rows, 1
+end
+
+-- insertRow adds an empty row after the caret's row (or before it, with
+-- false, but never above the header).
+function Editor:insertRow(after)
+  local t = self:tableAt()
+  if not t then return false end
+  local r = whereIn(self, t)
+  self:checkpoint()
+  local at = after == false and math.max(2, r) or r + 1
+  table.insert(t.rows, at, emptyRow(#t.align))
+  -- The caret stays with its own row, which a row put before it pushes down.
+  if self.cell and after == false and r >= 2 then self.cell.r = r + 1 end
+  self.lastKind = nil
+  return true
+end
+
+-- insertColumn adds an empty column after the caret's column (or before it,
+-- with false).
+function Editor:insertColumn(after)
+  local t = self:tableAt()
+  if not t then return false end
+  local _, k = whereIn(self, t)
+  self:checkpoint()
+  local at = after == false and k or k + 1
+  table.insert(t.align, at, false)
+  for _, row in ipairs(t.rows) do table.insert(row, at, {}) end
+  if self.cell and after == false then self.cell.k = k + 1 end
+  self.lastKind = nil
+  return true
+end
+
+-- deleteRow removes the caret's row; a table keeps at least its header.
+function Editor:deleteRow()
+  local t = self:tableAt()
+  if not t or #t.rows < 2 then return false end
+  local r = whereIn(self, t)
+  self:checkpoint()
+  table.remove(t.rows, r)
+  if self.cell then
+    self.cell.r = math.min(r, #t.rows)
+    self.cell.o = math.min(self.cell.o, cellLen(t.rows[self.cell.r][self.cell.k]))
+  end
+  self.lastKind = nil
+  return true
+end
+
+-- deleteColumn removes the caret's column; a table keeps at least one.
+function Editor:deleteColumn()
+  local t = self:tableAt()
+  if not t or #t.align < 2 then return false end
+  local _, k = whereIn(self, t)
+  self:checkpoint()
+  table.remove(t.align, k)
+  for _, row in ipairs(t.rows) do table.remove(row, k) end
+  if self.cell then
+    self.cell.k = math.min(k, #t.align)
+    self.cell.o = math.min(self.cell.o, cellLen(t.rows[self.cell.r][self.cell.k]))
+  end
+  self.lastKind = nil
+  return true
+end
+
+-- setAlign aligns the caret's column: "left", "center", "right", or false.
+function Editor:setAlign(how)
+  local t = self:tableAt()
+  if not t then return false end
+  local _, k = whereIn(self, t)
+  self:checkpoint()
+  t.align[k] = how or false
+  self.lastKind = nil
+  return true
+end
+
 ---------------------------------------------------------------- counting
 
 function Editor:stats()
   local words, chars = 0, 0
   for _, b in ipairs(self.blocks) do
     local t = M.textOf(b)
+    if b.type == "table" then
+      local cells = {}
+      for _, row in ipairs(b.rows) do
+        for _, cell in ipairs(row) do cells[#cells + 1] = M.textOf { runs = cell } end
+      end
+      t = table.concat(cells, " ")
+    end
     words = words + select(2, t:gsub("%S+", ""))
     chars = chars + #t:gsub("[\128-\191]", "")
   end

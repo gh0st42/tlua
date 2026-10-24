@@ -134,7 +134,7 @@ gui.define {
         s.lay = layout.build(self.ed.blocks, columnW, s.measurer.measure, function(src)
           local img = picture(self, src)
           if img then return img.width, img.height end
-        end, s.cache, { scale = k })
+        end, s.cache, { scale = k, minCell = math.floor(64 * k) })
         s.needsLayout = false
       end
       return s.lay
@@ -154,7 +154,9 @@ gui.define {
         s.top, s.reveal = nil, false
       end
       if s.reveal then
-        local _, cy, ch = lay:caret(ed.caret)
+        local _, cy, ch
+        if ed.cell then _, cy, ch = lay:cellCaret(ed.caret.b, ed.cell.r, ed.cell.k, ed.cell.o)
+        else _, cy, ch = lay:caret(ed.caret) end
         if cy + pad - s.scrollY < 8 then s.scrollY = cy + pad - 8 end
         if cy + ch + pad - s.scrollY > H - 8 then s.scrollY = cy + ch + pad - H + 8 end
         s.reveal = false
@@ -203,8 +205,19 @@ gui.define {
         end
       end
 
-      -- The caret.
-      local cx, cy, ch = lay:caret(ed.caret)
+      -- The cell being edited gets a frame, and the caret is in it.
+      local cx, cy, ch
+      if ed.cell then
+        local rx, ry, rw, rh = lay:cellRect(ed.caret.b, ed.cell.r, ed.cell.k)
+        if rx then
+          g:color("#2f6fd8"); g:width(2)
+          g:rect(x0 + rx, y0 + ry, rw + 1, rh + 1)
+          g:width(1)
+        end
+        cx, cy, ch = lay:cellCaret(ed.caret.b, ed.cell.r, ed.cell.k, ed.cell.o)
+      else
+        cx, cy, ch = lay:caret(ed.caret)
+      end
       g:color(self.textColor or "#000000")
       g:fill(x0 + cx, y0 + cy + 2, 2, ch - 4)
 
@@ -265,6 +278,17 @@ gui.define {
           if self:fire("onLink", url) ~= true and url:match("^#") then self:scrollTo(url) end
           return
         end
+      end
+      if s.lay and ed.blocks[p.b].type == "table" then
+        -- A click in a table puts the caret in the cell it is in.
+        local px, py = pageAt(self, x, y)
+        local r, k, o = s.lay:cellHit(p.b, px, py)
+        if r then ed:enterCell(p.b, r, k, o) else ed:setCaret(p) end
+        ed.goalX = nil
+        s.dragging = false
+        self:redraw()
+        self:fire("onSelect")
+        return
       end
       if double then
         ed:selectWord(p)
@@ -366,8 +390,21 @@ gui.define {
         ["Shift+Enter"] = function() ed:lineBreak() end,
       }
       local edit = edits[key]
+      if key == "Escape" and ed.cell then
+        ed:leaveTable()
+        self:moved()
+        return true
+      end
       if key == "Tab" or key == "Shift+Tab" then
         local delta = key == "Tab" and 1 or -1
+        if ed:tableAt() then
+          local t = ed:tableAt()
+          local rows = #t.rows
+          ed:cellTab(delta)
+          -- Tab in the last cell adds a row; any other Tab only moves.
+          if #t.rows ~= rows then self:changed() else self:moved() end
+          return true
+        end
         if ed:indent(delta) then self:changed() return true end
         if key == "Tab" and ed:blockType() == "code" then ed:type("    ") self:changed() return true end
         return false -- Tab goes on to the next control
