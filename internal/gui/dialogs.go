@@ -61,6 +61,38 @@ func (a *app) inputbox(L *lua.LState) int {
 	return 1
 }
 
+// passwordbox(prompt [, title [, confirm]]) asks for a password, shown as
+// dots, and returns it, or nil when the box is cancelled. With confirm set
+// it asks twice, for a new password, until both are the same.
+func (a *app) passwordbox(L *lua.LState) int {
+	prompt := L.CheckString(1)
+	title := L.OptString(2, "Password")
+	confirm := L.OptBool(3, false)
+	fields := []dialogField{{secret: true}}
+	if confirm {
+		fields[0].label = "Password"
+		fields = append(fields, dialogField{secret: true, label: "Again"})
+	}
+	for {
+		pressed, texts, err := dialogFields(title, prompt, []string{"OK", "Cancel"}, fields, a.interrupted)
+		if err != nil {
+			L.RaiseError("%s", err.Error())
+		}
+		if pressed != 0 {
+			L.Push(lua.LNil)
+			return 1
+		}
+		if confirm && texts[0] != texts[1] {
+			if _, _, err := dialog(title, "The two passwords are not the same.", []string{"OK"}, false, "", a.interrupted); err != nil {
+				L.RaiseError("%s", err.Error())
+			}
+			continue
+		}
+		L.Push(lua.LString(texts[0]))
+		return 1
+	}
+}
+
 // clipboard() returns the text on the clipboard; clipboard(text) puts text
 // there.
 func (a *app) clipboard(L *lua.LState) int {

@@ -945,6 +945,14 @@ function gui.msgbox(message, buttons, title) end
 ---@return string?
 function gui.inputbox(prompt, title, default) end
 
+--- Asks for a password, shown as dots. Returns it, or nil when cancelled.
+--- With confirm it asks twice, for a new password, until both are the same.
+---@param prompt string
+---@param title? string
+---@param confirm? boolean
+---@return string?
+function gui.passwordbox(prompt, title, confirm) end
+
 ---@class gui.FileOptions
 ---@field title? string
 ---@field filter? string as "Lua\t*.lua\nAll\t*"

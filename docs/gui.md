@@ -1032,6 +1032,9 @@ These are module functions; any of them can be called from a handler.
   button.
 - `gui.inputbox(prompt [, title [, default]])` returns the text typed (which
   may be empty), or nil when cancelled.
+- `gui.passwordbox(prompt [, title [, confirm]])` asks for a password,
+  shown as dots, and returns it or nil when cancelled. With `confirm` it
+  has a second line, "Again", and asks until both are the same.
 - `gui.openfile(opts)`, `gui.savefile(opts)` and `gui.choosedir(opts)` take a
   title, or a table of `title`, `filter` (`"Lua\t*.lua\nAll\t*"`), `dir` and
   `file`. They return a path or nil. `openfile{multiple = true}` returns a

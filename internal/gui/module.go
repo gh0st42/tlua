@@ -448,6 +448,7 @@ func (a *app) open(L *lua.LState) int {
 	L.SetFuncs(mod, map[string]lua.LGFunction{
 		"msgbox":      a.msgbox,
 		"inputbox":    a.inputbox,
+		"passwordbox": a.passwordbox,
 		"openfile":    a.fileFunc("open"),
 		"savefile":    a.fileFunc("save"),
 		"choosedir":   a.fileFunc("dir"),

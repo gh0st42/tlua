@@ -507,6 +507,17 @@ form:show()`, func(s *scene) {
 		s.lua(`answer = gui.inputbox("Name?", "Input", "x")`)
 		s.expect(`answer == nil`)
 
+		later(func() {
+			in.Type("s3cret")
+			in.Key(fltk.ENTER_KEY, "\r", 0)
+		})
+		s.lua(`answer = gui.passwordbox("Password?")`)
+		s.expect(`answer == "s3cret"`)
+
+		later(func() { in.Key(fltk.ESCAPE, "", 0) })
+		s.lua(`answer = gui.passwordbox("Password?", "Open", true)`)
+		s.expect(`answer == nil`)
+
 		// A dialog asked for from a handler, inside the form's own loop.
 		s.lua(`button = form:Button{caption = "ask", left = 10, top = 10,
 		  onClick = function() asked = gui.inputbox("From a handler?") end}`)

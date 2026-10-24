@@ -1424,6 +1424,28 @@ func onKey(f *guiObject) bool {
 // box was closed some other way, and what was typed. stop says when the
 // program has been told to stop, which closes the box.
 func dialog(title, message string, buttons []string, input bool, deflt string, stop func() bool) (int, string, error) {
+	var fields []dialogField
+	if input {
+		fields = []dialogField{{value: deflt}}
+	}
+	pressed, texts, err := dialogFields(title, message, buttons, fields, stop)
+	text := ""
+	if len(texts) > 0 {
+		text = texts[0]
+	}
+	return pressed, text, err
+}
+
+// dialogField is a line to type into in a dialog: what it starts with, a
+// label above it when given, and whether what is typed is hidden.
+type dialogField struct {
+	value, label string
+	secret       bool
+}
+
+// dialogFields is dialog with any number of lines to type into. It returns
+// what each held.
+func dialogFields(title, message string, buttons []string, fields []dialogField, stop func() bool) (int, []string, error) {
 	const pad, gap, bw, bh = 16, 8, 88, 28
 	win := fltk.NewWindow(400, 200, title)
 	defer win.Destroy()
@@ -1437,7 +1459,7 @@ func dialog(title, message string, buttons []string, input bool, deflt string, s
 		w = rowW
 	}
 	minW := 200
-	if input {
+	if len(fields) > 0 {
 		minW = 320
 	}
 	if minW > w {
@@ -1448,14 +1470,24 @@ func dialog(title, message string, buttons []string, input bool, deflt string, s
 	msg.Resize(pad, y, w-2*pad, mh)
 	y += mh + gap + gap/2
 
-	var in *fltk.Input
-	if input {
-		in = fltk.NewInput(pad, y, w-2*pad, bh)
-		in.SetValue(deflt)
-		y += bh + 2*gap
-	} else {
-		y += gap
+	var inputs []*fltk.Input
+	for _, f := range fields {
+		if f.label != "" {
+			l := fltk.NewBox(fltk.NO_BOX, pad, y, w-2*pad, 18, label(f.label))
+			l.SetAlign(fltk.ALIGN_LEFT | fltk.ALIGN_INSIDE)
+			y += 20
+		}
+		var in *fltk.Input
+		if f.secret {
+			in = &fltk.NewSecretInput(pad, y, w-2*pad, bh).Input
+		} else {
+			in = fltk.NewInput(pad, y, w-2*pad, bh)
+		}
+		in.SetValue(f.value)
+		inputs = append(inputs, in)
+		y += bh + gap
 	}
+	y += gap
 
 	pressed := -1
 	bx := w - pad - len(buttons)*(bw+gap) + gap
@@ -1478,10 +1510,10 @@ func dialog(title, message string, buttons []string, input bool, deflt string, s
 	win.Resize(x, wy, w, h)
 	win.SetCallback(func() { pressed = -1; win.Hide() })
 	win.Show()
-	// The line to type into has the keyboard; otherwise the first button
-	// does, so that Tab and Space move along the row from there.
-	if in != nil {
-		in.TakeFocus()
+	// The first line to type into has the keyboard; otherwise the first
+	// button does, so that Tab and Space move along the row from there.
+	if len(inputs) > 0 {
+		inputs[0].TakeFocus()
 	} else {
 		first.TakeFocus()
 	}
@@ -1493,11 +1525,11 @@ func dialog(title, message string, buttons []string, input bool, deflt string, s
 		pressed = -1
 		win.Hide()
 	}
-	text := ""
-	if in != nil {
-		text = in.Value()
+	texts := make([]string, len(inputs))
+	for i, in := range inputs {
+		texts[i] = in.Value()
 	}
-	return pressed, text, nil
+	return pressed, texts, nil
 }
 
 func colorDialog(title string, r, g, b uint8) (string, bool, error) {
