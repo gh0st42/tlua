@@ -9,7 +9,9 @@ details of each part.
 
 tlua is a Lua 5.1 interpreter in Go, on a patched gopher-lua, with:
 - a desktop GUI module on FLTK (`require "gui"`), and `tlua design`, a
-  VB6-style form designer written in Lua on it;
+  VB6-style form designer written in Lua on it, which also designs
+  components (groups of controls made with `gui.component`, shared through
+  palettes) and edits console programs and games as source projects;
 - a fantasy console for games (`tlua play`);
 - bundles (`.ztl`), fused executables, and a terminal editor (`tlua edit`);
 - Go versions of the C modules LuaRocks libraries are built on (lfs,
@@ -26,7 +28,7 @@ tlua is a Lua 5.1 interpreter in Go, on a patched gopher-lua, with:
 | internal/lualib | the modules: lfs, socket.core, ssl.*, zlib, png, zip, mime |
 | internal/lualib/lua | modules written in Lua: markdown*, sys, term, tui; LuaSocket's and LuaSec's Lua halves; inspect, dkjson, argparse |
 | internal/gui | the gui module; `fltk*.go` on FLTK, `nofltk.go` without cgo |
-| internal/gui/lua | controls written in Lua that come with tlua (MarkdownView, MarkdownEdit) |
+| internal/gui/lua | controls written in Lua that come with tlua (MarkdownView, MarkdownEdit) and `gui.component` |
 | internal/design, internal/design/lua | `tlua design`, mostly in Lua |
 | internal/game, internal/pico | `tlua play` |
 | internal/update | `tlua update` |
@@ -34,6 +36,7 @@ tlua is a Lua 5.1 interpreter in Go, on a patched gopher-lua, with:
 | third_party/gopher-lua | the patched gopher-lua; PATCHES.md says what and why |
 | library | lua-language-server declarations for tlua's modules; `tlua lib` exports them and writes a .luarc.json |
 | docs | gui.md, design.md, pico.md; modules/, a page per module and on Lua 5.1; plans (`*-plan.md`) and future.md |
+| examples | gui/, console/, pico/, net/ and so on; palette/ holds components for the designer's palette |
 | scripts, .github/workflows | release builds and CI |
 
 The sibling repository `../turboapps` holds desktop apps built on tlua
@@ -60,6 +63,9 @@ musl build in Alpine.
 - **GUI tests** run with `TLUA_GUI_TESTS=1` and `-p 1`; they open real
   windows and send synthetic input (internal/gui/fltkinput), so nothing
   else should take the keyboard while they run.
+  Two runs at once take each other's focus and keys, and fail as if there
+  were bugs; internal/guilock makes a second run wait for the first. Do not
+  start a GUI suite while another is going, nor type while one runs.
 - **Nothing may wait for a person.** The designer's questions are
   answered in tests by `D.answer`, `D.answerText`, `D.answerColor`,
   `D.answerFile`, `D.answerMenu`, and at startup `answerStart` and
@@ -156,6 +162,9 @@ how `tlua update` knows a release build from one built from source.
 
 ## Plans waiting
 
+- docs/components-plan.md: components in the designer. Built (gui.component,
+  the designer's component editor, interface dialog, palettes); what is left
+  is listed in the plan.
 - docs/sandbox-plan.md: running bundles and games locked down, LÖVE-style,
   with permissions and trust. Not started.
 - docs/modules-plan.md: `tlua doc`, and the sources and docs in `tlua lib

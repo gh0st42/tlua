@@ -1,6 +1,7 @@
 # GUI implementation progress
 
-Last updated: 2026-10-08
+Last updated: 2026-10-08. This is the log of how the GUI began; docs/gui.md
+is what it is now, and docs/design.md, docs/components-plan.md the designer.
 
 ## Locked decisions
 
