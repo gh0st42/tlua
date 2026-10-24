@@ -845,6 +845,10 @@ local field = form:LabeledField { label = "Surname", left = 10, top = 10 }
   (and `form.lbl` is nothing), and a part cannot clash with a name on the
   form. A part with `public = true` is a field of the component, as
   `field.txt`. `code` gets all the parts as its second argument.
+- **Methods.** `methods = { clear = "fun()" }` in the layout lists, with a
+  type each, what the component's code adds as methods. The runtime ignores
+  it; it is for a designer to put in the declarations a language server
+  reads.
 - **Code.** `code(self, parts)` runs once for each component made, after the
   parts are built and the props and events wired. It is for methods, and for
   handlers that tie the parts together. It can also be the name of a module

@@ -1160,6 +1160,7 @@ function gui.define(def) end
 ---@field kind? "Component"|"Frame"
 ---@field props? table<string, gui.ComponentProp> the properties it shows
 ---@field events? table<string, string|true>|string[] the events it shows: name = "part.event" passes a part's on, a name alone is raised by its code
+---@field methods? table<string, string> the methods its code adds, each with a type as a language server reads it ("fun()"); for declarations only
 ---@field [integer] gui.Layout the parts; one with `public = true` is a field of the component
 
 ---@class gui.ComponentSpec

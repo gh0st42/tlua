@@ -100,7 +100,7 @@ function gui.component(spec)
   local frameOpts = {}
   for k, v in pairs(layout) do
     if type(k) == "string" and k ~= "kind" and k ~= "name" and k ~= "props"
-        and k ~= "events" and k ~= "left" and k ~= "top" then
+        and k ~= "events" and k ~= "methods" and k ~= "left" and k ~= "top" then
       frameOpts[k] = v
     end
   end

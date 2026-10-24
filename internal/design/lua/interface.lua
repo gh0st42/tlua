@@ -4,9 +4,12 @@
 -- and which parts a form can reach by name. Everything else about the
 -- parts stays private.
 --
--- The dialog edits three lists of rows of text; check and apply, which do
--- not touch the screen, turn them into a layout's `props`, `events` and
--- parts' `public`.
+-- Its methods, which its code adds, are listed with a type each, so that a
+-- language server knows them on a form.
+--
+-- The dialog edits four lists of rows of text; check and apply, which do
+-- not touch the screen, turn them into a layout's `props`, `events`,
+-- `methods` and parts' `public`.
 
 local gui = require "gui"
 local model = require "design.model"
@@ -17,7 +20,9 @@ local types = { "string", "number", "integer", "boolean", "color" }
 
 -- rows reads the interface out of a component's layout, as rows of text.
 function M.rows(doc)
-  local props, events, parts = {}, {}, {}
+  local props, events, parts, methods = {}, {}, {}, {}
+  for name, signature in pairs(doc.methods or {}) do methods[#methods + 1] = { name, signature } end
+  table.sort(methods, function(a, b) return a[1] < b[1] end)
   for name, d in pairs(doc.props or {}) do
     props[#props + 1] = { name, d.type or "string", d.default ~= nil and tostring(d.default) or "", d.to or "", orig = name }
   end
@@ -33,7 +38,7 @@ function M.rows(doc)
   model.walk(doc, function(node)
     if node.name then parts[#parts + 1] = { node.name, node.kind, node.public and "true" or "false" } end
   end)
-  return props, events, parts
+  return props, events, parts, methods
 end
 
 -- target checks "part.name" against the parts, and what the part has: its
@@ -58,7 +63,7 @@ local function target(text, parts, what, member)
 end
 
 -- check says why the rows cannot be an interface, or returns nil.
-function M.check(props, events, parts)
+function M.check(props, events, parts, methods)
   local common = model.kinds().Frame.props
   local seen = {}
   for _, r in ipairs(props) do
@@ -85,6 +90,19 @@ function M.check(props, events, parts)
       if why then return name .. ": " .. why end
     end
   end
+  for _, r in ipairs(methods or {}) do
+    local name = r[1]
+    if not name:match("^[%a_][%w_]*$") then return ("%q is not a name for a method"):format(name) end
+    if seen[name] then return name .. " is a property and a method" end
+    if common[name] or name == "kind" or name == "parent" or name:match("^on%u") then
+      return name .. " is a property or event every control has; pick another name"
+    end
+    if seen["method " .. name] then return name .. " is there twice" end
+    seen["method " .. name] = true
+    if not r[2]:match("^fun%(") then
+      return ('%s: the type reads like fun(), or fun(rgb: string): boolean'):format(name)
+    end
+  end
   local names = {}
   for _, r in ipairs(events) do
     local name = r[1]
@@ -103,7 +121,7 @@ end
 
 -- apply writes the rows into the layout. A prop's default is read as its
 -- type says; nothing typed is no default.
-function M.apply(doc, props, events, parts)
+function M.apply(doc, props, events, parts, methods)
   local p, e = {}, {}
   for _, r in ipairs(props) do
     local d = { type = r[2] }
@@ -118,6 +136,9 @@ function M.apply(doc, props, events, parts)
   for _, r in ipairs(events) do
     if r[2] ~= "" then e[r[1]] = r[2] else e[#e + 1] = r[1] end
   end
+  local m = {}
+  for _, r in ipairs(methods or {}) do m[r[1]] = r[2] end
+  doc.methods = next(m) and m or nil
   doc.props = next(p) and p or nil
   doc.events = next(e) and e or nil
   local public = {}
@@ -149,18 +170,18 @@ end
 -- changes). ed is filled in with its parts, for tests.
 function M.edit(doc, ed)
   ed = ed or {}
-  local props, events, parts = M.rows(doc)
+  local props, events, parts, methods = M.rows(doc)
   local saved
   local started = { props = {}, events = {} }
   for _, r in ipairs(props) do started.props[#started.props + 1] = r[1] end
   for _, r in ipairs(events) do started.events[#started.events + 1] = r[1] end
 
-  local dlg = gui.Form { caption = "Component Interface: " .. tostring(doc.name), width = 600, height = 560 }
+  local dlg = gui.Form { caption = "Component Interface: " .. tostring(doc.name), width = 600, height = 668 }
   ed.form = dlg
-  ed.props, ed.events, ed.parts = props, events, parts
+  ed.props, ed.events, ed.parts, ed.methods = props, events, parts, methods
 
   local function section(caption, top)
-    dlg:Label { caption = caption, left = 10, top = top, width = 300 }
+    dlg:Label { caption = caption, left = 10, top = top, width = 580 }
   end
 
   section("Properties: what a form can set on it", 8)
@@ -216,28 +237,52 @@ function M.edit(doc, ed)
     left = 190, top = 340, width = 400, fontSize = 12,
   }
 
-  section("Parts: the ones a form can reach by name are public", 376)
+  section("Methods: what its code adds, with the type a language server shows", 376)
+  ed.methodGrid = dlg:Table {
+    left = 10, top = 398, width = 580, height = 90,
+    columns = { "Name", "Type" },
+    columnWidths = { 160, 400 },
+    rows = methods, editable = true,
+  }
+  ed.addMethod = dlg:Button {
+    caption = "Add", left = 10, top = 492, width = 80,
+    onClick = function()
+      methods[#methods + 1] = { "", "fun()" }
+      ed.methodGrid.rows = methods
+      ed.methodGrid:edit(#methods, 1)
+    end,
+  }
+  ed.removeMethod = dlg:Button {
+    caption = "Remove", left = 96, top = 492, width = 80,
+    onClick = function()
+      local i = ed.methodGrid.selected
+      if i > 0 then table.remove(methods, i); ed.methodGrid.rows = methods end
+    end,
+  }
+
+  section("Parts: the ones a form can reach by name are public", 524)
   ed.partGrid = dlg:Table {
-    left = 10, top = 398, width = 580, height = 110,
+    left = 10, top = 546, width = 580, height = 76,
     columns = { "Part", "Kind", "Public" },
     columnWidths = { 200, 160, 200 },
     rows = parts, editable = { 3 },
     onStartEdit = function() return { choices = { "true", "false" } } end,
   }
 
-  dlg:Button { caption = "Cancel", left = 400, top = 518, width = 90, onClick = function() dlg:close() end }
+  dlg:Button { caption = "Cancel", left = 400, top = 628, width = 90, onClick = function() dlg:close() end }
   ed.ok = dlg:Button {
-    caption = "OK", left = 500, top = 518, width = 90, default = true,
+    caption = "OK", left = 500, top = 628, width = 90, default = true,
     onClick = function()
       if ed.propGrid:editing() then ed.propGrid:edit() end
       if ed.eventGrid:editing() then ed.eventGrid:edit() end
-      local why = M.check(props, events, parts)
+      if ed.methodGrid:editing() then ed.methodGrid:edit() end
+      local why = M.check(props, events, parts, methods)
       if why then
         ed.problem = why
         gui.msgbox(why)
         return
       end
-      M.apply(doc, props, events, parts)
+      M.apply(doc, props, events, parts, methods)
       saved = { props = M.changes(started.props, props), events = M.changes(started.events, events) }
       dlg:close()
     end,
