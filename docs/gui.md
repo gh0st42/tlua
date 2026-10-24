@@ -423,6 +423,9 @@ local grid = form:Table {
 ```
 
 - **Rows.** Each row is a table of cells, and the table shows them as text.
+- **Colours.** Cells are drawn in the colours `gui.colors` gave for text
+  boxes and text, so a table follows a dark look as a ListBox does; `color`
+  and `textColor` on the Table give its cells colours of their own.
 - **Selection.** `selected` is the selected row, 1 for the first and 0 for
   none. The user picks rows by clicking or with the arrow keys.
 - **Changes.** To change the data, change the tables and assign `rows` again

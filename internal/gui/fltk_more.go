@@ -558,6 +558,36 @@ func cell(o *guiObject, r, c int) string {
 	return ""
 }
 
+// tableColor is the colour the Table was given for its cells, `color` for
+// the ground and `textColor` for the text, else def: FLTK's own colour for
+// text boxes and for text, which are what gui.colors sets, so a table
+// follows a dark look as a ListBox does.
+func tableColor(o *guiObject, name string, def fltk.Color) fltk.Color {
+	if v, ok := o.props[name].(lua.LString); ok {
+		if r, g, b, err := parseColor(string(v)); err == nil {
+			return rgbColor(r, g, b)
+		}
+	}
+	return def
+}
+
+// tableGrid is the colour of the lines between the cells on ground bg: a
+// light grey on a light ground, as before, and a little lighter than the
+// ground on a dark one.
+func tableGrid(bg fltk.Color) fltk.Color {
+	r, g, b := bg.RGB()
+	if (r*299+g*587+b*114)/1000 >= 128 {
+		return gridColor
+	}
+	lift := func(v int) uint8 {
+		if v += 28; v > 255 {
+			v = 255
+		}
+		return uint8(v)
+	}
+	return rgbColor(lift(r), lift(g), lift(b))
+}
+
 func drawCell(o *guiObject, t *fltk.TableRow, ctx fltk.TableContext, r, c, x, y, w, h int) {
 	switch ctx {
 	case fltk.ContextStartPage:
@@ -567,7 +597,7 @@ func drawCell(o *guiObject, t *fltk.TableRow, ctx fltk.TableContext, r, c, x, y,
 	case fltk.ContextColHeader:
 		fltk.PushClip(x, y, w, h)
 		fltk.DrawBox(fltk.THIN_UP_BOX, x, y, w, h, fltk.BACKGROUND_COLOR)
-		fltk.SetDrawColor(black)
+		fltk.SetDrawColor(tableColor(o, "textColor", fltk.FOREGROUND_COLOR))
 		fltk.SetDrawFont(fltk.HELVETICA_BOLD, 14)
 		cols := propStrings(o, "columns")
 		if c < len(cols) {
@@ -581,7 +611,9 @@ func drawCell(o *guiObject, t *fltk.TableRow, ctx fltk.TableContext, r, c, x, y,
 			return
 		}
 		fltk.PushClip(x, y, w, h)
-		bg, fg := white, black
+		bg := tableColor(o, "color", fltk.BACKGROUND2_COLOR)
+		fg := tableColor(o, "textColor", fltk.FOREGROUND_COLOR)
+		grid := tableGrid(bg)
 		if t.IsRowSelected(r) {
 			bg, fg = selectionColor, white
 		}
@@ -589,7 +621,7 @@ func drawCell(o *guiObject, t *fltk.TableRow, ctx fltk.TableContext, r, c, x, y,
 		fltk.SetDrawColor(fg)
 		fltk.SetDrawFont(fltk.HELVETICA, 14)
 		fltk.Draw(label(cell(o, r, c)), x+4, y, w-8, h, fltk.ALIGN_LEFT)
-		fltk.DrawRectWithColor(x, y, w, h, gridColor)
+		fltk.DrawRectWithColor(x, y, w, h, grid)
 		fltk.PopClip()
 	}
 }
