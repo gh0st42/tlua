@@ -13,6 +13,8 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Vet
         run: go vet ./...
+      - name: 7-Zip, which the zip tests check encryption against
+        run: sudo apt-get install -y -qq 7zip
       - name: Test
         # Some tests open a game window; Xvfb is the screen they open on.
         run: xvfb-run -a go test ./...

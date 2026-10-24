@@ -15,6 +15,12 @@ package lualib
 //	out:add("hello.txt", "hello\n")
 //	out:add("pic.png", img:encode(), { store = true })
 //	out:close()                                 -- the bytes, when in memory
+//
+// Files can be encrypted with AES-256, in the form 7-Zip and WinZip read
+// (zipcrypt.go): zip.create(path, {password = "..."}) encrypts every file
+// added, out:add(name, data, {password = ...}) one, and zip.open(path,
+// {password = "..."}), arc:setpassword(...) or arc:read(name, password)
+// read them.
 
 import (
 	"archive/zip"
@@ -33,28 +39,51 @@ const (
 )
 
 type zipReader struct {
-	r     *zip.Reader
-	files map[string]*zip.File
-	names []string
+	r        *zip.Reader
+	files    map[string]*zip.File
+	names    []string
+	password string // for the encrypted files, unless one is given
 }
 
 type zipWriter struct {
-	buf    bytes.Buffer
-	w      *zip.Writer
-	path   string // "" for one made in memory
-	closed bool
+	buf      bytes.Buffer
+	w        *zip.Writer
+	path     string // "" for one made in memory
+	password string // for every file added, unless it says otherwise
+	closed   bool
+}
+
+// passwordOf is the password in an options table: "" for none.
+func passwordOf(L *lua.LState, opts lua.LValue, n int) string {
+	t, ok := opts.(*lua.LTable)
+	if !ok {
+		return ""
+	}
+	switch v := t.RawGetString("password").(type) {
+	case lua.LString:
+		if v == "" {
+			L.ArgError(n, "password must not be empty")
+		}
+		return string(v)
+	case *lua.LNilType, lua.LBool:
+		return ""
+	default:
+		L.ArgError(n, "password must be a string")
+	}
+	return ""
 }
 
 func openZip(L *lua.LState) int {
 	rmt := L.NewTypeMetatable(zipReaderType)
 	L.SetField(rmt, "__index", L.SetFuncs(L.NewTable(), map[string]lua.LGFunction{
-		"list":   zipList,
-		"files":  zipIterate,
-		"open":   zipOpenFile,
-		"info":   zipInfo,
-		"exists": zipExists,
-		"read":   zipRead,
-		"close":  func(L *lua.LState) int { return 0 },
+		"list":        zipList,
+		"files":       zipIterate,
+		"open":        zipOpenFile,
+		"info":        zipInfo,
+		"exists":      zipExists,
+		"read":        zipRead,
+		"setpassword": zipSetPassword,
+		"close":       func(L *lua.LState) int { return 0 },
 	}))
 	wmt := L.NewTypeMetatable(zipWriterType)
 	L.SetField(wmt, "__index", L.SetFuncs(L.NewTable(), map[string]lua.LGFunction{
@@ -69,14 +98,14 @@ func openZip(L *lua.LState) int {
 	return 1
 }
 
-func pushZipReader(L *lua.LState, data []byte) int {
+func pushZipReader(L *lua.LState, data []byte, password string) int {
 	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		L.Push(lua.LNil)
 		L.Push(lua.LString(err.Error()))
 		return 2
 	}
-	z := &zipReader{r: r, files: map[string]*zip.File{}}
+	z := &zipReader{r: r, files: map[string]*zip.File{}, password: password}
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -100,12 +129,37 @@ func zipOpen(L *lua.LState) int {
 		L.Push(lua.LString(err.Error()))
 		return 2
 	}
-	return pushZipReader(L, data)
+	return pushZipReader(L, data, passwordOf(L, L.Get(2), 2))
 }
 
-// zipLoad is zip.load(data): the archive in a string.
+// zipLoad is zip.load(data [, {password = ...}]): the archive in a string.
 func zipLoad(L *lua.LState) int {
-	return pushZipReader(L, []byte(L.CheckString(1)))
+	return pushZipReader(L, []byte(L.CheckString(1)), passwordOf(L, L.Get(2), 2))
+}
+
+// zipSetPassword is arc:setpassword(password): what the encrypted files
+// are read with from now on; nil takes it away.
+func zipSetPassword(L *lua.LState) int {
+	z := checkZipReader(L)
+	if L.Get(2) == lua.LNil {
+		z.password = ""
+		return 0
+	}
+	pw := L.CheckString(2)
+	if pw == "" {
+		L.ArgError(2, "password must not be empty")
+	}
+	z.password = pw
+	return 0
+}
+
+// entryPassword is the password to read an entry with: the one given to
+// the call, else the archive's.
+func (z *zipReader) entryPassword(L *lua.LState, n int) string {
+	if s, ok := L.Get(n).(lua.LString); ok && s != "" {
+		return string(s)
+	}
+	return z.password
 }
 
 func checkZipReader(L *lua.LState) *zipReader {
@@ -145,7 +199,7 @@ func zipIterate(L *lua.LState) int {
 		t := fileInfo(L, f)
 		t.RawSetString("filename", lua.LString(f.Name))
 		t.RawSetString("uncompressed_size", lua.LNumber(f.UncompressedSize64))
-		t.RawSetString("compressed_size", lua.LNumber(f.CompressedSize64))
+		t.RawSetString("compressed_size", t.RawGetString("compressed"))
 		L.Push(t)
 		return 1
 	}))
@@ -163,14 +217,7 @@ func zipOpenFile(L *lua.LState) int {
 		L.Push(lua.LString("no file '" + name + "' in the archive"))
 		return 2
 	}
-	rc, err := f.Open()
-	if err != nil {
-		L.Push(lua.LNil)
-		L.Push(lua.LString(err.Error()))
-		return 2
-	}
-	data, err := io.ReadAll(rc)
-	rc.Close()
+	data, err := zipEntry(f, z.entryPassword(L, 3))
 	if err != nil {
 		L.Push(lua.LNil)
 		L.Push(lua.LString(err.Error()))
@@ -253,11 +300,19 @@ func fileInfo(L *lua.LState, f *zip.File) *lua.LTable {
 	t.RawSetString("size", lua.LNumber(f.UncompressedSize64))
 	t.RawSetString("compressed", lua.LNumber(f.CompressedSize64))
 	t.RawSetString("modified", lua.LNumber(f.Modified.Unix()))
-	method := "deflate"
-	if f.Method == zip.Store {
-		method = "store"
+	method, compressed := f.Method, f.CompressedSize64
+	if a, ok := aesOf(f); ok {
+		// What it was packed with, and its size without what encryption adds.
+		method = a.method
+		compressed -= uint64(a.overhead())
+		t.RawSetString("compressed", lua.LNumber(compressed))
 	}
-	t.RawSetString("method", lua.LString(method))
+	name := "deflate"
+	if method == zip.Store {
+		name = "store"
+	}
+	t.RawSetString("method", lua.LString(name))
+	t.RawSetString("encrypted", lua.LBool(f.Flags&zipFlagCrypt != 0))
 	return t
 }
 
@@ -291,25 +346,29 @@ func zipRead(L *lua.LState) int {
 		L.Push(lua.LString("no file '" + name + "' in the archive"))
 		return 2
 	}
-	rc, err := f.Open()
-	if err == nil {
-		var data []byte
-		data, err = io.ReadAll(rc)
-		rc.Close()
-		if err == nil {
-			L.Push(lua.LString(data))
-			return 1
-		}
+	data, err := zipEntry(f, z.entryPassword(L, 3))
+	if err != nil {
+		L.Push(lua.LNil)
+		L.Push(lua.LString(err.Error()))
+		return 2
 	}
-	L.Push(lua.LNil)
-	L.Push(lua.LString(err.Error()))
-	return 2
+	L.Push(lua.LString(data))
+	return 1
 }
 
 // zipCreate is zip.create([path]): an archive to add files to, written to
 // path when it is closed, or given back as a string with none.
 func zipCreate(L *lua.LState) int {
-	z := &zipWriter{path: L.OptString(1, "")}
+	// zip.create([path] [, {password = ...}]), or zip.create({password = ...})
+	// for an archive in memory.
+	z := &zipWriter{}
+	opts := L.Get(2)
+	if t, ok := L.Get(1).(*lua.LTable); ok {
+		opts = t
+	} else {
+		z.path = L.OptString(1, "")
+	}
+	z.password = passwordOf(L, opts, 2)
 	z.w = zip.NewWriter(&z.buf)
 	ud := L.NewUserData()
 	ud.Value = z
@@ -337,6 +396,7 @@ func zipAdd(L *lua.LState) int {
 	z := checkZipWriter(L)
 	name, data := L.CheckString(2), L.CheckString(3)
 	hdr := &zip.FileHeader{Name: filepath.ToSlash(name), Method: zip.Deflate, Modified: time.Now()}
+	password := z.password
 	if opts, ok := L.Get(4).(*lua.LTable); ok {
 		if lua.LVAsBool(opts.RawGetString("store")) {
 			hdr.Method = zip.Store
@@ -344,10 +404,32 @@ func zipAdd(L *lua.LState) int {
 		if t, ok := opts.RawGetString("modified").(lua.LNumber); ok {
 			hdr.Modified = time.Unix(int64(t), 0)
 		}
+		// A password of its own, or false for none.
+		if v := opts.RawGetString("password"); v != lua.LNil {
+			password = passwordOf(L, opts, 4)
+		}
 	}
-	w, err := z.w.CreateHeader(hdr)
-	if err == nil {
-		_, err = w.Write([]byte(data))
+	var w io.Writer
+	var err error
+	if password != "" {
+		var sealed []byte
+		var method uint16
+		sealed, method, err = aesSeal([]byte(data), hdr.Method == zip.Store, password)
+		if err == nil {
+			hdr.Method, hdr.Flags = zipMethodAES, zipFlagCrypt
+			hdr.Extra = aesExtra(method)
+			hdr.CompressedSize64, hdr.UncompressedSize64 = uint64(len(sealed)), uint64(len(data))
+			// AE-2: the CRC is left out, the MAC covers the data.
+			w, err = z.w.CreateRaw(hdr)
+			if err == nil {
+				_, err = w.Write(sealed)
+			}
+		}
+	} else {
+		w, err = z.w.CreateHeader(hdr)
+		if err == nil {
+			_, err = w.Write([]byte(data))
+		}
 	}
 	if err != nil {
 		L.RaiseError("zip: %v", err)
