@@ -50,10 +50,15 @@ form:show()`, func(s *scene) {
 		// The mouse resting on text is a hover there, and moving on ends it.
 		s.lua(`hx, hy = code:pointAt(2)`)
 		x, y := s.at("code", int(luaNumber(s, "hx"))+3, int(luaNumber(s, "hy"))+5)
-		in.Send(in.Event{Type: fltk.MOVE, X: x, Y: y})
-		deadline := time.Now().Add(2 * time.Second)
-		for time.Now().Before(deadline) && s.L.GetGlobal("hovered").String() == "nil" {
-			s.pump()
+		// A hover is the mouse resting for a moment; any other mouse event
+		// over the box, a real pointer's among them, starts the wait again,
+		// so the move is sent again until one rests.
+		for attempt := 0; attempt < 4 && s.L.GetGlobal("hovered").String() == "nil"; attempt++ {
+			in.Send(in.Event{Type: fltk.MOVE, X: x, Y: y})
+			deadline := time.Now().Add(1500 * time.Millisecond)
+			for time.Now().Before(deadline) && s.L.GetGlobal("hovered").String() == "nil" {
+				s.pump()
+			}
 		}
 		s.expect(`hovered == 2`)
 		in.Send(in.Event{Type: fltk.MOVE, X: x + 40, Y: y})

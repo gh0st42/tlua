@@ -18,6 +18,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 
 	in "tlua/internal/gui/fltkinput"
+	"tlua/internal/guilock"
 	"tlua/internal/lualib"
 )
 
@@ -31,6 +32,7 @@ func TestMain(m *testing.M) {
 	if !guiTests {
 		os.Exit(m.Run())
 	}
+	guilock.Acquire() // one run of these at a time on a screen
 	done := make(chan int)
 	go func() { done <- m.Run() }()
 	for {
