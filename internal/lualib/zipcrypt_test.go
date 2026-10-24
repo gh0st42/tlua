@@ -242,12 +242,15 @@ func sevenZip(t *testing.T) string {
 
 // 7-Zip reads what tlua writes: its test passes, and what it extracts is
 // what went in; a wrong password is refused.
+// (The password is ASCII: what a password's bytes are is not in the format,
+// and older 7-Zip, p7zip 17 on the macOS runner, reads a non-ASCII one
+// differently from 7-Zip 26, which agrees with tlua.)
 func TestSevenZipReadsWhatZipWrites(t *testing.T) {
 	sz := sevenZip(t)
 	dir := t.TempDir()
 	runIn(t, map[string]string{"dir": dir}, `
 		local zip = require "zip"
-		local out = zip.create(dir .. "/ours.zip", { password = "pässwörd ✓" })
+		local out = zip.create(dir .. "/ours.zip", { password = "tlua-k3y!" })
 		out:add("hello.txt", "hello, world\n")
 		out:add("empty.txt", "")
 		out:add("big.bin", string.rep("0123456789abcdef", 40000))
@@ -269,7 +272,7 @@ func TestSevenZipReadsWhatZipWrites(t *testing.T) {
 		assert(out:close())`)
 	zipPath := filepath.Join(dir, "ours.zip")
 
-	if out, err := exec.Command(sz, "t", "-p"+"pässwörd ✓", zipPath).CombinedOutput(); err != nil || !strings.Contains(string(out), "Everything is Ok") {
+	if out, err := exec.Command(sz, "t", "-p"+"tlua-k3y!", zipPath).CombinedOutput(); err != nil || !strings.Contains(string(out), "Everything is Ok") {
 		t.Fatalf("7-Zip does not accept it: %v\n%s", err, out)
 	}
 	if out, err := exec.Command(sz, "t", "-pwrong", zipPath).CombinedOutput(); err == nil {
@@ -277,7 +280,7 @@ func TestSevenZipReadsWhatZipWrites(t *testing.T) {
 	}
 	// What 7-Zip makes of it is what went in.
 	extracted := filepath.Join(dir, "x")
-	if out, err := exec.Command(sz, "x", "-y", "-o"+extracted, "-p"+"pässwörd ✓", zipPath).CombinedOutput(); err != nil {
+	if out, err := exec.Command(sz, "x", "-y", "-o"+extracted, "-p"+"tlua-k3y!", zipPath).CombinedOutput(); err != nil {
 		t.Fatalf("7-Zip x: %v\n%s", err, out)
 	}
 	runIn(t, map[string]string{"dir": extracted}, `
@@ -289,7 +292,7 @@ func TestSevenZipReadsWhatZipWrites(t *testing.T) {
 		assert(slurp(dir .. "/plain.txt") == "not encrypted")
 		assert(slurp(dir .. "/dir/nested.txt") == "nested")`)
 	// And it says AES-256, as the format has it.
-	if out, err := exec.Command(sz, "l", "-slt", "-p"+"pässwörd ✓", zipPath).CombinedOutput(); err != nil || !strings.Contains(string(out), "AES-256") {
+	if out, err := exec.Command(sz, "l", "-slt", "-p"+"tlua-k3y!", zipPath).CombinedOutput(); err != nil || !strings.Contains(string(out), "AES-256") {
 		t.Errorf("7-Zip does not call it AES-256: %v\n%s", err, out)
 	}
 }

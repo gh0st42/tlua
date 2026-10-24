@@ -152,11 +152,12 @@ print(arc:read("report.txt"))
   derivation at 1000 rounds of SHA-1, which is fast to try against. Use a
   long passphrase, not a short word. This is a property of the format, not
   something tlua can raise.
-- **Passwords are bytes**, as Lua strings are, and UTF-8 text works: an
-  archive made here with a non-ASCII password opens in 7-Zip with the same
-  text. (7-Zip's command line itself refuses to *make* an AES zip with such a
-  password.) The format does not say how a password is turned into bytes, so
-  other tools may do it differently; an ASCII password is safe everywhere.
+- **Passwords are bytes**, as Lua strings are, and UTF-8 text works between
+  tlua and recent 7-Zip (checked with 26.03). The format does not say how a
+  password is turned into bytes, so other tools do it differently: p7zip 17
+  does not accept an archive made here with a non-ASCII password, and 7-Zip's
+  command line refuses to *make* an AES zip with one. An ASCII password is
+  safe everywhere.
 - **Old ZipCrypto is not read.** What `zip -e` writes by default is broken
   encryption, and tlua will not pretend otherwise: the error says so. Make
   the archive again with 7-Zip's `-mem=AES256`, or read it with the tool that
