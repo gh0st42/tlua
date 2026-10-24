@@ -9,7 +9,7 @@ jobs:
   linux:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Vet
         run: go vet ./...
@@ -29,7 +29,7 @@ jobs:
   macos:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Test
         run: go test ./...
@@ -37,6 +37,25 @@ jobs:
   alpine:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build and try the musl release
         run: docker run --rm -v "$PWD":/src -w /src alpine:3.22 scripts/build-alpine.sh 0.0.0-ci
+
+  # Not yet tried by hand: a failure here is a warning, as in the release.
+  windows:
+    runs-on: windows-2022
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Build (MinGW)
+        shell: msys2 {0}
+        run: scripts/build-release.sh 0.0.0-ci
+      - name: Smoke test
+        shell: bash
+        run: |
+          cd dist
+          7z x -bso0 *.zip >/dev/null
+          exe=$(ls */tlua.exe)
+          "$exe" -v
+          "$exe" -e 'assert(require("gui") and (1 + 1 == 2))'

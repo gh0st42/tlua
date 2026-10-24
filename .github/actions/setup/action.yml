@@ -2,11 +2,11 @@ name: Set up the build
 description: >
   Go from go.mod, and what the GUI's cgo needs on the runner: the X11,
   Wayland, OpenGL and sound development packages on Linux, the SDK path
-  go-fltk names on macOS, and MinGW-w64 on Windows.
+  go-fltk names on macOS, and MinGW-w64 (the UCRT64 flavour) on Windows.
 runs:
   using: composite
   steps:
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@v7
       with:
         go-version-file: go.mod
 
@@ -39,6 +39,6 @@ runs:
       if: runner.os == 'Windows'
       uses: msys2/setup-msys2@v2
       with:
-        msystem: MINGW64
+        msystem: UCRT64
         path-type: inherit
-        install: mingw-w64-x86_64-gcc
+        install: mingw-w64-ucrt-x86_64-gcc
