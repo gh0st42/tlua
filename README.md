@@ -91,7 +91,7 @@ releases do not have.
 ```
 usage: tlua [options] [script [args]]
        tlua edit [file...]
-       tlua design [directory]
+       tlua design [-new gui|console|game] [directory]
        tlua play [script | directory | bundle] [args]
        tlua app.ztl [args]
        tlua bundle [-o output] [-play] <main.lua | directory>

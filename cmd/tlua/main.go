@@ -31,7 +31,7 @@ const banner = "tlua " + version.Number + " (Lua 5.1 via gopher-lua, pure Go)"
 
 const usage = `usage: tlua [options] [script [args]]
        tlua edit [file...]
-       tlua design [directory]
+       tlua design [-new gui|console|game] [directory]
        tlua play [script | directory | bundle] [args]
        tlua app.ztl [args]
        tlua bundle [-o output] [-play] <main.lua | directory>

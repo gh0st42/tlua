@@ -180,6 +180,25 @@ assert(doc.props.label.to == "lbl.caption" and doc.props.label.default == "Name"
 assert(doc.events.onChange == "txt.onChange" and doc.events[1] == "onSubmit" and doc[2].public == true and doc[1].public == nil)
 local again = { interface.rows(doc) }
 assert(#again[1] == 2 and again[1][1][1] == "label" and #again[2] == 2 and again[3][2][3] == "true")
+-- Methods are listed with a type, for the language server.
+local mrows = { { "clear", "fun()" }, { "set", "fun(rgb: string): boolean" } }
+assert(interface.check(props, events, parts, mrows) == nil)
+interface.apply(doc, props, events, parts, mrows)
+assert(doc.methods.clear == "fun()" and doc.methods.set == "fun(rgb: string): boolean")
+local _, _, _, back = interface.rows(doc)
+assert(#back == 2 and back[1][1] == "clear" and back[2][2] == "fun(rgb: string): boolean")
+local function badMethod(rows, want)
+  local why = interface.check(props, events, parts, rows)
+  assert(why and why:find(want, 1, true), tostring(why))
+end
+badMethod({ { "a b", "fun()" } }, "not a name")
+badMethod({ { "x", "number" } }, "reads like fun()")
+badMethod({ { "x", "fun()" }, { "x", "fun()" } }, "twice")
+badMethod({ { "size", "fun()" } }, "a property and a method")
+badMethod({ { "visible", "fun()" } }, "every control has")
+interface.apply(doc, props, events, parts, {})
+assert(doc.methods == nil)
+
 local function bad(p, e, want)
   local why = interface.check(p, e or {}, parts)
   assert(why and why:find(want, 1, true), tostring(why))
@@ -195,6 +214,12 @@ bad({ { "x", "string", "", "lbl.nothing" } }, nil, "a Label has no property noth
 bad({}, { { "change", "" } }, "not an event name")
 bad({}, { { "onChange", "txt.onNothing" } }, "a TextBox has no event onNothing")
 bad({}, { { "onShow", "" } }, "every control has")
+
+-- What is defined where, for the outline of a file of source.
+local outline = code.outline("local function a() end\nfunction M.b(x)\nend\nfunction Obj:c() end\nlocal d = function() end\nM.e = function() end\nlocal f = functional\n  function g() end\nprint('function h')\n")
+local names = {}
+for _, f in ipairs(outline) do names[#names + 1] = f.name .. ":" .. f.line end
+assert(table.concat(names, ",") == "a:1,M.b:2,Obj:c:4,d:5,M.e:6,g:8", table.concat(names, ","))
 
 -- A component's code is a function of the component and its parts: the
 -- handlers go inside it, on parts.
@@ -402,4 +427,43 @@ lfs.mkdir(con .. "/.git"); local g = io.open(con .. "/.git/x.lua", "w"); g:write
 local d = io.open(con .. "/lib/util.d.lua", "w"); d:write("x"); d:close()
 local n = io.open(con .. "/notes.txt", "w"); n:write("x"); n:close()
 assert(table.concat(project.files(con), ",") == "a/b/c.lua,lib/util.lua,main.lua", table.concat(project.files(con), ","))`)
+}
+
+func TestProjectSetKind(t *testing.T) {
+	r, _ := newLua(t)
+	r.L.SetGlobal("dir", lua.LString(t.TempDir()))
+	run(t, r.L, `
+local project = require "design.project"
+gui = require "gui"
+project.createProject(dir, "console")
+assert(project.kind(dir) == "console")
+project.setKind(dir, "game")
+assert(project.kind(dir) == "game")
+project.setKind(dir, "console")
+assert(project.kind(dir) == "console")
+
+-- A component's methods are in what a language server reads.
+project.create(dir .. "/app")
+assert(project.addComponent(dir .. "/app", "Field"))
+local comp = project.readComponent(dir .. "/app", "Field")
+comp.methods = { clear = "fun()", set = "fun(text: string)" }
+project.saveComponent(dir .. "/app", "Field", comp)
+local stub = io.open(dir .. "/app/components/Field.d.lua"):read("*a")
+assert(stub:find("---@field clear fun()", 1, true) and stub:find("---@field set fun(text: string)", 1, true), stub)
+assert(project.readComponent(dir .. "/app", "Field").methods.clear == "fun()")`)
+}
+
+func TestDesignCommandOptions(t *testing.T) {
+	for _, args := range [][]string{
+		{"-new"},                       // needs a kind
+		{"-new", "spreadsheet", "dir"}, // no such kind
+		{"-new", "game"},               // needs a folder
+	} {
+		if code := Command(args); code != 1 {
+			t.Errorf("tlua design %v: exit %d, want 1", args, code)
+		}
+	}
+	if code := Command([]string{"-h"}); code != 0 {
+		t.Errorf("-h: exit %d", code)
+	}
 }

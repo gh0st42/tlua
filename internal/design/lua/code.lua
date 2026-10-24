@@ -154,4 +154,21 @@ function M.errorAt(message)
   end
 end
 
+-- outline lists where functions are defined in code: { name =, line = },
+-- in order of the lines. A function is `function name`, `local function
+-- name` or `name = function`, with a dotted or colon name allowed.
+function M.outline(text)
+  local out = {}
+  local line = 0
+  for l in (text .. "\n"):gmatch("(.-)\r?\n") do
+    line = line + 1
+    local name = l:match("^%s*local%s+function%s+([%w_]+)")
+      or l:match("^%s*function%s+([%w_%.:]+)")
+      or l:match("^%s*local%s+([%w_]+)%s*=%s*function%f[^%w_]")
+      or l:match("^%s*([%w_%.]+)%s*=%s*function%f[^%w_]")
+    if name then out[#out + 1] = { name = name, line = line } end
+  end
+  return out
+end
+
 return M

@@ -70,3 +70,24 @@ D.win:close()`)
 		})
 	}
 }
+
+// tlua design -new KIND makes the project without asking, and not over one.
+func TestDesignNewOption(t *testing.T) {
+	cwd, _ := os.Getwd()
+	defer os.Chdir(cwd)
+	dir := filepath.Join(t.TempDir(), "mygame")
+	r, _ := newLua(t)
+	L := r.L
+	L.SetGlobal("dir", lua.LString(dir))
+	run(t, L, `
+local gui = require "gui"
+gui.msgbox = function() error("nothing is asked") end
+local D = require("design.main").start{dir = dir, newType = "game", show = false}
+assert(D.kind == "game" and D.dir == dir, tostring(D.kind))
+D.win:close()
+local ok, err = pcall(require("design.main").start, { dir = dir, newType = "console", show = false })
+assert(not ok and tostring(err):find("is a project already", 1, true), tostring(err))`)
+	if _, err := os.Stat(filepath.Join(dir, ".tlua-project")); err != nil {
+		t.Errorf("the game is not marked: %v", err)
+	}
+}

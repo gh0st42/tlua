@@ -183,6 +183,13 @@ function M.createProject(dir, kind)
   write(dir .. "/" .. marker, ("-- What kind of project this is, for tlua design.\nreturn { type = %q }\n"):format(kind))
 end
 
+-- setKind says a project of source files is another kind: its
+-- .tlua-project is written again. A GUI application is what its forms make
+-- it, so it is left to them.
+function M.setKind(dir, kind)
+  write(dir .. "/" .. marker, ("-- What kind of project this is, for tlua design.\nreturn { type = %q }\n"):format(kind))
+end
+
 -- files lists the Lua files of a project that is not forms, as paths from
 -- its folder with /, in order. Folders that start with a dot are left out,
 -- and so are declaration files (.d.lua).
@@ -422,6 +429,13 @@ local function componentStub(dir, name, doc)
   table.sort(props)
   for _, f in ipairs(props) do lines[#lines + 1] = f end
   for _, f in ipairs(public) do lines[#lines + 1] = f end
+  -- What the code adds to it: its methods, with the types the layout gives.
+  local methods = {}
+  for name, signature in pairs(doc.methods or {}) do
+    methods[#methods + 1] = ("---@field %s %s"):format(name, signature)
+  end
+  table.sort(methods)
+  for _, f in ipairs(methods) do lines[#lines + 1] = f end
   write(dir .. "/components/" .. name .. ".d.lua", table.concat(lines, "\n") .. "\n")
 end
 

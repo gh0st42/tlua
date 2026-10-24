@@ -27,7 +27,14 @@ game when it defines `_draw` or `_update`, and a console program otherwise,
 so any folder of Lua can be opened. A new project does not touch files that
 are there already; an existing `main.lua` is used as it is.
 
-In these projects Project > New File starts a Lua file, in a folder if the
+A console program can become a game and back with Project > Project Type,
+which rewrites `.tlua-project`; a GUI application has no other kind. `tlua
+design -new console|game|gui myapp` makes the project in `myapp` without
+asking, and refuses a folder that is a project already.
+
+In these projects the right pane is an outline of the open file: its
+functions with their lines (`function name`, `local function name`, `name =
+function`), kept up to date as you type, and a click goes to one. Project > New File starts a Lua file, in a folder if the
 name has one (`lib/util.lua`); a double click in the tree opens a file; the
 language server completes and shows help as it does for a form's code; and
 double-clicking a line of an error in the output pane opens the file at that
@@ -203,8 +210,10 @@ and used like a control: [gui.md](gui.md#components) describes what it is.
   default, and stand for a property of a part (`lbl.caption`) or are the
   component's own. *Events* are passed on from a part's (`txt.onChange`), or
   have nothing after them and are raised by its code with `self:fire`.
-  *Parts* are private to the component unless marked public, which makes
-  them fields of it. The dialog refuses what a component cannot carry: a
+  *Methods* are what its code adds (`function self:clear()`), each with a
+  type as the language server reads it (`fun()`, `fun(rgb: string)`), so that
+  `frm.field:clear()` completes on a form. *Parts* are private to the
+  component unless marked public, which makes them fields of it. The dialog refuses what a component cannot carry: a
   name every control has, a part or property that is not there.
 - **Saving it** writes its files and defines it again, so a form opened
   afterwards uses the new one. A prop renamed or taken away in the interface

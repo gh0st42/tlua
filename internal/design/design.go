@@ -22,7 +22,7 @@ import (
 //go:embed lua/*.lua
 var sources embed.FS
 
-const usage = `usage: tlua design [directory]
+const usage = `usage: tlua design [-new gui|console|game] [directory]
 
 Opens the designer on the project in directory, or the current one.
 A GUI application is main.lua and a forms/ folder: each form a layout file
@@ -32,22 +32,42 @@ code window, with a .tlua-project file that says which; a folder with a
 main.lua and no forms is read for what it is. A directory with no project
 in it can be made into a new one, of the kind you pick. With no directory
 named, it asks whether to use the current one or another.
+
+  -new TYPE   make a project of that kind in directory, without asking
+              (gui, console or game); it must not have one already
 `
 
 // Command runs tlua design.
 func Command(args []string) int {
 	dir, given := ".", false
-	for _, a := range args {
+	newType := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
 		switch {
 		case a == "-h" || a == "--help":
 			fmt.Print(usage)
 			return 0
+		case a == "-new" || a == "--new":
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "tlua design: -new needs a kind: gui, console or game\n%s", usage)
+				return 1
+			}
+			i++
+			newType = args[i]
+			if newType != "gui" && newType != "console" && newType != "game" {
+				fmt.Fprintf(os.Stderr, "tlua design: -new %s: the kinds are gui, console and game\n%s", newType, usage)
+				return 1
+			}
 		case strings.HasPrefix(a, "-"):
 			fmt.Fprintf(os.Stderr, "tlua design: unknown option %s\n%s", a, usage)
 			return 1
 		default:
 			dir, given = a, true
 		}
+	}
+	if newType != "" && !given {
+		fmt.Fprintf(os.Stderr, "tlua design: -new needs the directory for the project\n%s", usage)
+		return 1
 	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -74,6 +94,9 @@ func Command(args []string) int {
 		// With no folder named, the user is asked whether the current one
 		// is the one they meant.
 		opts.RawSetString("pick", lua.LBool(!given))
+		if newType != "" {
+			opts.RawSetString("newType", lua.LString(newType))
+		}
 		return L.CallByParam(lua.P{Fn: start, NRet: 0, Protect: true}, opts)
 	})
 	if err != nil {

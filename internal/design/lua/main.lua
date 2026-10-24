@@ -116,6 +116,8 @@ end
 -- opts.pick, the folder was not named, and the user picks it first. It
 -- returns the designer, which is what tests hold on to.
 function M.start(opts)
+  -- -new TYPE makes the project in the folder named, without asking.
+  if opts.newType then opts.answerType = opts.newType end
   local d = { dirty = false, undoStack = {}, redoStack = {}, gridShown = false, snap = false }
   local splitH = H - MENU - OUTPUT - STATUS
 
@@ -182,13 +184,25 @@ function M.start(opts)
   d.codeBox = codePage:TextBox {
     multiLine = true, lineNumbers = true, syntax = "lua", acceptsTab = true,
     left = 0, top = 34, width = CW, height = pageH - 34, grow = true,
-    onChange = function() d:markCodeDirty() end,
+    onChange = function() d:markCodeDirty(); d:outlineSoon() end,
   }
   -- Completion and help from a language server, laid over the code.
   d.assist = assist.new(d, d.codeBox, codePage)
 
   d.propsLabel = rightPane:Label { caption = "Properties", left = 6, top = 2, width = RIGHT - 12, height = 20 }
   d.props = props.new(rightPane, d, { left = 6, top = 24, width = RIGHT - 12, height = splitH - 30 })
+  -- In a project of source files the right pane lists the functions of the
+  -- file open, and a click goes to one.
+  d.outline = rightPane:ListBox {
+    left = 6, top = 24, width = RIGHT - 12, height = splitH - 30, visible = false, grow = true,
+    onChange = function(self)
+      local line = not d.outlineQuiet and d.outlineLines and d.outlineLines[self.selected]
+      if line then
+        d.codeBox.line = line
+        d.codeBox:focus()
+      end
+    end,
+  }
 
   d.output = win:ListBox {
     left = 0, top = MENU + splitH, width = W, height = OUTPUT, font = "mono",
@@ -356,6 +370,32 @@ function M.start(opts)
       self.dirty = true
       self:retitle()
     end
+  end
+
+  -- refreshOutline lists the functions in the code window, for a project of
+  -- source files; outlineSoon does it once typing has paused.
+  function d:refreshOutline()
+    if self.kind == "gui" then return end
+    local items, lines = {}, {}
+    for _, f in ipairs(code.outline(self.codeBox.text)) do
+      items[#items + 1] = ("%s  :%d"):format(f.name, f.line)
+      lines[#lines + 1] = f.line
+    end
+    if #items == 0 then items[1] = "(no functions)" end
+    self.outlineQuiet = true
+    self.outlineLines = lines
+    self.outline.items = items
+    self.outline.selected = 0
+    self.outlineQuiet = false
+  end
+
+  function d:outlineSoon()
+    if self.kind == "gui" then return end
+    self.outlineToken = (self.outlineToken or 0) + 1
+    local token = self.outlineToken
+    gui.after(0.6, function()
+      if token == self.outlineToken then self:refreshOutline() end
+    end)
   end
 
   function d:markCodeDirty()
@@ -674,7 +714,8 @@ function M.start(opts)
     local forms = kind == "gui"
     self.projectLabel.caption = forms and "Project" or "Files"
     self.toolboxLabel.caption = forms and "Toolbox" or ""
-    self.propsLabel.caption = forms and "Properties" or ""
+    self.propsLabel.caption = forms and "Properties" or "Outline"
+    self.outline.visible = not forms
     self.tools.visible = forms
     self.props.picker.visible = forms
     self.props.grid.visible = forms
@@ -740,6 +781,29 @@ function M.start(opts)
     local files = project.files(dir)
     local first = project.exists(dir .. "/main.lua") and "main.lua" or files[1]
     if first then self:openFile(first) end
+  end
+
+  -- changeType says a project of source files is another kind: a console
+  -- program or a game. A GUI application is what its forms make it.
+  -- answerChoice answers the question in tests.
+  function d:changeType()
+    if not self.dir then return end
+    if self.kind == "gui" then
+      self:status("A GUI application is told by its forms; there is no other kind for it to be")
+      return
+    end
+    local others, titles = {}, {}
+    for _, t in ipairs(project.types) do
+      if t.id ~= "gui" then
+        others[#others + 1] = t.id
+        titles[#titles + 1] = t.title .. (t.id == self.kind and "  (now)" or "")
+      end
+    end
+    local i = self:choose("Project Type", titles)
+    if not i or others[i] == self.kind then return end
+    project.setKind(self.dir, others[i])
+    self:setMode(others[i])
+    self:status("This is a " .. (others[i] == "game" and "game" or "console application") .. " now: F5 runs it that way")
   end
 
   -- openFile shows one of the files of a project of source files in the
@@ -860,6 +924,7 @@ function M.start(opts)
     if f then f:close() end
     self.codeStamp = stamp(path)
     self.codeDirty = false
+    self:refreshOutline()
     self:retitle()
   end
 
@@ -1490,6 +1555,7 @@ function M.start(opts)
       { "&New Control...", function() d:newControl() end },
       "-",
       { "New &File...", function() d:addFile() end },
+      { "Project T&ype...", function() d:changeType() end },
     } },
     { "&Tools", {
       { "&Menu Editor...", function() d:editMenu() end, shortcut = "Cmd+E" },
@@ -1520,6 +1586,8 @@ function M.start(opts)
   local dir = opts.dir
   if dir and opts.pick then
     dir = pickProject(dir, opts)
+  elseif opts.newType and project.kind(dir) then
+    error("tlua design: " .. dir .. " is a project already", 0)
   elseif dir and not project.kind(dir) then
     if opts.create or opts.answerType or gui.msgbox("Start a new project in " .. dir .. "?", "yesno", "tlua design") == "yes" then
       dir = startNew(dir, opts)

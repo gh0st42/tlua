@@ -1133,12 +1133,13 @@ func TestDesignerMakesComponents(t *testing.T) {
 			  E.props[2] = { "text", "string", "", "txt.text" }
 			  E.events[1] = { "onChange", "txt.onChange" }
 			  E.events[2] = { "onSubmit", "" }
+			  E.methods[1] = { "clear", "fun()" }
 			  E.parts[2][3] = "true"`)
 			x, y := s.at("E.ok", 10, 10)
 			in.Click(x, y)
 		})
 		s.lua(`D:editInterface()`)
-		s.expect(`D.doc.props.label.to == "lbl.caption" and D.doc.events.onChange == "txt.onChange" and D.doc.events[1] == "onSubmit" and D.doc[2].public == true and D.dirty`)
+		s.expect(`D.doc.props.label.to == "lbl.caption" and D.doc.events.onChange == "txt.onChange" and D.doc.events[1] == "onSubmit" and D.doc[2].public == true and D.doc.methods.clear == "fun()" and D.dirty`)
 		s.lua(`D:save()`)
 		for _, f := range []string{"components/LabeledField.comp.lua", "components/LabeledField.lua", "components/LabeledField.d.lua", "controls/LabeledField.lua"} {
 			if _, err := os.Stat(filepath.Join(s.dir, f)); err != nil {
@@ -1146,7 +1147,7 @@ func TestDesignerMakesComponents(t *testing.T) {
 			}
 		}
 		stub, _ := os.ReadFile(filepath.Join(s.dir, "components/LabeledField.d.lua"))
-		for _, want := range []string{"---@class components.LabeledField.parts", "---@field lbl gui.Label", "---@class components.LabeledField: gui.Frame", "---@field label? string"} {
+		for _, want := range []string{"---@class components.LabeledField.parts", "---@field lbl gui.Label", "---@class components.LabeledField: gui.Frame", "---@field label? string", "---@field clear fun()"} {
 			if !strings.Contains(string(stub), want) {
 				s.t.Errorf("stub lacks %s:\n%s", want, stub)
 			}
@@ -1354,5 +1355,44 @@ func TestNewProjectDialog(t *testing.T) {
 		})
 		s.lua(`D:newProject()`)
 		s.expect(`D.kind == "game" and D.dir == target`)
+	})
+}
+
+func TestDesignerOutlineAndProjectType(t *testing.T) {
+	proj := filepath.Join(t.TempDir(), "tool")
+	withDesigner(t, func(s *scene) {
+		s.L.SetGlobal("proj", lua.LString(proj))
+		s.lua(`D.answerNew = { dir = proj, type = "console" }; D:newProject()`)
+		s.expect(`D.kind == "console" and D.outline.visible and D.propsLabel.caption == "Outline" and not D.props.grid.visible`)
+
+		// The right pane lists the functions; a click goes to one.
+		s.expect(`D.outline.items[1] == "(no functions)" and #D.outlineLines == 0`)
+		s.lua(`D.codeBox.text = "local function first()\nend\n\nfunction second()\nend\n\nfunction third() end\n"; D:refreshOutline()`)
+		s.expect(`#D.outlineLines == 3 and D.outline.items[2] == "second  :4"`)
+		fltk.SetDrawFont(fltk.HELVETICA, 14)
+		_, lh := fltk.MeasureText("Xg", false)
+		x, y := s.at("D.outline", 30, 3+lh*2+lh/2)
+		in.Click(x, y)
+		s.expect(`D.codeBox.line == 7`)
+		// Typing updates it once the typing pauses.
+		s.lua(`D.codeBox.text = D.codeBox.text .. "function fourth() end\n"; D:outlineSoon()`)
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) && s.L.DoString(`__n = #D.outlineLines`) == nil && lua.LVAsNumber(s.L.GetGlobal("__n")) < 4 {
+			s.pump()
+		}
+		s.expect(`#D.outlineLines == 4`)
+
+		// A console program can become a game and back; nothing else changes.
+		s.lua(`D.answerChoice = 2; D:changeType()`)
+		s.expect(`D.kind == "game" and require("design.project").kind(D.dir) == "game"`)
+		data, _ := os.ReadFile(filepath.Join(proj, ".tlua-project"))
+		if !strings.Contains(string(data), `"game"`) {
+			s.t.Errorf("not written:\n%s", data)
+		}
+		s.lua(`D.answerChoice = 1; D:changeType()`)
+		s.expect(`D.kind == "console"`)
+		// A GUI application has no other kind.
+		s.lua(`D.answerNew = { dir = proj .. "2", type = "gui" }; D:newProject(); D.answerChoice = 2; D:changeType()`)
+		s.expect(`D.kind == "gui" and D.statusLine.caption:find("told by its forms") and not D.outline.visible`)
 	})
 }
