@@ -36,6 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"unicode/utf8"
 )
 
 const (
@@ -106,6 +107,50 @@ func aesExtra(method uint16) []byte {
 	b[8] = aesStrength
 	binary.LittleEndian.PutUint16(b[9:], method)
 	return b
+}
+
+// aesHeader fills in a header for an AES entry of sealedLen bytes in the
+// archive that holds plainLen bytes. Writer.CreateRaw, which takes it, does
+// none of what Writer.CreateHeader does for an ordinary entry, so it is done
+// here: the date, in MS-DOS form and as the extended timestamp Info-ZIP
+// writes, the flag for a UTF-8 name, and the versions (WinZip's AES needs
+// 5.1 to read). The caller sets hdr.Name and hdr.Modified.
+func aesHeader(hdr *zip.FileHeader, method uint16, sealedLen, plainLen int) {
+	hdr.Method = zipMethodAES
+	hdr.Flags |= zipFlagCrypt
+	if hasMultibyte(hdr.Name) {
+		hdr.Flags |= 0x800 // the name is UTF-8
+	}
+	hdr.CreatorVersion = hdr.CreatorVersion&0xff00 | 20
+	hdr.ReaderVersion = 51
+	hdr.CompressedSize64, hdr.UncompressedSize64 = uint64(sealedLen), uint64(plainLen)
+	hdr.CRC32 = 0 // AE-2: the MAC covers the data
+
+	hdr.Extra = aesExtra(method)
+	if !hdr.Modified.IsZero() {
+		t := hdr.Modified
+		hdr.ModifiedDate = uint16(t.Day() + int(t.Month())<<5 + (t.Year()-1980)<<9)
+		hdr.ModifiedTime = uint16(t.Second()/2 + t.Minute()<<5 + t.Hour()<<11)
+		var ts [9]byte
+		binary.LittleEndian.PutUint16(ts[0:], 0x5455) // extended timestamp
+		binary.LittleEndian.PutUint16(ts[2:], 5)
+		ts[4] = 1 // the modification time is there
+		binary.LittleEndian.PutUint32(ts[5:], uint32(t.Unix()))
+		hdr.Extra = append(hdr.Extra, ts[:]...)
+	}
+}
+
+// hasMultibyte says whether a name is valid UTF-8 that is not plain ASCII.
+func hasMultibyte(name string) bool {
+	if !utf8.ValidString(name) {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		if name[i] >= 0x80 {
+			return true
+		}
+	}
+	return false
 }
 
 // ctrLE is AES in counter mode as WinZip has it: the counter is 128 bits,

@@ -416,10 +416,7 @@ func zipAdd(L *lua.LState) int {
 		var method uint16
 		sealed, method, err = aesSeal([]byte(data), hdr.Method == zip.Store, password)
 		if err == nil {
-			hdr.Method, hdr.Flags = zipMethodAES, zipFlagCrypt
-			hdr.Extra = aesExtra(method)
-			hdr.CompressedSize64, hdr.UncompressedSize64 = uint64(len(sealed)), uint64(len(data))
-			// AE-2: the CRC is left out, the MAC covers the data.
+			aesHeader(hdr, method, len(sealed), len(data))
 			w, err = z.w.CreateRaw(hdr)
 			if err == nil {
 				_, err = w.Write(sealed)

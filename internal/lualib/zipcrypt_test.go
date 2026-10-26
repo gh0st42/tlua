@@ -131,6 +131,17 @@ func TestZipEncryptionRoundTrip(t *testing.T) {
 		assert(arc:read("other.txt", "second") == "another secret")
 		assert(arc:open("big.bin"):read(5) == "01234")
 
+		-- Dates are kept, as for a file that is not encrypted: the one given,
+		-- and now when none is.
+		local dated = zip.create({ password = "d" })
+		dated:add("old.txt", "x", { modified = 1000000000 })
+		dated:add("new.txt", "y")
+		dated:add("plain.txt", "z", { modified = 1000000000, password = false })
+		local da = zip.load(dated:close(), { password = "d" })
+		assert(da:info("old.txt").modified == 1000000000, da:info("old.txt").modified)
+		assert(da:info("plain.txt").modified == da:info("old.txt").modified)
+		assert(math.abs(os.time() - da:info("new.txt").modified) < 5, da:info("new.txt").modified)
+
 		-- wrong archive password, then none
 		local arc2 = assert(zip.load(bytes, { password = "nope" }))
 		assert(select(2, arc2:read("hello.txt")):find("wrong password", 1, true))
@@ -269,6 +280,9 @@ func TestSevenZipReadsWhatZipWrites(t *testing.T) {
 		out:add("raw.bin", pseudo(70001, 7919), { store = true })
 		out:add("plain.txt", "not encrypted", { password = false })
 		out:add("dir/nested.txt", "nested")
+		out:add("dated.txt", "dated", { modified = 1000000000 })
+		out:add("dated-plain.txt", "dated", { modified = 1000000000, password = false })
+		out:add("ümläut/名前.txt", "unicode name")
 		assert(out:close())`)
 	zipPath := filepath.Join(dir, "ours.zip")
 
@@ -291,6 +305,33 @@ func TestSevenZipReadsWhatZipWrites(t *testing.T) {
 		assert(#slurp(dir .. "/raw.bin") == 70001)
 		assert(slurp(dir .. "/plain.txt") == "not encrypted")
 		assert(slurp(dir .. "/dir/nested.txt") == "nested")`)
+	// The dates are there, as for a file that is not encrypted, and a name
+	// that is not ASCII is what it was.
+	listing, err := exec.Command(sz, "l", "-slt", "-p"+"tlua-k3y!", zipPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("7-Zip l: %v\n%s", err, listing)
+	}
+	modified := map[string]string{}
+	path := ""
+	for _, line := range strings.Split(string(listing), "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "Path = "):
+			path = strings.TrimPrefix(line, "Path = ")
+		case strings.HasPrefix(line, "Modified = "):
+			modified[path] = strings.TrimPrefix(line, "Modified = ")
+		}
+	}
+	if modified["dated.txt"] == "" || modified["dated.txt"] != modified["dated-plain.txt"] ||
+		strings.HasPrefix(modified["dated.txt"], "1979") || !strings.HasPrefix(modified["dated.txt"], "2001-09-09") {
+		t.Errorf("dates differ: encrypted %q, plain %q", modified["dated.txt"], modified["dated-plain.txt"])
+	}
+	if modified["ümläut/名前.txt"] == "" {
+		t.Errorf("the non-ASCII name is not as written:\n%s", listing)
+	}
+	if data, err := os.ReadFile(filepath.Join(extracted, "ümläut", "名前.txt")); err != nil || string(data) != "unicode name" {
+		t.Errorf("the file with a non-ASCII name: %v %q", err, data)
+	}
 	// And it says AES-256, as the format has it.
 	if out, err := exec.Command(sz, "l", "-slt", "-p"+"tlua-k3y!", zipPath).CombinedOutput(); err != nil || !strings.Contains(string(out), "AES-256") {
 		t.Errorf("7-Zip does not call it AES-256: %v\n%s", err, out)
