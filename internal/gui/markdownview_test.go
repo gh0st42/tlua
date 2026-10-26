@@ -101,6 +101,17 @@ form:show()`, func(s *scene) {
 		s.lua(`view.text = "# Hi\n\nthere [x](#hi)"`)
 		s.expect(`view:headings()[1].text == "Hi" and view:scrollTo("hi") and not view:scrollTo("nope")`)
 		s.expect(`select(1, view:open("nope.md")) == false and view.text:find("Not found")`)
+
+		// Searching backwards, and counting.
+		s.lua(`view.text = "one TWO two\n\nthree two\n\nfour"`)
+		s.expect(`select(1, view:matches("two")) == 3 and select(2, view:matches("two")) == 0`)
+		s.expect(`view:search("two") and select(2, view:matches("two")) == 1`)
+		s.expect(`view:search("two") and select(2, view:matches("two")) == 2`)
+		s.expect(`view:search("two") and select(2, view:matches("two")) == 3`)
+		s.expect(`view:search("two") and select(2, view:matches("two")) == 1`)
+		s.expect(`view:search("two", true) and select(2, view:matches("two")) == 3`)
+		s.expect(`view:search("two", true) and select(2, view:matches("two")) == 2`)
+		s.expect(`not view:search("nowhere", true)`)
 	})
 }
 

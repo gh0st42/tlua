@@ -1186,6 +1186,173 @@ function Editor:setAlign(how)
   return true
 end
 
+---------------------------------------------------------------- find and replace
+
+-- opts, for these: matchCase (letters differ by case, else they do not; only
+-- ASCII letters have two), whole (a match is a whole word) and wrap (go
+-- round at the end of the document: on unless false). A match is in one
+-- block's text; tables are not searched.
+
+-- findIn is where needle is in text from byte from: its first and last byte,
+-- or nil.
+local function findIn(text, needle, from, opts)
+  local hay, n = text, needle
+  if not opts.matchCase then hay, n = text:lower(), needle:lower() end
+  while true do
+    local s, e = hay:find(n, from, true)
+    if not s then return nil end
+    if not opts.whole or (not isWordByte(text:byte(s - 1)) and not isWordByte(text:byte(e + 1))) then return s, e end
+    from = s + 1
+  end
+end
+
+-- lastIn is the last match in text that begins before byte limit.
+local function lastIn(text, needle, limit, opts)
+  local from, ls, le = 1, nil, nil
+  while true do
+    local s, e = findIn(text, needle, from, opts)
+    if not s or s > limit then return ls, le end
+    ls, le = s, e
+    from = s + 1
+  end
+end
+
+-- find selects the next match of needle after the selection (before it,
+-- with back) and says whether there was one; a second result is true when
+-- it went round the end to find it.
+function Editor:find(needle, opts, back)
+  opts = opts or {}
+  if needle == nil or needle == "" then return false end
+  local a, z = self:range()
+  local n = #self.blocks
+  local wrap = opts.wrap ~= false
+  local function mark(i, s, e)
+    self.anchor, self.caret = { b = i, o = s - 1 }, { b = i, o = e }
+    self.cell, self.pending, self.lastKind = nil, nil, nil
+  end
+  for step = 0, n do
+    local wrapped = false
+    local i
+    if back then
+      i = a.b - step
+      if i < 1 then i, wrapped = i + n, true end
+    else
+      i = z.b + step
+      if i > n then i, wrapped = i - n, true end
+    end
+    if step > 0 and wrapped and not wrap then return false end
+    local b = self.blocks[i]
+    if hasText(b) then
+      local text = M.textOf(b)
+      local s, e
+      if back then
+        local limit = (step == 0) and a.o or #text + 1
+        -- A match must end where the selection begins, or before.
+        if step == 0 then
+          local from, ls, le = 1, nil, nil
+          while true do
+            local ms, me = findIn(text, needle, from, opts)
+            if not ms or me > limit then break end
+            ls, le, from = ms, me, ms + 1
+          end
+          s, e = ls, le
+        else
+          s, e = lastIn(text, needle, limit, opts)
+        end
+      else
+        local from = (step == 0) and z.o + 1 or 1
+        s, e = findIn(text, needle, from, opts)
+      end
+      if s then
+        mark(i, s, e)
+        return true, wrapped or step == n
+      end
+    end
+  end
+  return false
+end
+
+-- isMatch says whether the selection is a match of needle exactly.
+function Editor:isMatch(needle, opts)
+  opts = opts or {}
+  if needle == nil or needle == "" or not self:hasSelection() then return false end
+  local a, z = self:range()
+  if a.b ~= z.b or not hasText(self.blocks[a.b]) then return false end
+  local text = M.textOf(self.blocks[a.b])
+  local s, e = findIn(text, needle, a.o + 1, opts)
+  return s == a.o + 1 and e == z.o
+end
+
+-- countMatches is how many matches there are, and which of them the
+-- selection is (0 when none).
+function Editor:countMatches(needle, opts)
+  opts = opts or {}
+  if needle == nil or needle == "" then return 0, 0 end
+  local a = self:range()
+  local count, which = 0, 0
+  for i, b in ipairs(self.blocks) do
+    if hasText(b) then
+      local text, from = M.textOf(b), 1
+      while true do
+        local s, e = findIn(text, needle, from, opts)
+        if not s then break end
+        count = count + 1
+        if which == 0 and a.b == i and a.o == s - 1 and self:isMatch(needle, opts) then which = count end
+        from = s + 1
+      end
+    end
+  end
+  return count, which
+end
+
+-- replace puts with in place of the selection when that is a match of
+-- needle, and selects the next one. It says whether it replaced, and
+-- whether it found a next.
+function Editor:replace(needle, with, opts)
+  local replaced = false
+  if self:isMatch(needle, opts) then
+    local a = self:range()
+    local style = self:styleAt({ b = a.b, o = a.o + 1 })
+    local run = { text = with, b = style.b, i = style.i, code = style.code, link = style.link, wiki = style.wiki }
+    self:insertRuns({ run }, "replace")
+    self.lastKind = nil
+    replaced = true
+  end
+  return replaced, self:find(needle, opts)
+end
+
+-- replaceAll replaces every match, as one step of undo, and says how many.
+function Editor:replaceAll(needle, with, opts)
+  opts = opts or {}
+  if needle == nil or needle == "" then return 0 end
+  local total = 0
+  local checked = false
+  for i, b in ipairs(self.blocks) do
+    if hasText(b) then
+      local text = M.textOf(b)
+      local from = 1
+      while true do
+        local s, e = findIn(text, needle, from, opts)
+        if not s then break end
+        if not checked then self:checkpoint("replace") checked = true end
+        local style = b.type == "code" and {} or self:styleAt({ b = i, o = s })
+        local run = { text = with, b = style.b, i = style.i, code = style.code, link = style.link, wiki = style.wiki }
+        local left = split(b.runs, s - 1)
+        local _, right = split(b.runs, e)
+        b.runs = concat(left, b.type == "code" and plain({ run }) or { run }, right)
+        text = M.textOf(b)
+        from = s + #with
+        total = total + 1
+      end
+    end
+  end
+  if total > 0 then
+    self.lastKind = nil
+    self:setCaret(self:clamp(self.caret))
+  end
+  return total
+end
+
 ---------------------------------------------------------------- counting
 
 function Editor:stats()

@@ -632,8 +632,9 @@ help:back()
 - **Selecting.** Dragging selects text, a double click a word.
   `view:selectedText()` is the text selected, `view:copy()` puts it on the
   clipboard, and `view:selectAll()` selects everything.
-  `view:search(text)` selects where text is next found, the case of letters
-  aside, and scrolls to it.
+  `view:search(text [, back])` selects where text is next found (before the
+  selection, with `back`), the case of letters aside, and scrolls to it, and
+  `view:matches(text)` says how many there are and which is selected.
 - **Keys.** Clicked on, it takes the keyboard. Up, Down, Page Up, Page Down,
   Space, Home and End scroll; Ctrl+C (Cmd+C) copies and Ctrl+A selects all;
   Alt+Left and Alt+Right (Cmd+[ and Cmd+]) go back and forward.
@@ -686,6 +687,13 @@ edit.ed:toggle("b") edit:changed()                     -- a Bold button
   `setAlign("left" | "center" | "right" | false)`, the last four on the
   caret's row or column; each is followed by `edit:changed()`. A cell holds
   one line of styled text; a line break typed or pasted becomes a space.
+- **Finding.** `edit.ed:find(text, opts, back)` selects the next match (the
+  one before, with `back`), `replace(text, with, opts)` replaces the match
+  selected and selects the next, `replaceAll(text, with, opts)` replaces all
+  as one step of undo, and `countMatches(text, opts)` says how many there are
+  and which is selected. `opts` is `matchCase`, `whole` (whole words) and
+  `wrap` (round the end, on unless false). Tables are not searched; call
+  `edit:moved()` after `find` (and `changed()` after a replace) to show it.
 - **What a program adds.** `edit.ed` is the `markdown.editor` underneath:
   its `toggle("b")`, `setType("h2")`, `setLink(url)`, `insertImage(src)`,
   `undo()`, `copyText()`, `paste(text)` and the rest are a program's menus

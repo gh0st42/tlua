@@ -168,6 +168,44 @@ function Editor:deleteColumn() end
 ---@param how "left"|"center"|"right"|false the caret's column
 ---@return boolean
 function Editor:setAlign(how) end
+---@class markdown.FindOptions
+---@field matchCase? boolean letters differ by case
+---@field whole? boolean a match is a whole word
+---@field wrap? boolean go round at the end of the document (on unless false)
+
+--- Selects the next match of needle after the selection (before it, with
+--- back), in a block's text (tables are not searched).
+---@param needle string
+---@param opts? markdown.FindOptions
+---@param back? boolean
+---@return boolean found
+---@return boolean? wrapped went round the end to find it
+function Editor:find(needle, opts, back) end
+--- Whether the selection is a match of needle exactly.
+---@param needle string
+---@param opts? markdown.FindOptions
+---@return boolean
+function Editor:isMatch(needle, opts) end
+--- How many matches there are, and which the selection is (0 for none).
+---@param needle string
+---@param opts? markdown.FindOptions
+---@return integer count
+---@return integer which
+function Editor:countMatches(needle, opts) end
+--- Puts with in place of the selection if it is a match, in its style, and
+--- selects the next match.
+---@param needle string
+---@param with string
+---@param opts? markdown.FindOptions
+---@return boolean replaced
+---@return boolean found a next match
+function Editor:replace(needle, with, opts) end
+--- Replaces every match, as one step of undo; how many.
+---@param needle string
+---@param with string
+---@param opts? markdown.FindOptions
+---@return integer
+function Editor:replaceAll(needle, with, opts) end
 ---@param b integer the table's block
 ---@param r integer row
 ---@param k integer column

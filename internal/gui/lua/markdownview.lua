@@ -301,28 +301,67 @@ gui.define {
 
     -- search selects where text is next found after the selection, and
     -- shows it: the case of letters aside, from the top again at the end.
-    -- It is false when the page does not have it.
-    function c:search(text)
+    -- With back it is the match before the selection, from the bottom again
+    -- at the top. It is false when the page does not have it.
+    function c:search(text, back)
       sync(self)
       text = tostring(text or ""):lower()
       if text == "" or #s.blocks == 0 then return false end
-      local _, b = range()
-      local start = b or { b = 1, o = 0 }
+      local a, b = range()
       local n = #s.blocks
+      local function found(i, at)
+        s.sel, s.caret = { b = i, o = at - 1 }, { b = i, o = at - 1 + #text }
+        s.reveal = true
+        self:redraw()
+        return true
+      end
+      if back then
+        local start = a or { b = n, o = math.huge }
+        for step = 0, n do
+          local i = (start.b - 1 - step) % n + 1
+          local hay = md.textOf(s.blocks[i]):lower()
+          local last, from = nil, 1
+          while true do
+            local at = hay:find(text, from, true)
+            if not at then break end
+            if step == 0 and at - 1 >= start.o then break end
+            last, from = at, at + 1
+          end
+          if last then return found(i, last) end
+        end
+        return false
+      end
+      local start = b or { b = 1, o = 0 }
       for step = 0, n do
         local i = (start.b - 1 + step) % n + 1
         local hay = md.textOf(s.blocks[i]):lower()
         local from = (step == 0) and start.o + 1 or 1
         local at = hay:find(text, from, true)
         if not at and step == n then at = hay:find(text, 1, true) end
-        if at then
-          s.sel, s.caret = { b = i, o = at - 1 }, { b = i, o = at - 1 + #text }
-          s.reveal = true
-          self:redraw()
-          return true
-        end
+        if at then return found(i, at) end
       end
       return false
+    end
+
+    -- matches counts where text is found on the page, the case of letters
+    -- aside, and says which of them the selection is (0 when it is none).
+    function c:matches(text)
+      sync(self)
+      text = tostring(text or ""):lower()
+      if text == "" then return 0, 0 end
+      local a = range()
+      local count, which = 0, 0
+      for i, block in ipairs(s.blocks) do
+        local hay, from = md.textOf(block):lower(), 1
+        while true do
+          local at = hay:find(text, from, true)
+          if not at then break end
+          count = count + 1
+          if a and a.b == i and a.o == at - 1 and which == 0 then which = count end
+          from = at + 1
+        end
+      end
+      return count, which
     end
 
     ---------------------------------------------------------------- drawing

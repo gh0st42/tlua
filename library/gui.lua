@@ -638,11 +638,19 @@ function MarkdownView:headings() end
 ---@return boolean found
 function MarkdownView:scrollTo(anchor) end
 
---- Selects where text is next found after the selection, case aside, and
---- scrolls to it; from the top again at the end.
+--- Selects where text is next found after the selection (or before it, with
+--- back), case aside, and scrolls to it; round again at the end.
 ---@param text string
+---@param back? boolean the match before the selection instead
 ---@return boolean found
-function MarkdownView:search(text) end
+function MarkdownView:search(text, back) end
+
+--- How many times text is on the page, the case aside, and which of them
+--- is selected (0 when none is).
+---@param text string
+---@return integer count
+---@return integer which
+function MarkdownView:matches(text) end
 
 --- The text selected, without its formatting; "" for none.
 ---@return string

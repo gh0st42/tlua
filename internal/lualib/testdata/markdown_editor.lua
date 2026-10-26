@@ -408,4 +408,89 @@ test("cells are found in a layout", function()
   eq(e.cell.o, 0)
 end)
 
+---------------------------------------------------------------- find and replace
+
+local function selected(e)
+  local a, z = e:range()
+  if a.b ~= z.b then return nil end
+  return md.textOf(e.blocks[a.b]):sub(a.o + 1, z.o)
+end
+
+test("find goes to the next match, across blocks, and round again", function()
+  local e = ed("The cat sat.\n\nA CAT here, and a catalogue.\n\n- no felines\n")
+  e:setCaret { b = 1, o = 0 }
+  ok(e:find("cat"))
+  eq(selected(e), "cat"); eq(e.anchor.b, 1); eq(e.anchor.o, 4)
+  local found, wrapped = e:find("cat")
+  ok(found and not wrapped); eq(selected(e), "CAT"); eq(e.caret.b, 2)
+  ok(e:find("cat")); eq(selected(e), "cat") eq(e.anchor.o, 18) -- the one in "catalogue"
+  found, wrapped = e:find("cat")
+  ok(found and wrapped, "back to the first")
+  eq(e.caret.b, 1)
+  ok(not e:find("dog"))
+  ok(not e:find(""))
+  eq(select(1, e:find("cat", { wrap = false })), true)
+  e:setCaret { b = 2, o = 20 }
+  eq(select(1, e:find("cat", { wrap = false })), false, "no round with wrap off")
+end)
+
+test("find: match case, whole words, and backwards", function()
+  local e = ed("cat Cat CAT catalogue cat\n")
+  e:setCaret { b = 1, o = 0 }
+  e:find("Cat", { matchCase = true })
+  eq(e.anchor.o, 4)
+  e:setCaret { b = 1, o = 0 }
+  local words = 0
+  for _ = 1, 4 do
+    if e:find("cat", { whole = true }) then words = words + 1 end
+  end
+  eq(words, 4, "cat, Cat, CAT and the last one, round again")
+  e:setCaret { b = 1, o = 25 }
+  ok(e:find("cat", { whole = true }, true)); eq(e.anchor.o, 22)
+  ok(e:find("cat", { whole = true }, true)); eq(e.anchor.o, 8)
+  ok(e:find("cat", nil, true)); eq(e.anchor.o, 4, "Cat, before CAT")
+  e:setCaret { b = 1, o = 0 }
+  local found, wrapped = e:find("cat", nil, true)
+  ok(found and wrapped); eq(e.anchor.o, 22)
+end)
+
+test("counting matches and knowing which is selected", function()
+  local e = ed("one two one\n\ntwo one\n")
+  eq(e:countMatches("one"), 3)
+  e:setCaret { b = 1, o = 0 }
+  e:find("one"); e:find("one")
+  local n, which = e:countMatches("one")
+  eq(n, 3); eq(which, 2)
+  eq(select(1, e:countMatches("none")), 0)
+end)
+
+test("replace puts text for the selection, keeps its style, and goes on", function()
+  local e = ed("a **bold cat** and a cat\n")
+  e:setCaret { b = 1, o = 0 }
+  e:find("cat")
+  ok(e:isMatch("cat"))
+  local replaced, next = e:replace("cat", "dog")
+  ok(replaced and next)
+  eq(e:markdown(), "a **bold dog** and a cat\n")
+  replaced, next = e:replace("cat", "dog")
+  ok(replaced); ok(not next, "no more is left")
+  eq(e:markdown(), "a **bold dog** and a dog\n")
+  replaced, next = e:replace("cat", "dog")
+  ok(not replaced, "the selection is not a match: nothing is replaced")
+end)
+
+test("replace all, as one step of undo", function()
+  local e = ed("Cat and cat\n\ncatalog `cat`\n")
+  eq(e:replaceAll("cat", "dog"), 4)
+  eq(e:markdown(), "dog and dog\n\ndogalog `dog`\n")
+  e:undo()
+  eq(e:markdown(), "Cat and cat\n\ncatalog `cat`\n")
+  eq(e:replaceAll("cat", "dog", { matchCase = true, whole = true }), 2)
+  eq(e:markdown(), "Cat and dog\n\ncatalog `dog`\n")
+  eq(e:replaceAll("zzz", "x"), 0)
+  local f = ed("ab\n")
+  eq(f:replaceAll("a", "aa"), 1, "a replacement is not searched again")
+  eq(f:markdown(), "aab\n")
+end)
+
 if #failed > 0 then error(#failed .. " failed:\n" .. table.concat(failed, "\n"), 0) end
