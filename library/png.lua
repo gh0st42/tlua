@@ -48,6 +48,18 @@ function Image:clone() end
 ---@return png.Image
 function Image:crop(x, y, w, h) end
 
+--- A new picture turned clockwise by that many quarter turns; a negative
+--- number turns it the other way.
+---@param turns integer
+---@return png.Image
+function Image:rotate(turns) end
+
+--- A new picture mirrored left to right ("horizontal") or top to bottom
+--- ("vertical").
+---@param axis "horizontal"|"vertical"
+---@return png.Image
+function Image:flip(axis) end
+
 --- The picture as the bytes of a PNG file.
 ---@return string? data
 ---@return string? why

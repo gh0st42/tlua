@@ -113,6 +113,40 @@ func TestPng(t *testing.T) {
 	`)
 }
 
+func TestPngRotateAndFlip(t *testing.T) {
+	runIn(t, nil, `
+		local png = require "png"
+		-- 3 wide, 2 high: red at the top left, green at the top right, blue
+		-- at the bottom left.
+		local img = png.new(3, 2, "#ffffff")
+		img:set(0, 0, "#ff0000"); img:set(2, 0, "#00ff00"); img:set(0, 1, "#0000ff")
+		local function at(i, x, y) return (select(1, i:get(x, y)) == 255 and "r" or "") ..
+		  (select(2, i:get(x, y)) == 255 and "g" or "") .. (select(3, i:get(x, y)) == 255 and "b" or "") end
+		local cw = img:rotate(1)
+		assert(cw.width == 2 and cw.height == 3)
+		-- Clockwise: the top left goes to the top right, the bottom left to the top left.
+		assert(select(1, cw:get(1, 0)) == 255 and select(2, cw:get(1, 0)) == 0, "red at top right")
+		assert(select(3, cw:get(0, 0)) == 255 and select(1, cw:get(0, 0)) == 0, "blue at top left")
+		assert(select(2, cw:get(1, 2)) == 255 and select(1, cw:get(1, 2)) == 0, "green at bottom right")
+		local ccw = img:rotate(-1)
+		assert(ccw.width == 2 and ccw.height == 3)
+		assert(select(2, ccw:get(0, 0)) == 255 and select(1, ccw:get(0, 0)) == 0, "green at top left")
+		assert(select(1, ccw:get(0, 2)) == 255 and select(2, ccw:get(0, 2)) == 0, "red at bottom left")
+		local half = img:rotate(2)
+		assert(half.width == 3 and half.height == 2)
+		assert(select(1, half:get(2, 1)) == 255 and select(2, half:get(2, 1)) == 0, "red at bottom right")
+		assert(img:rotate(4):pixels() == img:pixels() and img:rotate(3):pixels() == ccw:pixels())
+		assert(img:rotate(1):rotate(1):pixels() == half:pixels())
+		local h = img:flip("horizontal")
+		assert(select(1, h:get(2, 0)) == 255 and select(2, h:get(0, 0)) == 255, "mirrored left to right")
+		local v = img:flip("vertical")
+		assert(select(3, v:get(0, 0)) == 255 and select(1, v:get(0, 1)) == 255, "mirrored top to bottom")
+		assert(h:flip("h"):pixels() == img:pixels() and v:flip("v"):pixels() == img:pixels())
+		assert(img:get(0, 0) == 255, "the original is as it was")
+		assert(not pcall(img.flip, img, "sideways"))
+	`)
+}
+
 func TestZip(t *testing.T) {
 	dir := t.TempDir()
 	runIn(t, map[string]string{"dir": dir}, `

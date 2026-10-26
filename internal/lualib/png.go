@@ -59,6 +59,8 @@ func openPng(L *lua.LState) int {
 		"pixels": imagePixels,
 		"clone":  imageClone,
 		"crop":   imageCrop,
+		"rotate": imageRotate,
+		"flip":   imageFlip,
 		"encode": imageEncode,
 		"save":   imageSave,
 	})
@@ -323,6 +325,69 @@ func imageCrop(L *lua.LState) int {
 		L.ArgError(2, "the rectangle is outside the picture")
 	}
 	pushImage(L, toNRGBA(img.Pix.SubImage(r)))
+	return 1
+}
+
+// imageRotate is img:rotate(turns): a new picture turned clockwise by that
+// many quarter turns (a negative number turns it the other way).
+func imageRotate(L *lua.LState) int {
+	img := checkImage(L, 1)
+	turns := ((L.CheckInt(2) % 4) + 4) % 4
+	src := img.Pix
+	w, h := src.Rect.Dx(), src.Rect.Dy()
+	if turns%2 == 0 {
+		pix := image.NewNRGBA(image.Rect(0, 0, w, h))
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				nx, ny := x, y
+				if turns == 2 {
+					nx, ny = w-1-x, h-1-y
+				}
+				copy(pix.Pix[ny*pix.Stride+nx*4:ny*pix.Stride+nx*4+4], src.Pix[y*src.Stride+x*4:y*src.Stride+x*4+4])
+			}
+		}
+		pushImage(L, pix)
+		return 1
+	}
+	pix := image.NewNRGBA(image.Rect(0, 0, h, w))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			// A quarter turn clockwise takes (x, y) to (h-1-y, x); three
+			// take it to (y, w-1-x).
+			nx, ny := h-1-y, x
+			if turns == 3 {
+				nx, ny = y, w-1-x
+			}
+			copy(pix.Pix[ny*pix.Stride+nx*4:ny*pix.Stride+nx*4+4], src.Pix[y*src.Stride+x*4:y*src.Stride+x*4+4])
+		}
+	}
+	pushImage(L, pix)
+	return 1
+}
+
+// imageFlip is img:flip(axis): a new picture mirrored left to right
+// ("horizontal") or top to bottom ("vertical").
+func imageFlip(L *lua.LState) int {
+	img := checkImage(L, 1)
+	axis := L.CheckString(2)
+	if axis != "horizontal" && axis != "vertical" && axis != "h" && axis != "v" {
+		L.ArgError(2, `axis must be "horizontal" or "vertical"`)
+	}
+	src := img.Pix
+	w, h := src.Rect.Dx(), src.Rect.Dy()
+	pix := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			nx, ny := x, y
+			if axis[0] == 'h' {
+				nx = w - 1 - x
+			} else {
+				ny = h - 1 - y
+			}
+			copy(pix.Pix[ny*pix.Stride+nx*4:ny*pix.Stride+nx*4+4], src.Pix[y*src.Stride+x*4:y*src.Stride+x*4+4])
+		}
+	}
+	pushImage(L, pix)
 	return 1
 }
 
