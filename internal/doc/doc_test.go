@@ -31,6 +31,8 @@ func TestTopics(t *testing.T) {
 		"socket.http.request": {"http.request(url_or_reqt, body)", ""},
 		"socket.tp.connect":   {"tp.connect(", ""},
 		"lfs.attributes":      {"lfs.attributes(path [, name])\n\nA table about", "permissions"},
+		"png.rotate":          {"img:rotate(turns)\n\nTurned clockwise", ""},
+		"zip.read":            {"arc:read(name [, password])\n\nThe file's contents", "wrong password"},
 		"markdown.anchor":     {"markdown.anchor(text)\n\nThe anchor", "getting-started"},
 	} {
 		text, err := show(texts, topic, 80, false)

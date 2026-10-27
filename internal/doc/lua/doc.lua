@@ -61,6 +61,10 @@ function M.find(pages, topic)
             local want = topic
             while #want > #prefix do
                 local h = heading(blocks, want) or heading(blocks, short .. want:sub(#prefix + 1))
+                -- Or a method: png.rotate is the heading img:rotate(turns).
+                if not h and want:sub(#prefix + 1, #prefix + 1) == "." and #want > #prefix + 1 then
+                    h = heading(blocks, ":" .. want:sub(#prefix + 2))
+                end
                 if h then return name, h end
                 want = want:match("^(.*)[.:][^.:]*$") or prefix
             end
