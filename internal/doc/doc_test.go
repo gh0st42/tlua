@@ -16,6 +16,7 @@ func TestTopics(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"index", "sys", "term", "tui", "inspect", "dkjson", "argparse",
+		"lfs", "zlib", "zip", "png", "markdown", "ssl",
 		"socket", "socket.http", "lua-language", "lua-stdlib", "gui", "design", "pico"} {
 		if texts[name] == "" {
 			t.Errorf("no page %s", name)
@@ -29,6 +30,8 @@ func TestTopics(t *testing.T) {
 		"tui.Application:run": {"tui.Application\n", "app:run()"},
 		"socket.http.request": {"http.request(url_or_reqt, body)", ""},
 		"socket.tp.connect":   {"tp.connect(", ""},
+		"lfs.attributes":      {"lfs.attributes(path [, name])\n\nA table about", "permissions"},
+		"markdown.anchor":     {"markdown.anchor(text)\n\nThe anchor", "getting-started"},
 	} {
 		text, err := show(texts, topic, 80, false)
 		if err != nil {

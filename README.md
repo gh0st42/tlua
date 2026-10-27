@@ -868,7 +868,8 @@ against Python's zlib, gzip and zipfile instead, both ways round. What differs:
 ### TLS
 
 `require "ssl"` is LuaSec: a LuaSocket TCP connection wrapped in TLS, as a
-client or a server, with certificates, ALPN and SNI. Its Go half is
+client or a server, with certificates, ALPN and SNI
+([docs/modules/ssl.md](docs/modules/ssl.md) is its page in the built-in help). Its Go half is
 built on Go's `crypto/tls`, and LuaSec's own `ssl.lua` and `ssl/https.lua`
 run on top of it, so code written for LuaSec runs as it is:
 
@@ -965,7 +966,9 @@ found after `package.path`.
 
 These have no LuaRocks original. Like the ones above, a program `require`s
 them. [docs/modules](docs/modules/README.md) describes these, the
-libraries above, LuaSocket, and Lua 5.1 itself, function by function.
+libraries above, LuaSocket, and Lua 5.1 itself, function by function: a page
+each for `lfs`, `zlib`, `zip`, `png`, `markdown`, `ssl`, `sys`, `term`, `tui`
+and the rest, listed under Libraries, which `tlua doc` shows from the binary.
 
 - `sys`, `term` and `tui`, from turbolua, for console programs: files and
   folders (`sys.readfile`, `sys.copy`, `sys.listdir`, ...); an ANSI

@@ -31,9 +31,10 @@ var sources embed.FS
 
 const usage = `usage: tlua doc [-g] [-no-pager] [topic]
 
-Shows the documentation built into tlua: a page for each module (sys,
-term, tui, inspect, dkjson, argparse, socket, ...), Lua 5.1 itself (lua,
-stdlib), the gui, the designer and the console (gui, design, pico).
+Shows the documentation built into tlua: a page for each library (lfs,
+zlib, zip, png, markdown, inspect, dkjson, argparse, socket, ssl, and sys,
+term and tui from turbolua), Lua 5.1 itself (lua, stdlib), the gui, the
+designer and the game console (gui, design, pico).
 
   tlua doc              the contents, and the names of the pages
   tlua doc tui          a page
