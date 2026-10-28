@@ -57,7 +57,7 @@ func setClipboard(text string) error                          { return errNoBack
 func setScheme(name string)                                   {}
 func setColors(background, background2, foreground *[3]uint8) {}
 
-func dialog(title, message string, buttons []string, input bool, deflt string, stop func() bool) (int, string, error) {
+func dialog(title, message string, buttons []string, input bool, deflt string, stop func() bool, around *guiObject) (int, string, error) {
 	return -1, "", errNoBackend
 }
 
@@ -66,6 +66,6 @@ type dialogField struct {
 	secret       bool
 }
 
-func dialogFields(title, message string, buttons []string, fields []dialogField, stop func() bool) (int, []string, error) {
+func dialogFields(title, message string, buttons []string, fields []dialogField, stop func() bool, around *guiObject) (int, []string, error) {
 	return -1, nil, errNoBackend
 }

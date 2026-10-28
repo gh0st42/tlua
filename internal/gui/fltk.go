@@ -47,6 +47,24 @@ func centered(w, h int) (int, int) {
 	return sx + (sw-w)/2, sy + (sh-h)/2
 }
 
+// centeredOn is where a window of the given size sits in the middle of the
+// form around, kept inside the screen that form is on: a dialog or a new
+// form belongs where the user is working, which on a machine with several
+// screens is not always the main one. With no form up it is the main
+// screen's middle.
+func centeredOn(w, h int, around *guiObject) (int, int) {
+	win := window(around)
+	if win == nil || !win.IsShown() {
+		return centered(w, h)
+	}
+	cx, cy := win.XRoot()+win.W()/2, win.YRoot()+win.H()/2
+	sx, sy, sw, sh := fltk.ScreenWorkArea(fltk.ScreenNum(cx, cy))
+	x, y := cx-w/2, cy-h/2
+	x = max(sx, min(x, sx+sw-w))
+	y = max(sy, min(y, sy+sh-h))
+	return x, y
+}
+
 // label keeps FLTK from reading an @ in a caption as the name of a symbol.
 func label(s string) string { return strings.ReplaceAll(s, "@", "@@") }
 
@@ -261,7 +279,7 @@ func buildForm(f *guiObject) error {
 		return nil
 	}
 	w, h := propInt(f, "width", 360), propInt(f, "height", 240)
-	x, y := centered(w, h)
+	x, y := centeredOn(w, h, f.app.anchor(f))
 	if f.placed {
 		x, y = propInt(f, "left", 0), propInt(f, "top", 0)
 	}
@@ -1423,12 +1441,12 @@ func onKey(f *guiObject) bool {
 // input is set. It returns the index of the button pressed, or -1 when the
 // box was closed some other way, and what was typed. stop says when the
 // program has been told to stop, which closes the box.
-func dialog(title, message string, buttons []string, input bool, deflt string, stop func() bool) (int, string, error) {
+func dialog(title, message string, buttons []string, input bool, deflt string, stop func() bool, around *guiObject) (int, string, error) {
 	var fields []dialogField
 	if input {
 		fields = []dialogField{{value: deflt}}
 	}
-	pressed, texts, err := dialogFields(title, message, buttons, fields, stop)
+	pressed, texts, err := dialogFields(title, message, buttons, fields, stop, around)
 	text := ""
 	if len(texts) > 0 {
 		text = texts[0]
@@ -1445,7 +1463,7 @@ type dialogField struct {
 
 // dialogFields is dialog with any number of lines to type into. It returns
 // what each held.
-func dialogFields(title, message string, buttons []string, fields []dialogField, stop func() bool) (int, []string, error) {
+func dialogFields(title, message string, buttons []string, fields []dialogField, stop func() bool, around *guiObject) (int, []string, error) {
 	const pad, gap, bw, bh = 16, 8, 88, 28
 	win := fltk.NewWindow(400, 200, title)
 	defer win.Destroy()
@@ -1506,7 +1524,7 @@ func dialogFields(title, message string, buttons []string, fields []dialogField,
 	}
 	h := y + bh + pad
 	win.End()
-	x, wy := centered(w, h)
+	x, wy := centeredOn(w, h, around)
 	win.Resize(x, wy, w, h)
 	win.SetCallback(func() { pressed = -1; win.Hide() })
 	win.Show()

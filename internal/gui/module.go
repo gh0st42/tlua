@@ -1367,6 +1367,12 @@ func (a *app) fire(o *guiObject, event string, args ...lua.LValue) lua.LValue {
 	if fn == nil {
 		return lua.LNil
 	}
+	// A handler of something the user did says which form is being worked
+	// in: that is where a dialog it opens belongs.
+	switch event {
+	case "onClick", "onDoubleClick", "onChange", "onKey", "onDrop":
+		a.lastEvent = o
+	}
 	return a.call(fn, append([]lua.LValue{o.ud}, args...)...)
 }
 
@@ -1436,6 +1442,33 @@ type menuPick struct {
 	name lua.LValue
 	text string
 	on   bool
+}
+
+// anchor is the form a new window belongs near: the one the last click or
+// key was in, else the one that has the keyboard, else the one made last,
+// provided it is on screen; nil when none is, or only skip is. A dialog and a
+// form with no place of its own open in its middle, on its screen.
+func (a *app) anchor(skip *guiObject) *guiObject {
+	ok := func(f *guiObject) bool { return f != nil && f != skip && f.kind == "Form" && shown(f) }
+	if a.lastEvent != nil {
+		if f := a.lastEvent.form(); ok(f) {
+			return f
+		}
+	}
+	for _, f := range a.forms {
+		if ok(f) && f.active {
+			return f
+		}
+	}
+	if ok(a.lastForm) {
+		return a.lastForm
+	}
+	for _, f := range a.forms {
+		if ok(f) {
+			return f
+		}
+	}
+	return nil
 }
 
 // popup is gui.popup(items [, near]): a menu at the mouse, over near's form
