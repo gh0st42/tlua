@@ -146,3 +146,15 @@ few hundred calls deep raised "stack overflow", where Lua 5.1 allows about
 as it is used (`MinimizeStackMemory`) so that each coroutine stays small.
 That stack's `IsFull` was never true, so the overflow came as a Go panic
 worded "lua callstack overflow"; it now says, as Lua does, "stack overflow".
+
+## state.go, _state.go, coroutinelib.go: yielding across a call through Go
+
+A coroutine yields by leaving the virtual machine's loop, which only works
+when that loop is the coroutine's own. From inside a call that went through Go
+(a `pcall`, a metamethod, a `table.sort` comparison, a `gsub` callback, a
+for-in iterator) the loop that was left was a nested one, and the Go caller
+carried on as if the call had returned, ending in a nil pointer dereference
+reported as "runtime error: invalid memory address". The state now counts
+such calls, and a yield from inside one raises Lua 5.1's own error,
+"attempt to yield across metamethod/C-call boundary". `pcall` catches it, as
+in 5.1, and puts the count right after any error.

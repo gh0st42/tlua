@@ -1050,7 +1050,9 @@ func (ls *LState) callR(nargs, nret, rbase int) {
 		ls.G.CurrentThread = ls
 		ls.mainLoop(ls, nil)
 	} else {
+		ls.cCalls++
 		ls.mainLoop(ls, ls.currentFrame)
+		ls.cCalls--
 	}
 	if nret != MultRet {
 		ls.reg.SetTop(rbase + nret)
@@ -1809,6 +1811,7 @@ func (ls *LState) Call(nargs, nret int) {
 
 func (ls *LState) PCall(nargs, nret int, errfunc *LFunction) (err error) {
 	err = nil
+	cCalls := ls.cCalls
 	sp := ls.stack.Sp()
 	base := ls.reg.Top() - nargs - 1
 	oldpanic := ls.Panic
@@ -1821,6 +1824,7 @@ func (ls *LState) PCall(nargs, nret int, errfunc *LFunction) (err error) {
 		ls.hasErrorFunc = false
 		rcv := recover()
 		if rcv != nil {
+			ls.cCalls = cCalls // what the error unwound is not in a call any more
 			if _, ok := rcv.(*ApiError); !ok {
 				err = newApiErrorS(ApiErrorPanic, fmt.Sprint(rcv))
 				if ls.Options.IncludeGoStackTrace {
@@ -2000,7 +2004,17 @@ func (ls *LState) Resume(th *LState, fn *LFunction, args ...LValue) (ResumeState
 	return ResumeYield, nil, ret
 }
 
+// checkYield raises the error Lua 5.1 gives for a yield from inside a call
+// that went through Go: the virtual machine cannot be left from there and
+// come back, and used to fail with a nil pointer.
+func (ls *LState) checkYield() {
+	if ls.cCalls > 0 && ls.Parent != nil {
+		ls.RaiseError("attempt to yield across metamethod/C-call boundary")
+	}
+}
+
 func (ls *LState) Yield(values ...LValue) int {
+	ls.checkYield()
 	ls.SetTop(0)
 	for _, lv := range values {
 		ls.Push(lv)

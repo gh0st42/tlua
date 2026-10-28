@@ -199,6 +199,10 @@ type LState struct {
 	alloc        *allocator
 	currentFrame *callFrame
 	wrapped      bool
+	// cCalls counts the calls the state is in the middle of that went
+	// through Go and came back into the virtual machine (a pcall, a
+	// metamethod, a sort's comparison): a coroutine cannot yield across them.
+	cCalls       int
 	uvcache      *Upvalue
 	hasErrorFunc bool
 	mainLoop     func(*LState, *callFrame)

@@ -36,6 +36,7 @@ func coCreate(L *LState) int {
 }
 
 func coYield(L *LState) int {
+	L.checkYield()
 	return -1
 }
 

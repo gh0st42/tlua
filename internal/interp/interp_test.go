@@ -76,6 +76,49 @@ func TestGopherLuaPatches(t *testing.T) {
 			assert(not ok and tostring(err):find("stack overflow", 1, true), tostring(err))
 			-- and the state is fine after it
 			assert(f(100) == 100)`,
+		"a yield across a call through Go is an error, not a crash": `
+			local function resumeError(f)
+				local co = coroutine.create(f)
+				local ok, err = coroutine.resume(co)
+				return ok, tostring(err)
+			end
+			local marker = "attempt to yield across metamethod/C-call boundary"
+			-- a for-in iterator, a sort's comparison and a metamethod are calls through Go
+			for name, f in pairs {
+				iterator = function() for x in function() coroutine.yield(1) end do end end,
+				sort = function() table.sort({3, 2, 1}, function(a, b) coroutine.yield() return a < b end) end,
+				index = function() return setmetatable({}, {__index = function() coroutine.yield() end}).x end,
+				gsub = function() return ("abc"):gsub("%w", function() coroutine.yield() end) end,
+			} do
+				local ok, err = resumeError(f)
+				assert(not ok and err:find(marker, 1, true), name .. ": " .. err)
+			end
+			-- pcall is such a call: it catches the error, as in 5.1, and the coroutine goes on
+			local co = coroutine.wrap(function()
+				local ok, err = pcall(coroutine.yield, 1)
+				assert(not ok and tostring(err):find(marker, 1, true), tostring(err))
+				local ok2, err2 = pcall(function() coroutine.yield(2) end)
+				assert(not ok2)
+				-- a yield that is not across one still works afterwards
+				local back = coroutine.yield("fine")
+				return back
+			end)
+			assert(co() == "fine")
+			assert(co("done") == "done")
+			-- another coroutine resumed from inside a pcall yields to its resumer as ever
+			local outer = coroutine.wrap(function()
+				local inner = coroutine.wrap(function() coroutine.yield("inner") return "end" end)
+				local ok, v = pcall(inner)
+				coroutine.yield(v)
+				return inner()
+			end)
+			assert(outer() == "inner" and outer() == "end")
+			-- an error through nested calls leaves the count right
+			local co3 = coroutine.wrap(function()
+				pcall(function() return setmetatable({}, {__index = function() error("x") end}).y end)
+				coroutine.yield("after")
+			end)
+			assert(co3() == "after")`,
 		"table.concat of a long table": `
 			local t = {}
 			for i = 1, 600000 do t[i] = "x" end
