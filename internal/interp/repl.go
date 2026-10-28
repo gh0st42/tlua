@@ -115,7 +115,7 @@ func isIncomplete(err error) bool {
 	if perr, ok := apiErr.Cause.(*parse.Error); ok {
 		return perr.Pos.Line == parse.EOF
 	}
-	return strings.Contains(apiErr.Error(), "at EOF")
+	return strings.Contains(apiErr.Error(), "near '<eof>'")
 }
 
 func readLine(in *bufio.Reader, p string) (string, error) {

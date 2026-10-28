@@ -20,15 +20,40 @@ type Error struct {
 	Pos     ast.Position
 	Message string
 	Token   string
+	// EOFLine is the last line there was, when the error is at the end of
+	// the input and Pos.Line says only that (EOF).
+	EOFLine int
 }
 
+// The messages the lexer and the parser give, as Lua 5.1 words them.
+var luaMessages = map[string]string{
+	"syntax error":                  "unexpected symbol",
+	"parse error":                   "unexpected symbol",
+	"unterminated string":           "unfinished string",
+	"unterminated multiline string": "unfinished long string",
+	"invalid multiline string":      "invalid long string delimiter",
+	"invalid multiline comment":     "invalid long string delimiter",
+	"illegal hexadecimal number":    "malformed number",
+	"Invalid token":                 "unexpected symbol",
+	"Invalid '~' token":             "unexpected symbol",
+}
+
+// Error is worded as Lua 5.1 words them, chunk:line: message near 'token',
+// so that what reads those (an editor's jump to a line, a test comparing with
+// the reference) finds what it expects.
 func (e *Error) Error() string {
-	pos := e.Pos
-	if pos.Line == EOF {
-		return fmt.Sprintf("%v at EOF:   %s\n", pos.Source, e.Message)
-	} else {
-		return fmt.Sprintf("%v line:%d(column:%d) near '%v':   %s\n", pos.Source, pos.Line, pos.Column, e.Token, e.Message)
+	name := e.Pos.Source
+	if len(name) > 0 && (name[0] == '=' || name[0] == '@') {
+		name = name[1:]
 	}
+	msg := e.Message
+	if m, ok := luaMessages[msg]; ok {
+		msg = m
+	}
+	if e.Pos.Line == EOF {
+		return fmt.Sprintf("%s:%d: %s near '<eof>'", name, e.EOFLine, msg)
+	}
+	return fmt.Sprintf("%s:%d: %s near '%v'", name, e.Pos.Line, msg, e.Token)
 }
 
 func writeChar(buf *bytes.Buffer, c int) { buf.WriteByte(byte(c)) }
@@ -44,8 +69,9 @@ func isDigit(ch int) bool {
 }
 
 type Scanner struct {
-	Pos    ast.Position
-	reader *bufio.Reader
+	Pos     ast.Position
+	reader  *bufio.Reader
+	eofLine int // the last line, kept when Pos.Line becomes EOF
 }
 
 func NewScanner(reader io.Reader, source string) *Scanner {
@@ -59,9 +85,13 @@ func NewScanner(reader io.Reader, source string) *Scanner {
 	}
 }
 
-func (sc *Scanner) Error(tok string, msg string) *Error { return &Error{sc.Pos, msg, tok} }
+func (sc *Scanner) Error(tok string, msg string) *Error {
+	return &Error{Pos: sc.Pos, Message: msg, Token: tok, EOFLine: sc.eofLine}
+}
 
-func (sc *Scanner) TokenError(tok ast.Token, msg string) *Error { return &Error{tok.Pos, msg, tok.Str} }
+func (sc *Scanner) TokenError(tok ast.Token, msg string) *Error {
+	return &Error{Pos: tok.Pos, Message: msg, Token: tok.Str, EOFLine: sc.eofLine}
+}
 
 func (sc *Scanner) readNext() int {
 	ch, err := sc.reader.ReadByte()
@@ -90,6 +120,9 @@ func (sc *Scanner) Next() int {
 		sc.Newline(ch)
 		ch = int('\n')
 	case EOF:
+		if sc.Pos.Line != EOF {
+			sc.eofLine = sc.Pos.Line
+		}
 		sc.Pos.Line = EOF
 		sc.Pos.Column = 0
 	default:

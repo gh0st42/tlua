@@ -158,3 +158,15 @@ reported as "runtime error: invalid memory address". The state now counts
 such calls, and a yield from inside one raises Lua 5.1's own error,
 "attempt to yield across metamethod/C-call boundary". `pcall` catches it, as
 in 5.1, and puts the count right after any error.
+
+## parse/lexer.go: how syntax errors read
+
+A syntax error read `prog.lua line:7(column:57) near '/':   syntax error`, and
+`prog.lua at EOF:   syntax error` at the end of the input, with a newline at
+the end: nothing that looks for `file:line:` could find the line. It is now
+worded as Lua 5.1 does, `prog.lua:7: unexpected symbol near '/'`, with the
+last line given for an error at the end of the input (`near '<eof>'`), and
+the lexer's messages as Lua says them (`unfinished string`, `unfinished long
+string`, `malformed number`). The parser still cannot tell which of Lua's
+specific messages fits (`'end' expected`, `'=' expected`), so the others are
+all "unexpected symbol". `parse.Error` keeps its fields, and has `EOFLine`.

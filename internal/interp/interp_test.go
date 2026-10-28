@@ -119,6 +119,18 @@ func TestGopherLuaPatches(t *testing.T) {
 				coroutine.yield("after")
 			end)
 			assert(co3() == "after")`,
+		"syntax errors read as Lua's do": `
+			local function err(src, name) return select(2, loadstring(src, name)) end
+			assert(err("x = = 1", "=chunk") == "chunk:1: unexpected symbol near '='", err("x = = 1", "=chunk"))
+			assert(err("x = 1\ny = = 2", "@f.lua") == "f.lua:2: unexpected symbol near '='")
+			assert(err("if x then", "=c") == "c:1: unexpected symbol near '<eof>'", err("if x then", "=c"))
+			assert(err("x = 1\nif x then\n  print(1)\n", "=c") == "c:4: unexpected symbol near '<eof>'", err("x = 1\nif x then\n  print(1)\n", "=c"))
+			assert(err("local s = 'abc", "=c") == "c:1: unfinished string near '<eof>'")
+			assert(err("x = [[abc", "=c") == "c:1: unfinished long string near '<eof>'")
+			assert(err("x = 0x", "=c") == "c:1: malformed number near '0x'")
+			-- and a tool that reads file:line: finds them
+			local file, line = err("a = 1\nb = = 2", "@dir/prog.lua"):match("^([^:]+):(%d+):")
+			assert(file == "dir/prog.lua" and line == "2")`,
 		"table.concat of a long table": `
 			local t = {}
 			for i = 1, 600000 do t[i] = "x" end
