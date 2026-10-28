@@ -116,7 +116,7 @@ assert(again.lblName.caption == "Name", "a full path, .lua and all")
 		t.Fatal(err)
 	}
 	L.SetGlobal("sneaky", lua.LString(filepath.Join(dir, "forms/Sneaky")))
-	fails(t, L, `gui.load(sneaky)`, "attempt to call a non-function object")
+	fails(t, L, `gui.load(sneaky)`, "attempt to call global 'print' (a nil value)")
 	L.SetGlobal("bad", lua.LString(filepath.Join(dir, "forms/NotATable")))
 	fails(t, L, `gui.load(bad)`, "returns a number, not a layout table")
 	fails(t, L, `gui.load("no/such/form")`, "no such file")

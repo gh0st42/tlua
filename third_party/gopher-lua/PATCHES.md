@@ -218,3 +218,26 @@ empty" for an empty range and rejects more than two arguments.
 which is not a number for an infinite divisor, as in 5.1. A coroutine that
 cannot be resumed says "cannot resume dead coroutine" or "cannot resume
 non-suspended coroutine".
+
+## errinfo.go, vm.go, _vm.go, state.go, _state.go, compile.go, function.go: how runtime errors read
+
+A runtime type error said `attempt to index a non-table object(nil) with key
+'x'`, `attempt to call a non-function object`, `cannot perform add operation
+between number and nil`, `cannot perform concat operation between nil and
+string`, `__len undefined`, `attempt to compare table with table` and
+`for statement limit must be a number`: none of which says what, in the
+program, was wrong. They now read as Lua 5.1's do: `attempt to index global
+'x' (a nil value)`, `attempt to call method 'm' (a nil value)`, `attempt to
+perform arithmetic on local 'n' (a string value)`, `attempt to concatenate
+field 'name' (a nil value)`, `attempt to get length of local 'n' (a nil
+value)`, `attempt to compare two table values`, `'for' limit must be a
+number`. The name is found as ldebug.c finds it (`getobjname`): the failing
+instruction says which register held the value, and the code before it says
+what the register was: a local, a global, a field, a method, an upvalue, a
+constant. Where it cannot be told, the error says what kind of value it was.
+
+The compiler's record of local variables (`DbgLocals`) is what the names of
+locals come from, and it was wrong whenever a block ended and a later local
+took the register of one in it: each variable's end was set on the entry that
+had its register's number, not its own. A variable now keeps its place in the
+record, and its register (`DbgLocalInfo.Reg`).

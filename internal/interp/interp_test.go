@@ -243,6 +243,60 @@ func TestGopherLuaPatches(t *testing.T) {
 			coroutine.resume(co)
 			local ok2, err2 = coroutine.resume(co)
 			assert(not ok2 and err2 == "cannot resume dead coroutine", tostring(err2))`,
+		"runtime errors name what was wrong, as Lua 5.1 does": `
+			local cases = {
+				-- indexing
+				{"return undefinedglobal.x", "attempt to index global 'undefinedglobal' (a nil value)"},
+				{"local a; return a.x", "attempt to index local 'a' (a nil value)"},
+				{"local t = {}; return t.a.b", "attempt to index field 'a' (a nil value)"},
+				{"local up; return (function() return up.x end)()", "attempt to index upvalue 'up' (a nil value)"},
+				{"local t = {}; t.x.y = 1", "attempt to index field 'x' (a nil value)"},
+				{"local a; a.b = 1", "attempt to index local 'a' (a nil value)"},
+				{"return (5).x", "attempt to index a number value"},
+				{"local t = setmetatable({}, {__index = 5}); return t.x", "attempt to index a number value"},
+				-- calling
+				{"undefinedfn()", "attempt to call global 'undefinedfn' (a nil value)"},
+				{"local t = {}; t.nofn()", "attempt to call field 'nofn' (a nil value)"},
+				{"local t = {}; t:nomethod()", "attempt to call method 'nomethod' (a nil value)"},
+				{"local a; a()", "attempt to call local 'a' (a nil value)"},
+				{"local t = {}; t.x = 5; t.x()", "attempt to call field 'x' (a number value)"},
+				{"local s = 'x'; return s:bad()", "attempt to call method 'bad' (a nil value)"},
+				-- arithmetic
+				{"return 1 + nil", "attempt to perform arithmetic on a nil value"},
+				{"local t = {}; return t + 1", "attempt to perform arithmetic on local 't' (a table value)"},
+				{"local s = 'x'; return s * 2", "attempt to perform arithmetic on local 's' (a string value)"},
+				{"local t = {}; return 1 + t.n", "attempt to perform arithmetic on field 'n' (a nil value)"},
+				{"local t = {}; return -t", "attempt to perform arithmetic on local 't' (a table value)"},
+				{"return 2 ^ undefinedglobal", "attempt to perform arithmetic on global 'undefinedglobal' (a nil value)"},
+				{"local a, b = 1; return a + b", "attempt to perform arithmetic on local 'b' (a nil value)"},
+				-- the rest
+				{"local x; return 'a' .. x", "attempt to concatenate local 'x' (a nil value)"},
+				{"local x; return x .. 'a'", "attempt to concatenate local 'x' (a nil value)"},
+				{"return 'a' .. {} .. 'b'", "attempt to concatenate a table value"},
+				{"local n; return #n", "attempt to get length of local 'n' (a nil value)"},
+				{"return #5", "attempt to get length of a number value"},
+				{"return {} < {}", "attempt to compare two table values"},
+				{"return 1 < 'x'", "attempt to compare number with string"},
+				{"return nil < 1", "attempt to compare nil with number"},
+				{"return {} <= 1", "attempt to compare table with number"},
+				{"for i = 1, 'x' do end", "'for' limit must be a number"},
+				{"for i = 'a', 2 do end", "'for' initial value must be a number"},
+				{"for i = 1, 2, {} do end", "'for' step must be a number"},
+				-- a local is told from the ones that had its register before it
+				{"do local first = 1 end local second; return second.x", "attempt to index local 'second' (a nil value)"},
+				{"local a = 1; do local b = 2 end; local c; return c.x", "attempt to index local 'c' (a nil value)"},
+				{"local function f(p) return p.x end; return f(nil)", "attempt to index local 'p' (a nil value)"},
+				{"for i = 1, 1 do local v; v() end", "attempt to call local 'v' (a nil value)"},
+			}
+			for _, case in ipairs(cases) do
+				local fn, perr = loadstring(case[1])
+				assert(fn, case[1] .. ": " .. tostring(perr))
+				local ok, err = pcall(fn)
+				assert(not ok and tostring(err):find(case[2], 1, true), case[1] .. " => " .. tostring(err))
+			end
+			-- a Lua function failing under a call from Go still says what it can
+			local ok, err = pcall(string.gsub, "x", "x", function() local n; return n.field end)
+			assert(not ok and err:find("attempt to index local 'n' (a nil value)", 1, true), tostring(err))`,
 		"table.concat of a long table": `
 			local t = {}
 			for i = 1, 600000 do t[i] = "x" end

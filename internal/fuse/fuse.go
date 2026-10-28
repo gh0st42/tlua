@@ -71,7 +71,7 @@ func Command(args []string) int {
 		kind = kind.AsGame()
 	} else if main := mainSource(kind, data); looksLikeAGame(main) && !asksForAWindow(main) {
 		// Fused without -play, a console program fails at the first drawing
-		// call with "attempt to call a non-function object", which says
+		// call with "attempt to call global 'cls' (a nil value)", which says
 		// nothing about what is actually wrong. Better to say it here.
 		//
 		// A program that calls boot() has said it for itself and needs no

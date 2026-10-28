@@ -301,15 +301,17 @@ func (cd *codeStore) Pop() {
 type varNamePoolValue struct {
 	Index int
 	Name  string
+	Dbg   int // the variable's place in the prototype's DbgLocals, or -1
 }
 
 type varNamePool struct {
 	names  []string
+	dbg    []int
 	offset int
 }
 
 func newVarNamePool(offset int) *varNamePool {
-	return &varNamePool{make([]string, 0, 16), offset}
+	return &varNamePool{names: make([]string, 0, 16), offset: offset}
 }
 
 func (vp *varNamePool) Names() []string {
@@ -321,6 +323,10 @@ func (vp *varNamePool) List() []varNamePoolValue {
 	for i, name := range vp.names {
 		result[i].Index = i + vp.offset
 		result[i].Name = name
+		result[i].Dbg = -1
+		if i < len(vp.dbg) {
+			result[i].Dbg = vp.dbg[i]
+		}
 	}
 	return result
 }
@@ -543,7 +549,14 @@ func (fc *funcContext) BlockLocalVarsCount() int {
 
 func (fc *funcContext) RegisterLocalVar(name string) int {
 	ret := fc.Block.LocalVars.Register(name)
-	fc.Proto.DbgLocals = append(fc.Proto.DbgLocals, &DbgLocalInfo{Name: name, StartPc: fc.Code.LastPC() + 1})
+	fc.Proto.DbgLocals = append(fc.Proto.DbgLocals, &DbgLocalInfo{Name: name, StartPc: fc.Code.LastPC() + 1, Reg: ret})
+	// A variable is told from the others that had its register before by
+	// its place in DbgLocals, which is not its register.
+	vars := fc.Block.LocalVars
+	for len(vars.dbg) < len(vars.names)-1 {
+		vars.dbg = append(vars.dbg, -1)
+	}
+	vars.dbg = append(vars.dbg, len(fc.Proto.DbgLocals)-1)
 	fc.SetRegTop(fc.RegTop() + 1)
 	return ret
 }
@@ -598,7 +611,10 @@ func (fc *funcContext) LeaveBlock() int {
 
 func (fc *funcContext) EndScope() {
 	for _, vr := range fc.Block.LocalVars.List() {
-		fc.Proto.DbgLocals[vr.Index].EndPc = fc.Code.LastPC()
+		if vr.Dbg >= 0 {
+			fc.Proto.DbgLocals[vr.Dbg].EndPc = fc.Code.LastPC()
+			fc.Proto.DbgLocals[vr.Dbg].ended = true
+		}
 	}
 }
 

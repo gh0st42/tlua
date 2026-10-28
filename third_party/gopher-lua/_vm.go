@@ -383,10 +383,10 @@ func init() {
 					if num, err := parseNumber(string(str)); err == nil {
 						// +inline-call reg.Set RA -num
 					} else {
-						L.RaiseError("__unm undefined")
+						L.unaryError("perform arithmetic on", unaryv)
 					}
 				} else {
-					L.RaiseError("__unm undefined")
+					L.unaryError("perform arithmetic on", unaryv)
 				}
 			}
 			return 0
@@ -431,7 +431,7 @@ func init() {
 				} else if lv.Type() == LTTable {
 					// +inline-call reg.SetNumber RA LNumber(lv.(*LTable).Len())
 				} else {
-					L.RaiseError("__len undefined")
+					L.unaryError("get length of", lv)
 				}
 			}
 			return 0
@@ -499,11 +499,11 @@ func init() {
 				if v2, ok2 := rhs.(LNumber); ok2 {
 					ret = v1 <= v2
 				} else {
-					L.RaiseError("attempt to compare %v with %v", lhs.Type().String(), rhs.Type().String())
+					L.compareError(lhs, rhs)
 				}
 			} else {
 				if lhs.Type() != rhs.Type() {
-					L.RaiseError("attempt to compare %v with %v", lhs.Type().String(), rhs.Type().String())
+					L.compareError(lhs, rhs)
 				}
 				switch lhs.Type() {
 				case LTString:
@@ -605,7 +605,7 @@ func init() {
 				callable, meta = L.metaCall(lv)
 			}
 			if callable == nil {
-				L.RaiseError("attempt to call a non-function object")
+				L.callError(lv)
 			}
 			// +inline-call L.closeUpvalues lbase
 			if callable.IsG {
@@ -699,13 +699,13 @@ func init() {
 							// +inline-call reg.SetTop RA+1
 						}
 					} else {
-						L.RaiseError("for statement step must be a number")
+						L.RaiseError("'for' step must be a number")
 					}
 				} else {
-					L.RaiseError("for statement limit must be a number")
+					L.RaiseError("'for' limit must be a number")
 				}
 			} else {
-				L.RaiseError("for statement init must be a number")
+				L.RaiseError("'for' initial value must be a number")
 			}
 			return 0
 		},
@@ -720,10 +720,10 @@ func init() {
 				if step, ok2 := reg.Get(RA + 2).(LNumber); ok2 {
 					// +inline-call reg.SetNumber RA LNumber(init-step)
 				} else {
-					L.RaiseError("for statement step must be a number")
+					L.RaiseError("'for' step must be a number")
 				}
 			} else {
-				L.RaiseError("for statement init must be a number")
+				L.RaiseError("'for' initial value must be a number")
 			}
 			cf.Pc += Sbx
 			return 0
@@ -881,6 +881,7 @@ func numberArith(L *LState, opcode int, lhs, rhs LNumber) LNumber {
 }
 
 func objectArith(L *LState, opcode int, lhs, rhs LValue) LValue {
+	origLhs, origRhs := lhs, rhs
 	event := ""
 	switch opcode {
 	case OP_ADD:
@@ -919,8 +920,7 @@ func objectArith(L *LState, opcode int, lhs, rhs LValue) LValue {
 			return numberArith(L, opcode, LNumber(v1), LNumber(v2))
 		}
 	}
-	L.RaiseError(fmt.Sprintf("cannot perform %v operation between %v and %v",
-		strings.TrimLeft(event, "_"), lhs.Type().String(), rhs.Type().String()))
+	L.arithError(origLhs, origRhs)
 
 	return LNil
 }
@@ -928,6 +928,7 @@ func objectArith(L *LState, opcode int, lhs, rhs LValue) LValue {
 func stringConcat(L *LState, total, last int) LValue {
 	rhs := L.reg.Get(last)
 	total--
+	first := true // rhs is still the last of the values, in its register
 	for i := last - 1; total > 0; {
 		lhs := L.reg.Get(i)
 		if !(LVCanConvToString(lhs) && LVCanConvToString(rhs)) {
@@ -938,10 +939,18 @@ func stringConcat(L *LState, total, last int) LValue {
 				L.reg.Push(rhs)
 				L.Call(2, 1)
 				rhs = L.reg.Pop()
+				first = false
 				total--
 				i--
 			} else {
-				L.RaiseError("cannot perform concat operation between %v and %v", lhs.Type().String(), rhs.Type().String())
+				lreg, rreg := -1, -1
+				if cf := L.currentFrame; cf != nil {
+					lreg = i - cf.LocalBase
+					if first {
+						rreg = last - cf.LocalBase
+					}
+				}
+				L.concatError(lhs, rhs, lreg, rreg)
 				return LNil
 			}
 		} else {
@@ -957,6 +966,7 @@ func stringConcat(L *LState, total, last int) LValue {
 				total--
 			}
 			rhs = LString(strings.Join(buf, ""))
+			first = false
 		}
 	}
 	return rhs
@@ -968,10 +978,10 @@ func lessThan(L *LState, lhs, rhs LValue) bool {
 		if v2, ok2 := rhs.(LNumber); ok2 {
 			return v1 < v2
 		}
-		L.RaiseError("attempt to compare %v with %v", lhs.Type().String(), rhs.Type().String())
+		L.compareError(lhs, rhs)
 	}
 	if lhs.Type() != rhs.Type() {
-		L.RaiseError("attempt to compare %v with %v", lhs.Type().String(), rhs.Type().String())
+		L.compareError(lhs, rhs)
 		return false
 	}
 	ret := false
@@ -1026,7 +1036,7 @@ func objectRationalWithError(L *LState, lhs, rhs LValue, event string) bool {
 	case 0:
 		return false
 	}
-	L.RaiseError("attempt to compare %v with %v", lhs.Type().String(), rhs.Type().String())
+	L.compareError(lhs, rhs)
 	return false
 }
 

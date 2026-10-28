@@ -15,6 +15,10 @@ type DbgLocalInfo struct {
 	Name    string
 	StartPc int
 	EndPc   int
+	// Reg is the register the variable lives in, and ended says EndPc has
+	// been set, which is when its scope ends.
+	Reg   int
+	ended bool
 }
 
 type DbgCall struct {
