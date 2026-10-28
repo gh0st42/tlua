@@ -66,6 +66,26 @@ func TestGopherLuaPatches(t *testing.T) {
 				return out
 			end
 			assert(#lines("a\nb") == 2)`,
+		"recursion as deep as Lua 5.1 allows": `
+			local function f(n) if n == 0 then return 0 end return 1 + f(n - 1) end
+			assert(f(15000) == 15000)
+			local co = coroutine.wrap(function() return f(10000) end)
+			assert(co() == 10000)
+			local function g() return 1 + g() end
+			local ok, err = pcall(g)
+			assert(not ok and tostring(err):find("stack overflow", 1, true), tostring(err))
+			-- and the state is fine after it
+			assert(f(100) == 100)`,
+		"table.concat of a long table": `
+			local t = {}
+			for i = 1, 600000 do t[i] = "x" end
+			assert(#table.concat(t) == 600000)
+			assert(#table.concat(t, ",") == 1199999)
+			assert(table.concat({1, 2.5, "x"}, "-") == "1-2.5-x")
+			assert(table.concat({}, ",") == "" and table.concat({"a"}, ",") == "a")
+			assert(table.concat({"a", "b", "c"}, ",", 2, 3) == "b,c")
+			local ok, err = pcall(table.concat, {{}})
+			assert(not ok and tostring(err):find("invalid value (table) at index 1 in table for concat", 1, true), tostring(err))`,
 		"frontier patterns": `
 			assert(select("#", ("THE (quick) fox"):find("%f[%a]%a+%f[%A]")) == 2)
 			local i, j = ("THE (quick) fox"):find("%f[%a]%a+%f[%A]")

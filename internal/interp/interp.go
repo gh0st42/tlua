@@ -59,6 +59,12 @@ func New(opts *Options) *Interp {
 		IncludeGoStackTrace: false,
 		RegistryMaxSize:     1024 * 1024,
 		RegistryGrowStep:    512,
+		// Lua 5.1 allows a call 20000 deep (LUAI_MAXCALLS); gopher-lua's
+		// default is 256, so a recursion a few hundred deep failed. The stack
+		// grows as it is used rather than being made that size at once, which
+		// keeps a coroutine, a state of its own, small.
+		CallStackSize:       20000,
+		MinimizeStackMemory: true,
 	})
 
 	lualib.Open(L)

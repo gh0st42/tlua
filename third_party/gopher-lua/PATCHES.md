@@ -130,3 +130,19 @@ letter f, so `("hello"):find("hello%f[%W]")` found nothing and
 it matches where the character before is not in the set and the one after is,
 the start and the end of the string counting as a zero byte, and it is an
 error without a `[` after it.
+
+## tablelib.go: table.concat of a long table
+
+`table.concat` pushed every item and every separator onto the Lua stack
+before joining them, so a table of half a million items raised "registry
+overflow" (the registry holds a million values). Lua 5.1 joins in a buffer
+and has no such limit; so does this now.
+
+## state.go, _state.go: the depth of calls
+
+A state's call stack had gopher-lua's default of 256 frames, so a recursion a
+few hundred calls deep raised "stack overflow", where Lua 5.1 allows about
+20000 (LUAI_MAXCALLS). tlua now asks for 20000 frames, in a stack that grows
+as it is used (`MinimizeStackMemory`) so that each coroutine stays small.
+That stack's `IsFull` was never true, so the overflow came as a Go panic
+worded "lua callstack overflow"; it now says, as Lua does, "stack overflow".

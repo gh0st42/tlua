@@ -258,7 +258,7 @@ func (cs *autoGrowingCallFrameStack) IsEmpty() bool {
 
 // IsFull returns true if the stack cannot receive any more stack pushes without overflowing
 func (cs *autoGrowingCallFrameStack) IsFull() bool {
-	return int(cs.segIdx) == len(cs.segments) && cs.segSp >= FramesPerSegment
+	return int(cs.segIdx) == len(cs.segments)-1 && cs.segSp >= FramesPerSegment
 }
 
 func (cs *autoGrowingCallFrameStack) Clear() {
