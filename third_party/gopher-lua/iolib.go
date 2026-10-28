@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -364,13 +366,14 @@ func fileReadAux(L *LState, file *lFile, idx int) int {
 				switch opt {
 				case 'n':
 					var v LNumber
-					_, err = fmt.Fscanf(file.reader, LNumberScanFormat, &v)
-					if err == io.EOF {
-						L.Push(LNil)
-						goto normalreturn
-					}
+					var found bool
+					v, found, err = readNumber(file.reader)
 					if err != nil {
 						goto errreturn
+					}
+					if !found {
+						L.Push(LNil)
+						goto normalreturn
 					}
 					L.Push(v)
 				case 'a':
@@ -754,3 +757,89 @@ func ioWrite(L *LState) int {
 }
 
 //
+
+// readNumber reads a number from a file as read("*n") does in Lua 5.1, which
+// is fscanf's "%lf": leading space is skipped and then the longest text that
+// can be a number is taken, a decimal or hexadecimal one (0x10, 1e2, .5, -3),
+// and what follows is left for the next read. found is false when there is no
+// number there.
+func readNumber(r *bufio.Reader) (v LNumber, found bool, err error) {
+	for {
+		c, e := r.ReadByte()
+		if e != nil {
+			if e == io.EOF {
+				return 0, false, nil
+			}
+			return 0, false, e
+		}
+		if !isLuaSpace(c) {
+			r.UnreadByte()
+			break
+		}
+	}
+	var tok []byte
+	next := func(ok func(c byte) bool) bool {
+		b, e := r.Peek(1)
+		if e != nil || !ok(b[0]) {
+			return false
+		}
+		tok = append(tok, b[0])
+		r.ReadByte()
+		return true
+	}
+	digit := func(c byte) bool { return c >= '0' && c <= '9' }
+	hexdigit := func(c byte) bool { return digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') }
+	// peek says whether the text ahead, after skip bytes, begins with a byte
+	// that ok accepts.
+	peek := func(skip int, ok func(c byte) bool) bool {
+		b, e := r.Peek(skip + 1)
+		return e == nil && ok(b[skip])
+	}
+	dotOrDigit := func(c byte) bool { return c == '.' || digit(c) }
+	sign := func(c byte) bool { return c == '+' || c == '-' }
+	// A sign belongs to the number when a digit or a point follows it.
+	if peek(0, sign) && peek(1, dotOrDigit) {
+		next(sign)
+	}
+	hex := false
+	if peek(0, func(c byte) bool { return c == '0' }) && peek(1, func(c byte) bool { return c == 'x' || c == 'X' }) &&
+		peek(2, func(c byte) bool { return c == '.' || hexdigit(c) }) {
+		next(func(c byte) bool { return c == '0' })
+		next(func(c byte) bool { return c == 'x' || c == 'X' })
+		hex = true
+	}
+	digits := digit
+	exp := func(c byte) bool { return c == 'e' || c == 'E' }
+	if hex {
+		digits = hexdigit
+		exp = func(c byte) bool { return c == 'p' || c == 'P' }
+	}
+	for next(digits) {
+	}
+	if next(func(c byte) bool { return c == '.' }) {
+		for next(digits) {
+		}
+	}
+	// An exponent belongs to the number when digits follow it.
+	if peek(0, exp) && (peek(1, digit) || (peek(1, sign) && peek(2, digit))) {
+		next(exp)
+		next(sign)
+		for next(digit) {
+		}
+	}
+	if len(tok) == 0 {
+		return 0, false, nil
+	}
+	n, ok := str2number(string(tok))
+	if !ok && hex {
+		// 0x1p4 and 0x.8, which fscanf reads and Lua's own conversion does not.
+		text := string(tok)
+		if !strings.ContainsAny(text, "pP") {
+			text += "p0"
+		}
+		if f, e := strconv.ParseFloat(text, 64); e == nil {
+			return LNumber(f), true, nil
+		}
+	}
+	return n, ok, nil
+}

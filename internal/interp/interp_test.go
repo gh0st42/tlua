@@ -178,6 +178,30 @@ func TestGopherLuaPatches(t *testing.T) {
 			assert(os.date("!%j %U %W %V %G", 1672531200) == "001 01 00 52 2022") -- Sunday 2023-01-01
 			local tt = os.date("!*t", 86400 * 40)
 			assert(tt.yday == 41 and tt.isdst == false and tt.month == 2 and tt.day == 10 and tt.wday == 3)`,
+		"file:read('*n') reads a number as C's scanf does": `
+			local function read(content, ...)
+				local name = os.tmpname()
+				local f = io.open(name, "w") f:write(content) f:close()
+				local g = io.open(name)
+				local got = {g:read(...)}
+				local rest = g:read("*a")
+				g:close() os.remove(name)
+				return got, rest
+			end
+			local got, rest = read("0x10 -5 1e2 abc", "*n", "*n", "*n", "*n")
+			assert(got[1] == 16 and got[2] == -5 and got[3] == 100 and got[4] == nil and rest == "abc")
+			got = read(".5 5. -.5e-1 +7", "*n", "*n", "*n", "*n")
+			assert(got[1] == 0.5 and got[2] == 5 and got[3] == -0.05 and got[4] == 7)
+			got = read("0x1p4 0X.8", "*n", "*n")
+			assert(got[1] == 16 and got[2] == 0.5)
+			got, rest = read("1e", "*n")
+			assert(got[1] == 1 and rest == "e", "an exponent without digits is not part of it")
+			got, rest = read("-", "*n")
+			assert(got[1] == nil and rest == "-")
+			got, rest = read("abc", "*n")
+			assert(got[1] == nil and rest == "abc")
+			got, rest = read("12 34\nline", "*n", "*n", "*l", "*l")
+			assert(got[1] == 12 and got[2] == 34 and got[3] == "" and got[4] == "line")`,
 		"table.concat of a long table": `
 			local t = {}
 			for i = 1, 600000 do t[i] = "x" end

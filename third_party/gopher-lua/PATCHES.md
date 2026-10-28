@@ -197,3 +197,11 @@ all the conversions of C99 (`%j`, `%U`, `%W`, `%V`, `%G`, `%e`, `%D`, `%T`,
 `%R`, `%r`, `%C`, `%u`, `%h`, `%n`, `%t`, `%s`, ...), the E and O modifiers
 ignored, and an unknown conversion left as written. `os.date("*t")` has the
 real `yday` and `isdst`.
+
+## iolib.go: read("*n")
+
+`file:read("*n")` used Go's fmt scanner, which does not read `0x10`, and
+returned its parse error and an errno of 1 instead of nil. It reads as
+`fscanf("%lf")` does: leading space skipped, the longest text that can be a
+number taken (decimal or hexadecimal, with a sign and an exponent when digits
+follow them), the rest left in the file, and nil when there is no number.
