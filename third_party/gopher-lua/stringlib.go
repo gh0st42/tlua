@@ -77,7 +77,11 @@ func strChar(L *LState) int {
 	top := L.GetTop()
 	bytes := make([]byte, L.GetTop())
 	for i := 1; i <= top; i++ {
-		bytes[i-1] = uint8(L.CheckInt(i))
+		c := L.CheckInt(i)
+		if c < 0 || c > 255 {
+			L.ArgError(i, "invalid value")
+		}
+		bytes[i-1] = uint8(c)
 	}
 	L.Push(LString(string(bytes)))
 	return 1
@@ -91,12 +95,17 @@ func strDump(L *LState) int {
 func strFind(L *LState) int {
 	str := L.CheckString(1)
 	pattern := L.CheckString(2)
+	init := luaIndex2StringIndex(str, L.OptInt(3, 1), true)
+	// As in Lua 5.1, a start past the end is the end: an empty pattern is
+	// found there, and anything else is not.
+	if init > len(str) {
+		init = len(str)
+	}
 	if len(pattern) == 0 {
-		L.Push(LNumber(1))
-		L.Push(LNumber(0))
+		L.Push(LNumber(init + 1))
+		L.Push(LNumber(init))
 		return 2
 	}
-	init := luaIndex2StringIndex(str, L.OptInt(3, 1), true)
 	plain := false
 	if L.GetTop() == 4 {
 		plain = LVAsBool(L.Get(4))
@@ -470,6 +479,10 @@ func strGmatchIter(L *LState) int {
 func strGmatch(L *LState) int {
 	str := L.CheckString(1)
 	pattern := L.CheckString(2)
+	// In gmatch a ^ is not an anchor, as Lua 5.1 has it: it matches a ^.
+	if strings.HasPrefix(pattern, "^") {
+		pattern = "%" + pattern
+	}
 	mds, err := pm.Find(pattern, []byte(str), 0, -1)
 	if err != nil {
 		L.RaiseError(err.Error())
@@ -504,6 +517,9 @@ func strMatch(L *LState) int {
 	offset--
 	if offset < 0 {
 		offset = 0
+	}
+	if offset > l {
+		offset = l
 	}
 
 	mds, err := pm.Find(pattern, unsafeFastStringToReadOnlyBytes(str), offset, 1)

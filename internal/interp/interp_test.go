@@ -202,6 +202,47 @@ func TestGopherLuaPatches(t *testing.T) {
 			assert(got[1] == nil and rest == "abc")
 			got, rest = read("12 34\nline", "*n", "*n", "*l", "*l")
 			assert(got[1] == 12 and got[2] == 34 and got[3] == "" and got[4] == "line")`,
+		"small differences from Lua 5.1": `
+			assert(not pcall(string.char, 256) and not pcall(string.char, -1))
+			assert(string.char(0, 255) == "\0\255")
+			-- a start past the end is the end
+			local s, e = ("hello"):find("", 6)
+			assert(s == 6 and e == 5)
+			assert(("hello"):find("", 99) == 6 and ("hello"):find("l", 10) == nil and ("hello"):find("l", 10, true) == nil)
+			assert(("hello"):find("", 2) == 2 and select(2, ("hello"):find("", 2)) == 1)
+			assert(("hello"):match("", 10) == "")
+			-- in gmatch a ^ is no anchor
+			local n = 0
+			for _ in ("aaa"):gmatch("^a") do n = n + 1 end
+			assert(n == 0)
+			n = 0
+			for _ in ("a^a^"):gmatch("^a") do n = n + 1 end
+			assert(n == 1, "it matches ^ followed by a, not the start of the string")
+			n = 0
+			for _ in ("x^a^a"):gmatch("^a") do n = n + 1 end
+			assert(n == 2)
+			assert(tostring(io.stdout):find("^file %(0x%x+%)$"), tostring(io.stdout))
+			local f = io.open(os.tmpname(), "w") f:close()
+			assert(tostring(f) == "file (closed)")
+			local ok, err = pcall(math.random, 5, 1)
+			assert(not ok and err:find("interval is empty", 1, true), tostring(err))
+			ok, err = pcall(math.random, 0)
+			assert(not ok and err:find("interval is empty", 1, true), tostring(err))
+			assert(not pcall(math.random, 1, 2, 3))
+			local r = math.random(3, 3) assert(r == 3)
+			-- table.remove outside 1..#t does nothing and returns nothing
+			assert(select("#", table.remove({})) == 0 and select("#", table.remove({1, 2}, 5)) == 0)
+			local t = {1, 2, 3}
+			assert(table.remove(t) == 3 and table.remove(t, 1) == 1 and #t == 1)
+			-- the modulo operator is Lua 5.1's a - floor(a/b)*b
+			assert(7 % 3 == 1 and -7 % 3 == 2 and 7 % -3 == -2 and 5.5 % 2 == 1.5)
+			local nan = 5 % math.huge
+			assert(nan ~= nan, "an infinite divisor gives nan, as in 5.1")
+			-- the words for a coroutine that cannot be resumed
+			local co = coroutine.create(function() end)
+			coroutine.resume(co)
+			local ok2, err2 = coroutine.resume(co)
+			assert(not ok2 and err2 == "cannot resume dead coroutine", tostring(err2))`,
 		"table.concat of a long table": `
 			local t = {}
 			for i = 1, 600000 do t[i] = "x" end

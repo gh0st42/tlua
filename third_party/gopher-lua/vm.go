@@ -2270,11 +2270,9 @@ func opArith(L *LState, inst uint32, baseframe *callFrame) int { //OP_ADD, OP_SU
 func luaModulo(lhs, rhs LNumber) LNumber {
 	flhs := float64(lhs)
 	frhs := float64(rhs)
-	v := math.Mod(flhs, frhs)
-	if frhs > 0 && v < 0 || frhs < 0 && v > 0 {
-		v += frhs
-	}
-	return LNumber(v)
+	// Lua 5.1's own: a - floor(a/b)*b, which is not a number for an infinite
+	// divisor, as the reference gives it.
+	return LNumber(flhs - math.Floor(flhs/frhs)*frhs)
 }
 
 func numberArith(L *LState, opcode int, lhs, rhs LNumber) LNumber {

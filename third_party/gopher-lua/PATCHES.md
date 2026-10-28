@@ -205,3 +205,16 @@ returned its parse error and an errno of 1 instead of nil. It reads as
 `fscanf("%lf")` does: leading space skipped, the longest text that can be a
 number taken (decimal or hexadecimal, with a sign and an exponent when digits
 follow them), the rest left in the file, and nil when there is no number.
+
+## stringlib.go, iolib.go, mathlib.go, tablelib.go, vm.go, coroutinelib.go: small differences from 5.1
+
+`string.char` raises "invalid value" outside 0 to 255 instead of wrapping.
+`string.find` and `string.match` take a start past the end as the end, as 5.1
+does: `("hello"):find("", 6)` is `6 5`, and an empty pattern honours the start
+it was given. A `^` at the start of a `gmatch` pattern is no anchor.
+`tostring` of a file says `file (0x...)`. `math.random` says "interval is
+empty" for an empty range and rejects more than two arguments.
+`table.remove` outside 1 to `#t` returns nothing. `%` is `a - floor(a/b)*b`,
+which is not a number for an infinite divisor, as in 5.1. A coroutine that
+cannot be resumed says "cannot resume dead coroutine" or "cannot resume
+non-suspended coroutine".

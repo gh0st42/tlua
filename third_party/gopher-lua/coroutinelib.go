@@ -43,7 +43,7 @@ func coYield(L *LState) int {
 func coResume(L *LState) int {
 	th := L.CheckThread(1)
 	if L.G.CurrentThread == th {
-		msg := "can not resume a running thread"
+		msg := "cannot resume non-suspended coroutine"
 		if th.wrapped {
 			L.RaiseError(msg)
 			return 0
@@ -53,7 +53,7 @@ func coResume(L *LState) int {
 		return 2
 	}
 	if th.Dead {
-		msg := "can not resume a dead thread"
+		msg := "cannot resume dead coroutine"
 		if th.wrapped {
 			L.RaiseError(msg)
 			return 0

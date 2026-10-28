@@ -219,13 +219,13 @@ func fileToString(L *LState) int {
 		if file.closed {
 			L.Push(LString("file (closed)"))
 		} else {
-			L.Push(LString("file"))
+			L.Push(LString(fmt.Sprintf("file (%p)", file)))
 		}
 	} else {
 		if file.closed {
 			L.Push(LString("process (closed)"))
 		} else {
-			L.Push(LString("process"))
+			L.Push(LString(fmt.Sprintf("process (%p)", file)))
 		}
 	}
 	return 1

@@ -42,11 +42,13 @@ func tableMaxN(L *LState) int {
 
 func tableRemove(L *LState) int {
 	tbl := L.CheckTable(1)
-	if L.GetTop() == 1 {
-		L.Push(tbl.Remove(-1))
-	} else {
-		L.Push(tbl.Remove(L.CheckInt(2)))
+	n := tbl.Len()
+	pos := L.OptInt(2, n)
+	// Lua 5.1 removes nothing, and returns nothing, from outside 1 to #t.
+	if pos < 1 || pos > n {
+		return 0
 	}
+	L.Push(tbl.Remove(pos))
 	return 1
 }
 

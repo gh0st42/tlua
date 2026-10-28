@@ -189,11 +189,19 @@ func mathRandom(L *LState) int {
 		L.Push(LNumber(rand.Float64()))
 	case 1:
 		n := L.CheckInt(1)
+		if n < 1 {
+			L.ArgError(1, "interval is empty")
+		}
 		L.Push(LNumber(rand.Intn(n) + 1))
-	default:
+	case 2:
 		min := L.CheckInt(1)
-		max := L.CheckInt(2) + 1
-		L.Push(LNumber(rand.Intn(max-min) + min))
+		max := L.CheckInt(2)
+		if min > max {
+			L.ArgError(2, "interval is empty")
+		}
+		L.Push(LNumber(rand.Intn(max-min+1) + min))
+	default:
+		L.RaiseError("wrong number of arguments")
 	}
 	return 1
 }
