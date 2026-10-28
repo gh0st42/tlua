@@ -99,35 +99,111 @@ func (fs *flagScanner) Next() (byte, bool) {
 	return c, false
 }
 
-var cDateFlagToGo = map[byte]string{
-	'a': "mon", 'A': "Monday", 'b': "Jan", 'B': "January", 'c': "02 Jan 06 15:04 MST", 'd': "02",
-	'F': "2006-01-02", 'H': "15", 'I': "03", 'm': "01", 'M': "04", 'p': "PM", 'P': "pm", 'S': "05",
-	'x': "15/04/05", 'X': "15:04:05", 'y': "06", 'Y': "2006", 'z': "-0700", 'Z': "MST"}
-
+// strftime formats a time as C's strftime does in the C locale, for os.date.
+// The E and O modifiers are accepted and ignored; a conversion it does not
+// know is left as written.
 func strftime(t time.Time, cfmt string) string {
-	sc := newFlagScanner('%', "", "", cfmt)
-	for c, eos := sc.Next(); !eos; c, eos = sc.Next() {
-		if !sc.ChangeFlag {
-			if sc.HasFlag {
-				if v, ok := cDateFlagToGo[c]; ok {
-					sc.AppendString(t.Format(v))
-				} else {
-					switch c {
-					case 'w':
-						sc.AppendString(fmt.Sprint(int(t.Weekday())))
-					default:
-						sc.AppendChar('%')
-						sc.AppendChar(c)
-					}
-				}
-				sc.HasFlag = false
+	var b strings.Builder
+	yday := t.YearDay() - 1 // 0 to 365
+	wday := int(t.Weekday())
+	for i := 0; i < len(cfmt); i++ {
+		c := cfmt[i]
+		if c != '%' || i+1 >= len(cfmt) {
+			b.WriteByte(c)
+			continue
+		}
+		i++
+		c = cfmt[i]
+		if (c == 'E' || c == 'O') && i+1 < len(cfmt) {
+			i++
+			c = cfmt[i]
+		}
+		switch c {
+		case 'a':
+			b.WriteString(t.Format("Mon"))
+		case 'A':
+			b.WriteString(t.Format("Monday"))
+		case 'b', 'h':
+			b.WriteString(t.Format("Jan"))
+		case 'B':
+			b.WriteString(t.Format("January"))
+		case 'c':
+			b.WriteString(t.Format("Mon Jan _2 15:04:05 2006"))
+		case 'C':
+			fmt.Fprintf(&b, "%02d", t.Year()/100)
+		case 'd':
+			b.WriteString(t.Format("02"))
+		case 'D', 'x':
+			b.WriteString(t.Format("01/02/06"))
+		case 'e':
+			b.WriteString(t.Format("_2"))
+		case 'F':
+			b.WriteString(t.Format("2006-01-02"))
+		case 'g':
+			y, _ := t.ISOWeek()
+			fmt.Fprintf(&b, "%02d", y%100)
+		case 'G':
+			y, _ := t.ISOWeek()
+			fmt.Fprintf(&b, "%d", y)
+		case 'H':
+			b.WriteString(t.Format("15"))
+		case 'I':
+			b.WriteString(t.Format("03"))
+		case 'j':
+			fmt.Fprintf(&b, "%03d", yday+1)
+		case 'm':
+			b.WriteString(t.Format("01"))
+		case 'M':
+			b.WriteString(t.Format("04"))
+		case 'n':
+			b.WriteByte('\n')
+		case 'p':
+			b.WriteString(t.Format("PM"))
+		case 'P':
+			b.WriteString(t.Format("pm"))
+		case 'r':
+			b.WriteString(t.Format("03:04:05 PM"))
+		case 'R':
+			b.WriteString(t.Format("15:04"))
+		case 's':
+			fmt.Fprintf(&b, "%d", t.Unix())
+		case 'S':
+			b.WriteString(t.Format("05"))
+		case 't':
+			b.WriteByte('\t')
+		case 'T', 'X':
+			b.WriteString(t.Format("15:04:05"))
+		case 'u':
+			if wday == 0 {
+				b.WriteByte('7')
 			} else {
-				sc.AppendChar(c)
+				fmt.Fprintf(&b, "%d", wday)
 			}
+		case 'U':
+			fmt.Fprintf(&b, "%02d", (yday+7-wday)/7)
+		case 'V':
+			_, w := t.ISOWeek()
+			fmt.Fprintf(&b, "%02d", w)
+		case 'w':
+			fmt.Fprintf(&b, "%d", wday)
+		case 'W':
+			fmt.Fprintf(&b, "%02d", (yday+7-(wday+6)%7)/7)
+		case 'y':
+			b.WriteString(t.Format("06"))
+		case 'Y':
+			fmt.Fprintf(&b, "%d", t.Year())
+		case 'z':
+			b.WriteString(t.Format("-0700"))
+		case 'Z':
+			b.WriteString(t.Format("MST"))
+		case '%':
+			b.WriteByte('%')
+		default:
+			b.WriteByte('%')
+			b.WriteByte(c)
 		}
 	}
-
-	return sc.String()
+	return b.String()
 }
 
 func isInteger(v LNumber) bool {

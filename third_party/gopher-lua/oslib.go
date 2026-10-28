@@ -128,9 +128,8 @@ func osDate(L *LState) int {
 			ret.RawSetString("min", LNumber(t.Minute()))
 			ret.RawSetString("sec", LNumber(t.Second()))
 			ret.RawSetString("wday", LNumber(t.Weekday()+1))
-			// TODO yday & dst
-			ret.RawSetString("yday", LNumber(0))
-			ret.RawSetString("isdst", LFalse)
+			ret.RawSetString("yday", LNumber(t.YearDay()))
+			ret.RawSetString("isdst", LBool(t.IsDST()))
 			L.Push(ret)
 			return 1
 		}

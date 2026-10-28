@@ -156,6 +156,28 @@ func TestGopherLuaPatches(t *testing.T) {
 			assert(not ok and err:find("bad argument #2 to 'rep' (number expected, got table)", 1, true), tostring(err))
 			ok, err = pcall(string.rep)
 			assert(not ok and err:find("bad argument #1 to '?'", 1, true), tostring(err))`,
+		"os.date as strftime does": `
+			-- 2023-11-14 22:13:20 UTC, a Tuesday
+			local t = 1700000000
+			local want = {
+				a = "Tue", A = "Tuesday", b = "Nov", B = "November", c = "Tue Nov 14 22:13:20 2023",
+				C = "20", d = "14", D = "11/14/23", e = "14", F = "2023-11-14", g = "23", G = "2023",
+				h = "Nov", H = "22", I = "10", j = "318", m = "11", M = "13", n = "\n", p = "PM",
+				r = "10:13:20 PM", R = "22:13", S = "20", t = "\t", T = "22:13:20", u = "2", U = "46",
+				V = "46", w = "2", W = "46", x = "11/14/23", X = "22:13:20", y = "23", Y = "2023",
+				Z = "UTC", ["%"] = "%",
+			}
+			for conv, text in pairs(want) do
+				assert(os.date("!%" .. conv, t) == text, "%" .. conv .. " = " .. os.date("!%" .. conv, t))
+			end
+			assert(os.date("!%Ey %Od", t) == "23 14", "E and O modifiers are ignored")
+			assert(os.date("!%Q", t) == "%Q", "an unknown conversion stays as written")
+			-- the weeks at the turn of a year
+			assert(os.date("!%j %U %W %V %G", 1704067200) == "001 00 01 01 2024") -- Monday 2024-01-01
+			assert(os.date("!%j %U %W %V %G", 1735689600) == "001 00 00 01 2025") -- Wednesday 2025-01-01
+			assert(os.date("!%j %U %W %V %G", 1672531200) == "001 01 00 52 2022") -- Sunday 2023-01-01
+			local tt = os.date("!*t", 86400 * 40)
+			assert(tt.yday == 41 and tt.isdst == false and tt.month == 2 and tt.day == 10 and tt.wday == 3)`,
 		"table.concat of a long table": `
 			local t = {}
 			for i = 1, 600000 do t[i] = "x" end

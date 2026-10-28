@@ -187,3 +187,13 @@ script's file say `cannot open x: No such file or directory`, and `require`
 says `module 'x' not found:` with `no file 'path'` for each path tried.
 Argument errors put the function's name in quotes and say `?` for one with
 no name (`bad argument #1 to 'rep' (...)`), as Lua does.
+
+## utils.go, oslib.go: os.date
+
+`os.date` knew a few of strftime's conversions and wrote the others as they
+stood, and several of those it knew were wrong: `%a` gave `mon`, `%x` gave
+`22/13/20` and `%c` a format of its own. It is now strftime in the C locale:
+all the conversions of C99 (`%j`, `%U`, `%W`, `%V`, `%G`, `%e`, `%D`, `%T`,
+`%R`, `%r`, `%C`, `%u`, `%h`, `%n`, `%t`, `%s`, ...), the E and O modifiers
+ignored, and an unknown conversion left as written. `os.date("*t")` has the
+real `yday` and `isdst`.
