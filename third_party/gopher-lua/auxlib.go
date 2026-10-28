@@ -246,7 +246,11 @@ func (ls *LState) ArgError(n int, message string) {
 }
 
 func (ls *LState) TypeError(n int, typ LValueType) {
-	ls.RaiseError("bad argument #%v to '%v' (%v expected, got %v)", n, ls.argFuncName(), typ.String(), ls.Get(n).Type().String())
+	got := ls.Get(n).Type().String()
+	if n > ls.GetTop() {
+		got = "no value"
+	}
+	ls.RaiseError("bad argument #%v to '%v' (%v expected, got %v)", n, ls.argFuncName(), typ.String(), got)
 }
 
 /* }}} */

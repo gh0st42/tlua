@@ -82,7 +82,7 @@ func baseDoFile(L *LState) int {
 }
 
 func baseError(L *LState) int {
-	obj := L.CheckAny(1)
+	obj := L.Get(1) // no argument is the error value nil, as in 5.1
 	level := L.OptInt(2, 1)
 	L.Error(obj, level)
 	return 0
@@ -387,10 +387,9 @@ func baseSetFEnv(L *LState) int {
 
 func baseSetMetatable(L *LState) int {
 	L.CheckTypes(2, LTNil, LTTable)
+	// Only a table's metatable can be set from Lua, as in 5.1.
+	L.CheckTable(1)
 	obj := L.Get(1)
-	if obj == LNil {
-		L.RaiseError("cannot set metatable to a nil object.")
-	}
 	mt := L.Get(2)
 	if m := L.metatable(obj, true); m != LNil {
 		if tb, ok := m.(*LTable); ok && tb.RawGetString("__metatable") != LNil {

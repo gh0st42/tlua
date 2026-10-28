@@ -240,4 +240,6 @@ The compiler's record of local variables (`DbgLocals`) is what the names of
 locals come from, and it was wrong whenever a block ended and a later local
 took the register of one in it: each variable's end was set on the entry that
 had its register's number, not its own. A variable now keeps its place in the
-record, and its register (`DbgLocalInfo.Reg`).
+record, and its register (`DbgLocalInfo.Reg`). `setmetatable` wants a table as
+Lua 5.1 does, `error()` with no value raises nil, and an argument that is
+missing is "got no value" in an argument error.

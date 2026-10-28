@@ -296,7 +296,14 @@ func TestGopherLuaPatches(t *testing.T) {
 			end
 			-- a Lua function failing under a call from Go still says what it can
 			local ok, err = pcall(string.gsub, "x", "x", function() local n; return n.field end)
-			assert(not ok and err:find("attempt to index local 'n' (a nil value)", 1, true), tostring(err))`,
+			assert(not ok and err:find("attempt to index local 'n' (a nil value)", 1, true), tostring(err))
+			-- argument checks
+			ok, err = pcall(function() return setmetatable(1, {}) end)
+			assert(not ok and err:find("bad argument #1 to 'setmetatable' (table expected, got number)", 1, true), tostring(err))
+			ok, err = pcall(function() return ipairs() end)
+			assert(not ok and err:find("(table expected, got no value)", 1, true), tostring(err))
+			ok, err = pcall(error)
+			assert(ok == false and err == nil, "error() with no value is the error nil")`,
 		"table.concat of a long table": `
 			local t = {}
 			for i = 1, 600000 do t[i] = "x" end
