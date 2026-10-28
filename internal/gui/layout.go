@@ -482,7 +482,7 @@ func (a *app) findControl(L *lua.LState, kind string) error {
 	if apiErr, ok := err.(*lua.ApiError); ok {
 		msg = lua.LVAsString(apiErr.Object)
 	}
-	if strings.Contains(msg, "module "+module+" not found") {
+	if strings.Contains(msg, "module '"+module+"' not found") {
 		return nil
 	}
 	return fmt.Errorf("gui: %s: %s", module, strings.TrimPrefix(luaPosition.ReplaceAllString(msg, ""), "gui: "))

@@ -131,6 +131,31 @@ func TestGopherLuaPatches(t *testing.T) {
 			-- and a tool that reads file:line: finds them
 			local file, line = err("a = 1\nb = = 2", "@dir/prog.lua"):match("^([^:]+):(%d+):")
 			assert(file == "dir/prog.lua" and line == "2")`,
+		"file errors read as C's do": `
+			local gone = "/nonexistent/dir/file.txt"
+			local f, msg, errno = io.open(gone, "r")
+			assert(f == nil and msg == gone .. ": No such file or directory" and errno == 2, tostring(msg) .. " " .. tostring(errno))
+			local ok, msg, errno = os.remove(gone)
+			assert(ok == nil and msg == gone .. ": No such file or directory" and errno == 2, tostring(msg))
+			ok, msg, errno = os.rename(gone, gone .. "2")
+			assert(ok == nil and msg == gone .. ": No such file or directory" and errno == 2, tostring(msg))
+			local ok2, err = pcall(function() return io.lines(gone) end)
+			assert(not ok2 and err:find("bad argument #1 to 'lines' (" .. gone .. ": No such file or directory)", 1, true), tostring(err))
+			ok2, err = pcall(function() return io.input(gone) end)
+			assert(not ok2 and err:find("cannot open file '" .. gone .. "' (No such file or directory)", 1, true), tostring(err))
+			local fn, why = loadfile(gone)
+			assert(fn == nil and why == "cannot open " .. gone .. ": No such file or directory", tostring(why))
+			ok2, err = pcall(dofile, gone)
+			assert(not ok2 and err == "cannot open " .. gone .. ": No such file or directory", tostring(err))
+			ok2, err = pcall(require, "no.such.module")
+			assert(not ok2 and err:find("module 'no.such.module' not found:\n\tno field package.preload['no.such.module']\n\tno file '", 1, true), tostring(err))`,
+		"argument errors name the function in quotes": `
+			local ok, err = pcall(function() return string.rep() end)
+			assert(not ok and err:find("bad argument #1 to 'rep' (string expected", 1, true), tostring(err))
+			ok, err = pcall(function() return ("x"):rep({}) end)
+			assert(not ok and err:find("bad argument #2 to 'rep' (number expected, got table)", 1, true), tostring(err))
+			ok, err = pcall(string.rep)
+			assert(not ok and err:find("bad argument #1 to '?'", 1, true), tostring(err))`,
 		"table.concat of a long table": `
 			local t = {}
 			for i = 1, 600000 do t[i] = "x" end

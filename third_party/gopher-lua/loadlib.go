@@ -40,7 +40,7 @@ func loFindFile(L *LState, name, pname string) (string, string) {
 		if _, err := os.Stat(luapath); err == nil {
 			return luapath, ""
 		} else {
-			messages = append(messages, err.Error())
+			messages = append(messages, "no file '"+luapath+"'")
 		}
 	}
 	return "", strings.Join(messages, "\n\t")

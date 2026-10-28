@@ -251,9 +251,12 @@ func fileWriteAux(L *LState, file *lFile, idx int) int {
 errreturn:
 
 	file.AbandonReadBuffer()
-	L.Push(LNil)
-	L.Push(LString(err.Error()))
-	L.Push(LNumber(1)) // C-Lua compatibility: Original Lua pushes errno to the stack
+	{
+		msg, errno := cError("", err)
+		L.Push(LNil)
+		L.Push(LString(msg))
+		L.Push(LNumber(errno))
+	}
 	return 3
 }
 
@@ -544,7 +547,8 @@ func ioInput(L *LState) int {
 	case LString:
 		file, err := newFile(L, nil, string(lv), os.O_RDONLY, 0600, false, true)
 		if err != nil {
-			L.RaiseError(err.Error())
+			msg, _ := cError("", err)
+			L.RaiseError("cannot open file '%s' (%s)", string(lv), msg)
 		}
 		L.Get(UpvalueIndex(1)).(*LTable).RawSetInt(fileDefInIndex, file)
 		L.Push(file)
@@ -606,6 +610,8 @@ func ioLines(L *LState) int {
 	path := L.CheckString(1)
 	ud, err := newFile(L, nil, path, os.O_RDONLY, os.FileMode(0600), false, true)
 	if err != nil {
+		msg, _ := cError(path, err)
+		L.ArgError(1, msg)
 		return 0
 	}
 	L.Push(L.NewClosure(ioLinesIter, L.Get(UpvalueIndex(1)), ud))
@@ -641,9 +647,10 @@ func ioOpenFile(L *LState) int {
 	}
 	file, err := newFile(L, nil, path, mode, os.FileMode(perm), writable, readable)
 	if err != nil {
+		msg, errno := cError(path, err)
 		L.Push(LNil)
-		L.Push(LString(err.Error()))
-		L.Push(LNumber(1)) // C-Lua compatibility: Original Lua pushes errno to the stack
+		L.Push(LString(msg))
+		L.Push(LNumber(errno))
 		return 3
 	}
 	L.Push(file)
@@ -724,7 +731,8 @@ func ioOutput(L *LState) int {
 	case LString:
 		file, err := newFile(L, nil, string(lv), os.O_WRONLY|os.O_CREATE, 0600, true, false)
 		if err != nil {
-			L.RaiseError(err.Error())
+			msg, _ := cError("", err)
+			L.RaiseError("cannot open file '%s' (%s)", string(lv), msg)
 		}
 		L.Get(UpvalueIndex(1)).(*LTable).RawSetInt(fileDefOutIndex, file)
 		L.Push(file)

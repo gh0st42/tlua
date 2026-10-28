@@ -150,11 +150,14 @@ func osGetEnv(L *LState) int {
 }
 
 func osRemove(L *LState) int {
-	err := os.Remove(L.CheckString(1))
+	name := L.CheckString(1)
+	err := os.Remove(name)
 	if err != nil {
+		msg, errno := cError(name, err)
 		L.Push(LNil)
-		L.Push(LString(err.Error()))
-		return 2
+		L.Push(LString(msg))
+		L.Push(LNumber(errno))
+		return 3
 	} else {
 		L.Push(LTrue)
 		return 1
@@ -162,11 +165,14 @@ func osRemove(L *LState) int {
 }
 
 func osRename(L *LState) int {
-	err := os.Rename(L.CheckString(1), L.CheckString(2))
+	from := L.CheckString(1)
+	err := os.Rename(from, L.CheckString(2))
 	if err != nil {
+		msg, errno := cError(from, err)
 		L.Push(LNil)
-		L.Push(LString(err.Error()))
-		return 2
+		L.Push(LString(msg))
+		L.Push(LNumber(errno))
+		return 3
 	} else {
 		L.Push(LTrue)
 		return 1

@@ -206,8 +206,9 @@ func baseLoadFile(L *LState) int {
 		chunkname = L.CheckString(1)
 		reader, err = os.Open(chunkname)
 		if err != nil {
+			msg, _ := cError("", err)
 			L.Push(LNil)
-			L.Push(LString(fmt.Sprintf("can not open file: %v", chunkname)))
+			L.Push(LString(fmt.Sprintf("cannot open %s: %s", chunkname, msg)))
 			return 2
 		}
 		defer reader.(*os.File).Close()
@@ -558,7 +559,7 @@ func loRequire(L *LState) int {
 	for i := 1; ; i++ {
 		loader := L.RawGetInt(loaders, i)
 		if loader == LNil {
-			L.RaiseError("module %s not found:\n\t%s, ", name, strings.Join(messages, "\n\t"))
+			L.RaiseError("module '%s' not found:\n\t%s", name, strings.Join(messages, "\n\t"))
 		}
 		L.Push(loader)
 		L.Push(LString(name))

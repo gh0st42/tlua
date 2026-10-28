@@ -242,11 +242,11 @@ func (ls *LState) OptUserData(n int, d *LUserData) *LUserData {
 /* error operations {{{ */
 
 func (ls *LState) ArgError(n int, message string) {
-	ls.RaiseError("bad argument #%v to %v (%v)", n, ls.rawFrameFuncName(ls.currentFrame), message)
+	ls.RaiseError("bad argument #%v to '%v' (%v)", n, ls.argFuncName(), message)
 }
 
 func (ls *LState) TypeError(n int, typ LValueType) {
-	ls.RaiseError("bad argument #%v to %v (%v expected, got %v)", n, ls.rawFrameFuncName(ls.currentFrame), typ.String(), ls.Get(n).Type().String())
+	ls.RaiseError("bad argument #%v to '%v' (%v expected, got %v)", n, ls.argFuncName(), typ.String(), ls.Get(n).Type().String())
 }
 
 /* }}} */
@@ -358,7 +358,8 @@ func (ls *LState) LoadFile(path string) (*LFunction, error) {
 		file, err = os.Open(path)
 		defer file.Close()
 		if err != nil {
-			return nil, newApiErrorE(ApiErrorFile, err)
+			msg, _ := cError("", err)
+			return nil, newApiErrorS(ApiErrorFile, "cannot open "+path+": "+msg)
 		}
 	}
 
@@ -463,3 +464,13 @@ func (ls *LState) OptChannel(n int, ch chan LValue) chan LValue {
 /* }}} */
 
 //
+
+// argFuncName is what an argument error calls the function: its name as it
+// was called, or ? when it has none, as Lua 5.1 says it.
+func (ls *LState) argFuncName() string {
+	name := ls.rawFrameFuncName(ls.currentFrame)
+	if name == "(anonymous)" {
+		return "?"
+	}
+	return name
+}

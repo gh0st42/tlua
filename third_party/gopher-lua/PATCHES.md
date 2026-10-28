@@ -170,3 +170,20 @@ the lexer's messages as Lua says them (`unfinished string`, `unfinished long
 string`, `malformed number`). The parser still cannot tell which of Lua's
 specific messages fits (`'end' expected`, `'=' expected`), so the others are
 all "unexpected symbol". `parse.Error` keeps its fields, and has `EOFLine`.
+
+## cerror.go, iolib.go, oslib.go, baselib.go, loadlib.go, auxlib.go: how file errors read
+
+Errors from the file system came out as Go words them: `io.open` gave `open
+/nonexistent/x: no such file or directory` with an errno of 1 whatever had
+gone wrong, `os.remove` and `os.rename` gave no errno, `io.lines` of a missing
+file returned nothing at all, `loadfile` said `can not open file: x`, `dofile`
+and the script on the command line raised the Go error, and `require` listed
+`stat x: no such file or directory` for each path. They now read as Lua 5.1
+and C give them: `io.open`, `os.remove` and `os.rename` return `nil,
+"x: No such file or directory", 2` (the real errno), `io.lines` raises `bad
+argument #1 to 'lines' (x: No such file or directory)`, `io.input` and
+`io.output` raise `cannot open file 'x' (...)`, `loadfile`, `dofile` and a
+script's file say `cannot open x: No such file or directory`, and `require`
+says `module 'x' not found:` with `no file 'path'` for each path tried.
+Argument errors put the function's name in quotes and say `?` for one with
+no name (`bad argument #1 to 'rep' (...)`), as Lua does.
